@@ -1,10 +1,14 @@
-// VoiceARControl.tsx
 import { ExpoWebGLRenderingContext, GLView } from 'expo-gl';
 import * as Speech from 'expo-speech';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export default function VoiceARControl() {
+interface VoiceARControlProps {
+  status: Record<string, any>;
+  onVoiceCommand: (cmd: string) => void;
+}
+
+export default function VoiceARControl({ status, onVoiceCommand }: VoiceARControlProps) {
   const [activated, setActivated] = useState(false);
   const [message, setMessage] = useState('Esperando comando...');
 
@@ -21,8 +25,16 @@ export default function VoiceARControl() {
   const renderGL = (gl: ExpoWebGLRenderingContext) => {
     gl.clearColor(activated ? 0.0 : 0.1, 0.3, activated ? 0.0 : 0.3, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.endFrameEXP(); // agora reconhecido
+    gl.endFrameEXP();
   };
+
+  // Exemplo: comando automático de voz com base em algum status
+  useEffect(() => {
+    const anomalyNodes = Object.entries(status).filter(([, s]) => s.anomaly === 'Anômalo');
+    if (anomalyNodes.length > 0) {
+      Speech.speak(`Alerta. ${anomalyNodes.length} nós com anomalia detectada.`);
+    }
+  }, [status]);
 
   return (
     <View style={styles.container}>
