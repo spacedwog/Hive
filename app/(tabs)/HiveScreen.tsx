@@ -21,7 +21,7 @@ type NodeStatus = {
 };
 
 const nodes = [
-  { name: 'ESP32', ip: '192.168.15.166' },
+  { name: 'ESP32', ip: '192.168.4.1' },
 ];
 
 export default function HiveScreen() {
