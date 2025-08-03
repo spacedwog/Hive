@@ -3,5 +3,26 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "cSpell.words": [
+    "Aciona",
+    "Alerta",
+    "Ativar",
+    "Buscando",
+    "Comando",
+    "contatar",
+    "Desligar",
+    "Endereço",
+    "enviado",
+    "enviar",
+    "Erro",
+    "escaneamento",
+    "Executando",
+    "Falha",
+    "lógica",
+    "nodemcu",
+    "Nodo",
+    "nodos",
+    "simulação"
+  ]
 }
