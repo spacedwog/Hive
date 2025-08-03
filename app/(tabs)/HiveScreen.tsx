@@ -6,19 +6,24 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Button,
+  GestureResponderEvent,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
 const nodes = [
   { name: 'ESP32', ip: '192.168.15.166' },
+  { name: 'HIVE_MESH', ip: '192.168.4.2' },
 ];
 
 export default function HiveScreen() {
   const [status, setStatus] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState<boolean>(true);
+  const [activated, setActivated] = useState<boolean>(false);
+  const [message, setMessage] = useState<string>('');
 
   const fetchStatus = async () => {
     setLoading(true);
@@ -66,6 +71,14 @@ export default function HiveScreen() {
     fetchStatus();
   }, []);
 
+  function toggleActivation(event: GestureResponderEvent): void {
+    setActivated((prev) => {
+      const newValue = !prev;
+      setMessage(newValue ? 'Ativado!' : 'Desativado!');
+      return newValue;
+    });
+  }
+
   return (
     <View style={styles.wrapper}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -106,6 +119,10 @@ export default function HiveScreen() {
               gl.endFrameEXP();
             }}
           />
+          <TouchableOpacity style={styles.button} onPress={toggleActivation}>
+            <Text style={styles.buttonText}>{activated ? 'Desativar' : 'Ativar'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.text}>{message}</Text>
         </View>
       </ScrollView>
     </View>
@@ -161,5 +178,24 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 60,
     alignItems: 'center',
+  },
+  button: {
+    backgroundColor: '#facc15',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  buttonText: {
+    color: '#0f172a',
+    fontWeight: 'bold',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  text: {
+    color: '#e2e8f0',
+    fontSize: 16,
+    marginTop: 8,
   },
 });
