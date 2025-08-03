@@ -27,9 +27,9 @@ export default function TabLayout() {
         }),
       }}>
       <Tabs.Screen
-        name="HIVEControl"
+        name="HiveScreen"
         options={{
-          title: 'Hive Control',
+          title: 'Hive Screen',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
