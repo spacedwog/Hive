@@ -14,7 +14,6 @@ import {
 
 const nodes = [
   { name: 'ESP32', ip: '192.168.15.166' },
-  { name: 'NodeMCU', ip: '192.168.15.167' },
 ];
 
 export default function HiveScreen() {
