@@ -1,87 +1,78 @@
-import { ExpoWebGLRenderingContext, GLView } from 'expo-gl';
+// VoiceARControl.tsx
 import * as Speech from 'expo-speech';
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-interface VoiceARControlProps {
-  status: Record<string, any>;
-  onVoiceCommand: (cmd: string) => void;
-}
+type NodeStatus = {
+  status?: string;
+  sensor?: number;
+  anomaly?: string;
+  error?: string;
+};
 
-export default function VoiceARControl({ status, onVoiceCommand }: VoiceARControlProps) {
-  const [activated, setActivated] = useState(false);
-  const [message, setMessage] = useState('Esperando comando...');
+type VoiceARControlProps = {
+  status: Record<string, NodeStatus>;
+  onVoiceCommand: (command: string) => void;
+};
 
-  const handleToggle = () => {
-    const nextState = !activated;
-    setActivated(nextState);
-
-    const spokenMsg = nextState ? 'Modo de visualização ativado.' : 'Modo de visualização desativado.';
-    const stateMsg = nextState ? 'Ativado!' : 'Desativado!';
-    setMessage(stateMsg);
-    Speech.speak(spokenMsg);
-  };
-
-  const renderGL = (gl: ExpoWebGLRenderingContext) => {
-    gl.clearColor(activated ? 0.0 : 0.1, 0.3, activated ? 0.0 : 0.3, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.endFrameEXP();
-  };
-
-  // Exemplo: comando automático de voz com base em algum status
+const VoiceARControl: React.FC<VoiceARControlProps> = ({ status, onVoiceCommand }) => {
   useEffect(() => {
-    const anomalyNodes = Object.entries(status).filter(([, s]) => s.anomaly === 'Anômalo');
-    if (anomalyNodes.length > 0) {
-      Speech.speak(`Alerta. ${anomalyNodes.length} nós com anomalia detectada.`);
+    const commandListener = setInterval(() => {
+      // Simula um comando por voz para teste
+      const fakeCommand = 'ativar hive'; // substitua por reconhecimento real futuramente
+      onVoiceCommand(fakeCommand);
+    }, 30000); // a cada 30 segundos
+
+    return () => clearInterval(commandListener);
+  }, [onVoiceCommand]);
+
+  useEffect(() => {
+    let response = '';
+
+    Object.entries(status).forEach(([node, data]) => {
+      if (data.error) {
+        response += `${node} está offline. `;
+      } else {
+        const condition = data.anomaly === 'Anômalo' ? 'com anomalia' : 'normal';
+        response += `${node} está ${data.status}, sensor em ${data.sensor}, ${condition}. `;
+      }
+    });
+
+    if (response.length > 0) {
+      Speech.speak(response, {
+        rate: 0.95,
+        pitch: 1,
+        language: 'pt-BR',
+      });
     }
   }, [status]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Visual AR (GLView + Voz)</Text>
-      <GLView style={styles.glview} onContextCreate={renderGL} />
-      <TouchableOpacity style={styles.button} onPress={handleToggle}>
-        <Text style={styles.buttonText}>{activated ? 'Desativar' : 'Ativar'}</Text>
-      </TouchableOpacity>
-      <Text style={styles.text}>{message}</Text>
+      <Text style={styles.text}>🎤 Controle de Voz Ativo (Simulado)</Text>
+      <Text style={styles.subText}>Comandos automáticos são disparados a cada 30s para testes.</Text>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 24,
-    marginBottom: 60,
+    marginBottom: 24,
+    paddingHorizontal: 20,
     alignItems: 'center',
   },
-  label: {
+  text: {
+    fontSize: 16,
     color: '#facc15',
-    marginBottom: 10,
-    fontSize: 16,
-  },
-  glview: {
-    width: 300,
-    height: 200,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  button: {
-    backgroundColor: '#facc15',
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  buttonText: {
-    color: '#0f172a',
-    fontWeight: 'bold',
-    fontSize: 16,
+    fontWeight: '600',
     textAlign: 'center',
   },
-  text: {
-    color: '#e2e8f0',
-    fontSize: 16,
-    marginTop: 8,
+  subText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+    marginTop: 4,
   },
 });
+
+export default VoiceARControl;
