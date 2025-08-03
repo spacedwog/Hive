@@ -1,4 +1,7 @@
+// HiveScreen.tsx (React Native - com expansões)
 import axios from 'axios';
+import { GLView } from 'expo-gl';
+import * as Speech from 'expo-speech';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,6 +14,7 @@ import {
 
 const nodes = [
   { name: 'ESP32', ip: '192.168.15.166' },
+  { name: 'NodeMCU', ip: '192.168.15.167' },
 ];
 
 export default function HiveScreen() {
@@ -23,7 +27,15 @@ export default function HiveScreen() {
     for (let node of nodes) {
       try {
         const response = await axios.get(`http://${node.ip}/status`);
-        newStatus[node.name] = response.data;
+
+        // Análise de padrões simples
+        const sensorValue = response.data.sensor;
+        const anomaly = sensorValue > 800 || sensorValue < 100;
+
+        newStatus[node.name] = {
+          ...response.data,
+          anomaly: anomaly ? 'Anômalo' : 'Normal',
+        };
       } catch (err) {
         newStatus[node.name] = { error: 'Offline ou inacessível' };
       }
@@ -44,6 +56,13 @@ export default function HiveScreen() {
     }
   };
 
+  const speakStatus = () => {
+    const message = Object.entries(status)
+      .map(([node, data]) => `${node}: ${data?.status || 'desconhecido'}, sensor: ${data?.sensor || 'N/A'}`)
+      .join('. ');
+    Speech.speak(`Estado atual dos dispositivos: ${message}`);
+  };
+
   useEffect(() => {
     fetchStatus();
   }, []);
@@ -57,6 +76,10 @@ export default function HiveScreen() {
           <Button title="🔄 Recarregar Status" onPress={fetchStatus} />
         </View>
 
+        <View style={styles.reloadButton}>
+          <Button title="🎤 Ler Estado em Voz Alta" onPress={speakStatus} />
+        </View>
+
         {loading ? (
           <ActivityIndicator size="large" color="#facc15" style={{ marginTop: 20 }} />
         ) : (
@@ -66,12 +89,25 @@ export default function HiveScreen() {
               <Text style={styles.statusText}>
                 {status[node.name]?.error
                   ? `❌ ${status[node.name].error}`
-                  : `✅ ${status[node.name].status} | Sensor: ${status[node.name].sensor}`}
+                  : `✅ ${status[node.name].status} | Sensor: ${status[node.name].sensor} | Padrão: ${status[node.name].anomaly}`}
               </Text>
               <Button title="⚡ Ativar Nó" onPress={() => sendCommand(node.name, 'activate')} />
             </View>
           ))
         )}
+
+        <View style={styles.glContainer}>
+          <Text style={{ color: '#facc15', marginBottom: 10 }}>GLView (AR Placeholder)</Text>
+          <GLView
+            style={{ width: 300, height: 200 }}
+            onContextCreate={(gl) => {
+              // AR ou renderização 3D futura
+              gl.clearColor(0.1, 0.1, 0.3, 1);
+              gl.clear(gl.COLOR_BUFFER_BIT);
+              gl.endFrameEXP();
+            }}
+          />
+        </View>
       </ScrollView>
     </View>
   );
@@ -98,7 +134,7 @@ const styles = StyleSheet.create({
   },
   reloadButton: {
     marginBottom: 20,
-    width: 200,
+    width: 240,
   },
   nodeCard: {
     width: 300,
@@ -121,5 +157,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: '#94a3b8',
     textAlign: 'center',
+  },
+  glContainer: {
+    marginTop: 24,
+    marginBottom: 60,
+    alignItems: 'center',
   },
 });
