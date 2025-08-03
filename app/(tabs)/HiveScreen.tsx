@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 const nodes = [
-  { name: 'NodeMCU', ip: '192.168.15.166' },
+  { name: 'ESP32', ip: '192.168.15.166' },
 ];
 
 export default function HiveScreen() {
