@@ -1,18 +1,17 @@
-// HiveScreen.tsx (React Native - com expansões)
+// HiveScreen.tsx
 import axios from 'axios';
 import { GLView } from 'expo-gl';
-import * as Speech from 'expo-speech';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Button,
-  GestureResponderEvent,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import VoiceARControl from '../VoiceARControl';
 
 const nodes = [
   { name: 'ESP32', ip: '192.168.15.166' },
@@ -31,8 +30,6 @@ export default function HiveScreen() {
     for (let node of nodes) {
       try {
         const response = await axios.get(`http://${node.ip}/status`);
-
-        // Análise de padrões simples
         const sensorValue = response.data.sensor;
         const anomaly = sensorValue > 800 || sensorValue < 100;
 
@@ -60,24 +57,33 @@ export default function HiveScreen() {
     }
   };
 
-  const speakStatus = () => {
-    const message = Object.entries(status)
-      .map(([node, data]) => `${node}: ${data?.status || 'desconhecido'}, sensor: ${data?.sensor || 'N/A'}`)
-      .join('. ');
-    Speech.speak(`Estado atual dos dispositivos: ${message}`);
+  const handleVoiceCommand = (cmd: string) => {
+    const normalized = cmd.toLowerCase();
+    if (normalized.includes('ativar')) {
+      nodes.forEach(node => sendCommand(node.name, 'activate'));
+      setMessage('Comando de voz: Ativar');
+    } else if (normalized.includes('desativar')) {
+      nodes.forEach(node => sendCommand(node.name, 'deactivate'));
+      setMessage('Comando de voz: Desativar');
+    } else if (normalized.includes('status')) {
+      fetchStatus();
+      setMessage('Comando de voz: Verificar status');
+    } else {
+      setMessage('Comando de voz não reconhecido');
+    }
   };
 
   useEffect(() => {
     fetchStatus();
   }, []);
 
-  function toggleActivation(event: GestureResponderEvent): void {
-    setActivated((prev) => {
+  const toggleActivation = () => {
+    setActivated(prev => {
       const newValue = !prev;
       setMessage(newValue ? 'Ativado!' : 'Desativado!');
       return newValue;
     });
-  }
+  };
 
   return (
     <View style={styles.wrapper}>
@@ -88,9 +94,7 @@ export default function HiveScreen() {
           <Button title="🔄 Recarregar Status" onPress={fetchStatus} />
         </View>
 
-        <View style={styles.reloadButton}>
-          <Button title="🎤 Ler Estado em Voz Alta" onPress={speakStatus} />
-        </View>
+        <VoiceARControl status={status} onVoiceCommand={handleVoiceCommand} />
 
         {loading ? (
           <ActivityIndicator size="large" color="#facc15" style={{ marginTop: 20 }} />
@@ -113,7 +117,6 @@ export default function HiveScreen() {
           <GLView
             style={{ width: 300, height: 200 }}
             onContextCreate={(gl) => {
-              // AR ou renderização 3D futura
               gl.clearColor(0.1, 0.1, 0.3, 1);
               gl.clear(gl.COLOR_BUFFER_BIT);
               gl.endFrameEXP();
