@@ -1,6 +1,6 @@
 // HiveScreen.tsx
 import axios from 'axios';
-import { GLView } from 'expo-gl';
+import { ExpoWebGLRenderingContext, GLView } from 'expo-gl';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,19 +13,27 @@ import {
 } from 'react-native';
 import VoiceARControl from '../VoiceARControl';
 
+type NodeStatus = {
+  status?: string;
+  sensor?: number;
+  anomaly?: string;
+  error?: string;
+};
+
 const nodes = [
   { name: 'ESP32', ip: '192.168.15.166' },
 ];
 
 export default function HiveScreen() {
-  const [status, setStatus] = useState<Record<string, any>>({});
+  const [status, setStatus] = useState<Record<string, NodeStatus>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [activated, setActivated] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
 
   const fetchStatus = async () => {
     setLoading(true);
-    const newStatus: Record<string, any> = {};
+    const newStatus: Record<string, NodeStatus> = {};
+
     for (let node of nodes) {
       try {
         const response = await axios.get(`http://${node.ip}/status`);
@@ -40,29 +48,30 @@ export default function HiveScreen() {
         newStatus[node.name] = { error: 'Offline ou inacessível' };
       }
     }
+
     setStatus(newStatus);
     setLoading(false);
   };
 
   const sendCommand = async (node: string, command: string) => {
-    const ip = nodes.find(n => n.name === node)?.ip;
-    if (ip) {
-      try {
-        await axios.post(`http://${ip}/command`, { command });
-        fetchStatus();
-      } catch (error) {
-        console.warn(`Erro ao enviar comando para ${node}:`, error);
-      }
+    const ip = nodes.find((n) => n.name === node)?.ip;
+    if (!ip) return;
+
+    try {
+      await axios.post(`http://${ip}/command`, { command });
+      fetchStatus();
+    } catch (error) {
+      console.warn(`Erro ao enviar comando para ${node}:`, error);
     }
   };
 
   const handleVoiceCommand = (cmd: string) => {
     const normalized = cmd.toLowerCase();
     if (normalized.includes('ativar')) {
-      nodes.forEach(node => sendCommand(node.name, 'activate'));
+      nodes.forEach((node) => sendCommand(node.name, 'activate'));
       setMessage('Comando de voz: Ativar');
     } else if (normalized.includes('desativar')) {
-      nodes.forEach(node => sendCommand(node.name, 'deactivate'));
+      nodes.forEach((node) => sendCommand(node.name, 'deactivate'));
       setMessage('Comando de voz: Desativar');
     } else if (normalized.includes('status')) {
       fetchStatus();
@@ -77,7 +86,7 @@ export default function HiveScreen() {
   }, []);
 
   const toggleActivation = () => {
-    setActivated(prev => {
+    setActivated((prev) => {
       const newValue = !prev;
       setMessage(newValue ? 'Ativado!' : 'Desativado!');
       return newValue;
@@ -115,7 +124,7 @@ export default function HiveScreen() {
           <Text style={{ color: '#facc15', marginBottom: 10 }}>GLView (AR Placeholder)</Text>
           <GLView
             style={{ width: 300, height: 200 }}
-            onContextCreate={(gl) => {
+            onContextCreate={(gl: ExpoWebGLRenderingContext) => {
               gl.clearColor(0.1, 0.1, 0.3, 1);
               gl.clear(gl.COLOR_BUFFER_BIT);
               gl.endFrameEXP();
