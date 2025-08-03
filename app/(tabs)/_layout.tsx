@@ -30,7 +30,7 @@ export default function TabLayout() {
         name="HiveScreen"
         options={{
           title: 'Hive Screen',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="apple.intelligence" color={color} />,
         }}
       />
       <Tabs.Screen
