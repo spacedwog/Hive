@@ -15,7 +15,6 @@ import VoiceARControl from '../VoiceARControl';
 
 const nodes = [
   { name: 'ESP32', ip: '192.168.15.166' },
-  { name: 'HIVE_MESH', ip: '192.168.4.2' },
 ];
 
 export default function HiveScreen() {
