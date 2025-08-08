@@ -19,6 +19,7 @@ const nodes = [
 
 type NodeStatus = {
   device?: string;
+  server?: string;
   status?: string;
   sensor?: number;
   anomaly?: boolean;
@@ -96,6 +97,9 @@ export default function HiveScreen() {
                   <>
                     <Text style={styles.statusText}>
                       🖥️ Aparelho: {s.device?.toUpperCase()}
+                    </Text>
+                    <Text style={styles.statusText}>
+                      🗄️ Servidor: {s.server?.toUpperCase()}
                     </Text>
                     <Text style={styles.statusText}>
                       ✅ Estado: {s.status?.toUpperCase()}

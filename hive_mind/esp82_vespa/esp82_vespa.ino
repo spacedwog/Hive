@@ -15,6 +15,7 @@ void handleStatus() {
   doc["status"] = activated ? "ativo" : "parado";
   doc["sensor"] = analogRead(34);
   doc["mesh"] = WiFi.status();
+  doc["server"] = WiFi.localIP();
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
