@@ -1,105 +1,102 @@
+// app/(tabs)/explore.tsx
+
+import { useIsFocused } from '@react-navigation/native';
 import { Camera, CameraType } from 'expo-camera';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function ExploreScreen() {
-  const cameraRef = useRef<React.ComponentRef<typeof Camera> | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [type, setType] = useState<CameraType>(CameraType.back);
+  const cameraRef = useRef<Camera>(null);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === 'granted');
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permissão negada',
-          'Você precisa liberar acesso à câmera nas configurações do dispositivo.'
-        );
-      }
     })();
   }, []);
 
-  const takePhoto = async () => {
-    if (!cameraRef.current) return;
+  const flipCamera = () => {
+    setType((prevType) =>
+      prevType === CameraType.back ? CameraType.front : CameraType.back
+    );
+  };
 
-    try {
+  const takePicture = async () => {
+    if (cameraRef.current) {
       const photo = await cameraRef.current.takePictureAsync();
-      setPhotoUri(photo.uri);
-    } catch (e) {
-      Alert.alert('Erro', 'Falha ao tirar a foto.');
+      Alert.alert('Foto tirada!', JSON.stringify(photo.uri));
+      // Aqui você pode navegar, salvar ou exibir a foto
     }
   };
 
   if (hasPermission === null) {
-    return (
-      <View style={styles.centered}>
-        <Text style={{ color: '#fff' }}>Solicitando permissão da câmera...</Text>
-      </View>
-    );
+    return <View />;
   }
 
   if (hasPermission === false) {
     return (
-      <View style={styles.centered}>
-        <Text style={{ color: '#fff' }}>Permissão para câmera negada.</Text>
+      <View style={styles.permissionContainer}>
+        <Text style={styles.permissionText}>Sem permissão para usar a câmera</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {!photoUri ? (
-        <>
-          <Camera
-            ref={cameraRef}
-            style={StyleSheet.absoluteFill}
-            type={type}
-            ratio="16:9"
-          />
-          <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
-            <Text style={styles.captureButtonText}>📸</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <View style={styles.previewContainer}>
-          <Image source={{ uri: photoUri }} style={styles.previewImage} />
-          <TouchableOpacity onPress={() => setPhotoUri(null)} style={styles.closeButton}>
-            <Text style={styles.closeButtonText}>✖ Fechar</Text>
-          </TouchableOpacity>
-        </View>
+      {isFocused && (
+        <Camera
+          style={styles.camera}
+          type={type}
+          ref={cameraRef}
+          ratio="16:9"
+        />
       )}
+      <View style={styles.controls}>
+        <TouchableOpacity onPress={flipCamera} style={styles.button}>
+          <Text style={styles.buttonText}>Trocar Câmera</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={takePicture} style={styles.button}>
+          <Text style={styles.buttonText}>Tirar Foto</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  captureButton: {
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  camera: {
+    flex: 1,
+  },
+  controls: {
     position: 'absolute',
-    bottom: 40,
-    alignSelf: 'center',
-    backgroundColor: '#facc15',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    bottom: 30,
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+  },
+  button: {
+    backgroundColor: '#ffffffaa',
+    padding: 12,
+    borderRadius: 10,
+  },
+  buttonText: {
+    color: '#000',
+    fontWeight: 'bold',
+  },
+  permissionContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#facc15',
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
   },
-  captureButtonText: { fontSize: 30 },
-  previewContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  previewImage: { width: '100%', height: '80%', resizeMode: 'contain' },
-  closeButton: {
-    marginTop: 20,
-    backgroundColor: '#f87171',
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-    borderRadius: 25,
+  permissionText: {
+    color: '#fff',
+    fontSize: 16,
   },
-  closeButtonText: { color: '#fff', fontSize: 16 },
 });
