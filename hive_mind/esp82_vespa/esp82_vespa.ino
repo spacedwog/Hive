@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 
 // 🚨 Substitua pelos dados reais da sua rede Wi-Fi local
-const char* ssid = "FAMILIA SANTOS(Extend)";
+const char* ssid = "FAMILIA SANTOS";
 const char* password = "6z2h1j3k9f";
 
 WebServer server(80);
