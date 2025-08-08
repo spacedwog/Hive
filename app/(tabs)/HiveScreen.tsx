@@ -13,17 +13,25 @@ const nodes = [
   { name: 'ESP32', ip: '192.168.15.166' },
 ];
 
+type NodeStatus = {
+  status?: string;
+  sensor?: number;
+  anomaly?: boolean;
+  mesh?: boolean;
+  error?: string;
+};
+
 export default function HiveScreen() {
-  const [status, setStatus] = useState<Record<string, any>>({});
+  const [status, setStatus] = useState<Record<string, NodeStatus>>({});
   const [loading, setLoading] = useState<boolean>(true);
 
   const fetchStatus = async () => {
     setLoading(true);
-    const newStatus: Record<string, any> = {};
+    const newStatus: Record<string, NodeStatus> = {};
     for (let node of nodes) {
       try {
-        const response = await axios.get(`http://${node.ip}/status`);
-        newStatus[node.name] = response.data;
+        const res = await axios.get(`http://${node.ip}/status`);
+        newStatus[node.name] = res.data;
       } catch (err) {
         newStatus[node.name] = { error: 'Offline ou inacessível' };
       }
@@ -34,13 +42,12 @@ export default function HiveScreen() {
 
   const sendCommand = async (node: string, command: string) => {
     const ip = nodes.find(n => n.name === node)?.ip;
-    if (ip) {
-      try {
-        await axios.post(`http://${ip}/command`, { command });
-        fetchStatus();
-      } catch (error) {
-        console.warn(`Erro ao enviar comando para ${node}:`, error);
-      }
+    if (!ip) return;
+    try {
+      await axios.post(`http://${ip}/command`, { command });
+      fetchStatus();
+    } catch (err) {
+      console.warn(`Erro ao enviar comando para ${node}:`, err);
     }
   };
 
@@ -60,17 +67,38 @@ export default function HiveScreen() {
         {loading ? (
           <ActivityIndicator size="large" color="#facc15" style={{ marginTop: 20 }} />
         ) : (
-          nodes.map((node) => (
-            <View key={node.name} style={styles.nodeCard}>
-              <Text style={styles.nodeName}>{node.name}</Text>
-              <Text style={styles.statusText}>
-                {status[node.name]?.error
-                  ? `❌ ${status[node.name].error}`
-                  : `✅ ${status[node.name].status} | Sensor: ${status[node.name].sensor}`}
-              </Text>
-              <Button title="⚡ Ativar Nó" onPress={() => sendCommand(node.name, 'activate')} />
-            </View>
-          ))
+          nodes.map((node) => {
+            const s = status[node.name];
+            return (
+              <View key={node.name} style={styles.nodeCard}>
+                <Text style={styles.nodeName}>{node.name}</Text>
+
+                {s?.error ? (
+                  <Text style={styles.statusText}>❌ {s.error}</Text>
+                ) : (
+                  <>
+                    <Text style={styles.statusText}>
+                      ✅ Estado: {s.status?.toUpperCase()}
+                    </Text>
+                    <Text style={styles.statusText}>
+                      📟 Sensor: {s.sensor}
+                    </Text>
+                    <Text style={styles.statusText}>
+                      🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}
+                    </Text>
+                    <Text style={[styles.statusText, { color: s.anomaly ? '#f87171' : '#4ade80' }]}>
+                      ⚠️ Anomalia: {s.anomaly ? 'Detectada' : 'Normal'}
+                    </Text>
+                    <View style={styles.buttonRow}>
+                      <Button title="⚡ Ativar" onPress={() => sendCommand(node.name, 'activate')} />
+                      <Button title="🛑 Desativar" onPress={() => sendCommand(node.name, 'deactivate')} />
+                      <Button title="📡 Ping" onPress={() => sendCommand(node.name, 'ping')} />
+                    </View>
+                  </>
+                )}
+              </View>
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -118,8 +146,13 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 16,
-    marginBottom: 12,
+    marginBottom: 6,
     color: '#94a3b8',
     textAlign: 'center',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
   },
 });
