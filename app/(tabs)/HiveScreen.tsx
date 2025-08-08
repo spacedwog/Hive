@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -28,6 +29,7 @@ type NodeStatus = {
 export default function HiveScreen() {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
   const [loading, setLoading] = useState<boolean>(true);
+  const [customCommands, setCustomCommands] = useState<Record<string, string>>({});
 
   const fetchStatus = async () => {
     setLoading(true);
@@ -36,7 +38,7 @@ export default function HiveScreen() {
     for (let node of nodes) {
       try {
         const res = await axios.get(`http://${node.ip}/status`, {
-          timeout: 3000, // ⏱ Timeout para evitar travamento
+          timeout: 3000,
         });
         newStatus[node.name] = res.data;
       } catch (err) {
@@ -115,23 +117,33 @@ export default function HiveScreen() {
 
                     <View style={styles.buttonRow}>
                       <View style={styles.buttonItem}>
-                        <Button
-                          title="⚡ Ativar"
-                          onPress={() => sendCommand(node.name, 'activate')}
-                        />
+                        <Button title="⚡ Ativar" onPress={() => sendCommand(node.name, 'activate')} />
                       </View>
                       <View style={styles.buttonItem}>
-                        <Button
-                          title="🛑 Desativar"
-                          onPress={() => sendCommand(node.name, 'deactivate')}
-                        />
+                        <Button title="🛑 Desativar" onPress={() => sendCommand(node.name, 'deactivate')} />
                       </View>
                       <View style={styles.buttonItem}>
-                        <Button
-                          title="📡 Ping"
-                          onPress={() => sendCommand(node.name, 'ping')}
-                        />
+                        <Button title="📡 Ping" onPress={() => sendCommand(node.name, 'ping')} />
                       </View>
+                    </View>
+
+                    {/* Campo de comando personalizado */}
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Digite um comando personalizado..."
+                      placeholderTextColor="#94a3b8"
+                      value={customCommands[node.name] || ''}
+                      onChangeText={(text) =>
+                        setCustomCommands({ ...customCommands, [node.name]: text })
+                      }
+                    />
+                    <View style={styles.customCommandButton}>
+                      <Button
+                        title="🚀 Enviar Comando"
+                        onPress={() =>
+                          sendCommand(node.name, customCommands[node.name] || '')
+                        }
+                      />
                     </View>
                   </>
                 )}
@@ -200,5 +212,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
     marginVertical: 4,
     minWidth: 90,
+  },
+  input: {
+    backgroundColor: '#334155',
+    color: '#f1f5f9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 14,
+    width: '100%',
+  },
+  customCommandButton: {
+    marginTop: 10,
+    width: '100%',
   },
 });
