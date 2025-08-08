@@ -31,7 +31,7 @@
     "expo-status-bar": "~2.2.3",
     "expo-symbols": "~0.4.5",
     "expo-system-ui": "~5.0.10",
-    "expo-three": "^8.0.0",
+    "expo-three": "^2.2.1",
     "expo-web-browser": "~14.2.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
@@ -41,6 +41,7 @@
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-svg": "^15.11.2",
+    "react-native-vision-camera": "^4.7.1",
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
     "three": "^0.166.1"
