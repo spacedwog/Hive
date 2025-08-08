@@ -1,62 +1,233 @@
-import { useState } from 'react';
-import { Alert, Button, StyleSheet, View } from 'react-native';
+import axios from 'axios';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Button,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+// Mapa de IPs dos dispositivos conectados
+const nodes = [
+  { name: 'NODEMCU', ip: '192.168.4.1' }, // Substitua com o IP real do NODEMCU
+];
 
-export default function TabTwoScreen() {
-  const [espResponse, setEspResponse] = useState<string | null>(null);
+type NodeStatus = {
+  device?: string;
+  server?: string;
+  status?: string;
+  sensor?: number;
+  anomaly?: boolean;
+  mesh?: boolean;
+  error?: string;
+};
 
-  const fetchESP32Data = async () => {
+export default function HiveScreen() {
+  const [status, setStatus] = useState<Record<string, NodeStatus>>({});
+  const [loading, setLoading] = useState<boolean>(true);
+  const [customCommands, setCustomCommands] = useState<Record<string, string>>({});
+
+  const fetchStatus = async () => {
+    setLoading(true);
+    const newStatus: Record<string, NodeStatus> = {};
+
+    for (let node of nodes) {
+      try {
+        const res = await axios.get(`http://${node.ip}/status`, {
+          timeout: 3000,
+        });
+        newStatus[node.name] = res.data;
+      } catch (err) {
+        newStatus[node.name] = { error: 'Offline ou inacessível' };
+      }
+    }
+
+    setStatus(newStatus);
+    setLoading(false);
+  };
+
+  const sendCommand = async (node: string, command: string) => {
+    const ip = nodes.find(n => n.name === node)?.ip;
+    if (!ip) return;
+
     try {
-      const response = await fetch('http://192.168.15.166/status'); // Substitua pelo IP real do ESP32
-      const data = await response.json();
-      setEspResponse(JSON.stringify(data, null, 2));
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível conectar ao ESP32');
-      console.error(error);
+      await axios.post(`http://${ip}/command`, { command }, { timeout: 3000 });
+      Alert.alert('✅ Comando enviado', `Comando "${command}" enviado com sucesso para ${node}.`);
+      fetchStatus();
+    } catch (err) {
+      Alert.alert('❌ Erro', `Falha ao enviar comando "${command}" para ${node}.`);
     }
   };
 
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Explore</ThemedText>
-      </ThemedView>
+  useEffect(() => {
+    fetchStatus();
+  }, []);
 
-      {/* Botão e exibição de resposta do ESP32 */}
-      <View style={{ marginVertical: 16 }}>
-        <Button title="Conectar ao ESP32" onPress={fetchESP32Data} />
-        {espResponse && (
-          <ThemedText style={{ marginTop: 10 }}>
-            Resposta do ESP32: {espResponse}
-          </ThemedText>
+  return (
+    <View style={styles.wrapper}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={fetchStatus} colors={['#facc15']} />
+        }
+      >
+        <Text style={styles.title}>🧠 HIVE Central Interface</Text>
+
+        <View style={styles.reloadButton}>
+          <Button title="🔄 Recarregar Status" onPress={fetchStatus} />
+        </View>
+
+        {loading ? (
+          <ActivityIndicator size="large" color="#facc15" style={{ marginTop: 20 }} />
+        ) : (
+          nodes.map((node) => {
+            const s = status[node.name];
+            return (
+              <View key={node.name} style={styles.nodeCard}>
+                <Text style={styles.nodeName}>{node.name}</Text>
+
+                {s?.error ? (
+                  <Text style={styles.statusText}>❌ {s.error}</Text>
+                ) : (
+                  <>
+                    <Text style={styles.statusText}>
+                      🖥️ Aparelho: {s.device?.toUpperCase()}
+                    </Text>
+                    <Text style={styles.statusText}>
+                      🗄️ Servidor: {s.server?.toUpperCase()}
+                    </Text>
+                    <Text style={styles.statusText}>
+                      ✅ Estado: {s.status?.toUpperCase()}
+                    </Text>
+                    <Text style={styles.statusText}>
+                      📟 Sensor: {s.sensor}
+                    </Text>
+                    <Text style={styles.statusText}>
+                      🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        { color: s.anomaly ? '#f87171' : '#4ade80' },
+                      ]}
+                    >
+                      ⚠️ Anomalia: {s.anomaly ? 'Detectada' : 'Normal'}
+                    </Text>
+
+                    <View style={styles.buttonRow}>
+                      <View style={styles.buttonItem}>
+                        <Button title="⚡ Ativar" onPress={() => sendCommand(node.name, 'activate')} />
+                      </View>
+                      <View style={styles.buttonItem}>
+                        <Button title="🛑 Desativar" onPress={() => sendCommand(node.name, 'deactivate')} />
+                      </View>
+                      <View style={styles.buttonItem}>
+                        <Button title="📡 Ping" onPress={() => sendCommand(node.name, 'ping')} />
+                      </View>
+                    </View>
+
+                    {/* Campo de comando personalizado */}
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Digite um comando personalizado..."
+                      placeholderTextColor="#94a3b8"
+                      value={customCommands[node.name] || ''}
+                      onChangeText={(text) =>
+                        setCustomCommands({ ...customCommands, [node.name]: text })
+                      }
+                    />
+                    <View style={styles.customCommandButton}>
+                      <Button
+                        title="🚀 Enviar Comando"
+                        onPress={() =>
+                          sendCommand(node.name, customCommands[node.name] || '')
+                        }
+                      />
+                    </View>
+                  </>
+                )}
+              </View>
+            );
+          })
         )}
-      </View>
-    </ParallaxScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  titleContainer: {
+  container: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#facc15',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  reloadButton: {
+    marginBottom: 20,
+    width: 200,
+  },
+  nodeCard: {
+    width: 320,
+    padding: 20,
+    backgroundColor: '#1e293b',
+    marginVertical: 12,
+    borderRadius: 16,
+    borderColor: '#334155',
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  nodeName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#e2e8f0',
+    marginBottom: 8,
+  },
+  statusText: {
+    fontSize: 16,
+    marginBottom: 6,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  buttonRow: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 12,
+  },
+  buttonItem: {
+    marginHorizontal: 5,
+    marginVertical: 4,
+    minWidth: 90,
+  },
+  input: {
+    backgroundColor: '#334155',
+    color: '#f1f5f9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 14,
+    width: '100%',
+  },
+  customCommandButton: {
+    marginTop: 10,
+    width: '100%',
   },
 });

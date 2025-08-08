@@ -46,7 +46,7 @@ export default function HiveHomeScreen() {
       <Animated.View style={[styles.card, cardStyle]}>
         <Text style={styles.description}>
           H.I.V.E. é uma IA descentralizada inspirada em colmeias, composta por múltiplos nós físicos e digitais que colaboram
-          para tomar decisões inteligentes. Cada nó (ESP32, Blackboard, NodeMCU) envia dados sensoriais para um núcleo de controle
+          para tomar decisões inteligentes. Cada nó (ESP32, NodeMCU) envia dados sensoriais para um núcleo de controle
           que aprende, interpreta e reage em tempo real. Sua missão: coordenar, vigiar e otimizar sistemas embarcados.
         </Text>
       </Animated.View>
