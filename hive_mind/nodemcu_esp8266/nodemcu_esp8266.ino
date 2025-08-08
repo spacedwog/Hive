@@ -11,7 +11,7 @@ bool activated = false;
 
 void handleStatus() {
   DynamicJsonDocument doc(128);
-  doc["device"] = "Vespa";
+  doc["device"] = "Esp8266";
   doc["status"] = activated ? "ativo" : "parado";
   doc["sensor"] = analogRead(A0);  // ESP8266 tem só A0
   doc["mesh"] = WiFi.status();
