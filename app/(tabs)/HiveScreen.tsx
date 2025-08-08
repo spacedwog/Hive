@@ -1,6 +1,4 @@
-// HiveScreen.tsx
 import axios from 'axios';
-import { ExpoWebGLRenderingContext, GLView } from 'expo-gl';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -8,103 +6,47 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
-import VoiceARControl from '../VoiceARControl';
-
-type NodeStatus = {
-  status?: string;
-  sensor?: number;
-  anomaly?: string;
-  error?: string;
-};
 
 const nodes = [
-  { name: 'ESP32_VESPA', ip: '192.168.15.166' },
-  { name: 'NODEMCU', ip: '192.168.4.1' },
-  { name: 'HIVE_MESH', ip: '192.168.4.2' },
+  { name: 'ESP32', ip: '192.168.15.166' },
 ];
 
 export default function HiveScreen() {
-  const [status, setStatus] = useState<Record<string, NodeStatus>>({});
+  const [status, setStatus] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState<boolean>(true);
-  const [activated, setActivated] = useState<boolean>(false);
-  const [message, setMessage] = useState<string>('');
 
   const fetchStatus = async () => {
     setLoading(true);
-    const newStatus: Record<string, NodeStatus> = {};
-
+    const newStatus: Record<string, any> = {};
     for (let node of nodes) {
       try {
         const response = await axios.get(`http://${node.ip}/status`);
-        const sensorValue = response.data.sensor;
-        const anomaly = sensorValue > 800 || sensorValue < 100;
-
-        newStatus[node.name] = {
-          ...response.data,
-          anomaly: anomaly ? 'Anômalo' : 'Normal',
-        };
+        newStatus[node.name] = response.data;
       } catch (err) {
         newStatus[node.name] = { error: 'Offline ou inacessível' };
       }
     }
-
     setStatus(newStatus);
     setLoading(false);
   };
 
-  const fetchLocalESP32Info = async () => {
-    try {
-      const response = await fetch(`http://${nodes[0].ip}:80/endpoint`); // ajuste o IP se necessário
-      const data = await response.json();
-      console.log('Dados recebidos do ESP32:', data);
-    } catch (err) {
-      console.error('Erro ao acessar o endpoint do ESP32:', err);
-    }
-  };
-
   const sendCommand = async (node: string, command: string) => {
-    const ip = nodes.find((n) => n.name === node)?.ip;
-    if (!ip) return;
-
-    try {
-      await axios.post(`http://${ip}/command`, { command });
-      fetchStatus();
-    } catch (error) {
-      console.warn(`Erro ao enviar comando para ${node}:`, error);
-    }
-  };
-
-  const handleVoiceCommand = (cmd: string) => {
-    const normalized = cmd.toLowerCase();
-    if (normalized.includes('ativar')) {
-      nodes.forEach((node) => sendCommand(node.name, 'activate'));
-      setMessage('Comando de voz: Ativar');
-    } else if (normalized.includes('desativar')) {
-      nodes.forEach((node) => sendCommand(node.name, 'deactivate'));
-      setMessage('Comando de voz: Desativar');
-    } else if (normalized.includes('status')) {
-      fetchStatus();
-      setMessage('Comando de voz: Verificar status');
-    } else {
-      setMessage('Comando de voz não reconhecido');
+    const ip = nodes.find(n => n.name === node)?.ip;
+    if (ip) {
+      try {
+        await axios.post(`http://${ip}/command`, { command });
+        fetchStatus();
+      } catch (error) {
+        console.warn(`Erro ao enviar comando para ${node}:`, error);
+      }
     }
   };
 
   useEffect(() => {
     fetchStatus();
-    fetchLocalESP32Info(); // chamada do novo fetch ao carregar a tela
   }, []);
-
-  const toggleActivation = () => {
-    setActivated((prev) => {
-      const newValue = !prev;
-      setMessage(newValue ? 'Ativado!' : 'Desativado!');
-      return newValue;
-    });
-  };
 
   return (
     <View style={styles.wrapper}>
@@ -115,8 +57,6 @@ export default function HiveScreen() {
           <Button title="🔄 Recarregar Status" onPress={fetchStatus} />
         </View>
 
-        <VoiceARControl status={status} onVoiceCommand={handleVoiceCommand} />
-
         {loading ? (
           <ActivityIndicator size="large" color="#facc15" style={{ marginTop: 20 }} />
         ) : (
@@ -126,28 +66,12 @@ export default function HiveScreen() {
               <Text style={styles.statusText}>
                 {status[node.name]?.error
                   ? `❌ ${status[node.name].error}`
-                  : `✅ ${status[node.name].status} | Sensor: ${status[node.name].sensor} | Padrão: ${status[node.name].anomaly}`}
+                  : `✅ ${status[node.name].status} | Sensor: ${status[node.name].sensor}`}
               </Text>
               <Button title="⚡ Ativar Nó" onPress={() => sendCommand(node.name, 'activate')} />
             </View>
           ))
         )}
-
-        <View style={styles.glContainer}>
-          <Text style={{ color: '#facc15', marginBottom: 10 }}>GLView (AR Placeholder)</Text>
-          <GLView
-            style={{ width: 300, height: 200 }}
-            onContextCreate={(gl: ExpoWebGLRenderingContext) => {
-              gl.clearColor(0.1, 0.1, 0.3, 1);
-              gl.clear(gl.COLOR_BUFFER_BIT);
-              gl.endFrameEXP();
-            }}
-          />
-          <TouchableOpacity style={styles.button} onPress={toggleActivation}>
-            <Text style={styles.buttonText}>{activated ? 'Desativar' : 'Ativar'}</Text>
-          </TouchableOpacity>
-          <Text style={styles.text}>{message}</Text>
-        </View>
       </ScrollView>
     </View>
   );
@@ -174,7 +98,7 @@ const styles = StyleSheet.create({
   },
   reloadButton: {
     marginBottom: 20,
-    width: 240,
+    width: 200,
   },
   nodeCard: {
     width: 300,
@@ -197,29 +121,5 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: '#94a3b8',
     textAlign: 'center',
-  },
-  glContainer: {
-    marginTop: 24,
-    marginBottom: 60,
-    alignItems: 'center',
-  },
-  button: {
-    backgroundColor: '#facc15',
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  buttonText: {
-    color: '#0f172a',
-    fontWeight: 'bold',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  text: {
-    color: '#e2e8f0',
-    fontSize: 16,
-    marginTop: 8,
   },
 });
