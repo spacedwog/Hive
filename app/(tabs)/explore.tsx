@@ -76,7 +76,7 @@ export default function HiveScreen() {
           <RefreshControl refreshing={loading} onRefresh={fetchStatus} colors={['#facc15']} />
         }
       >
-        <Text style={styles.title}>🧠 HIVE Central Interface</Text>
+        <Text style={styles.title}>🧠 HIVE Explorer</Text>
 
         <View style={styles.reloadButton}>
           <Button title="🔄 Recarregar Status" onPress={fetchStatus} />
