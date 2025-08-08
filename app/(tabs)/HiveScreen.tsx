@@ -1,7 +1,7 @@
 // HiveScreen.tsx
 import axios from 'axios';
 import { ExpoWebGLRenderingContext, GLView } from 'expo-gl';
-import React, { useEffect, useState } from 'react';
+import React, { JSX, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Button,
@@ -13,6 +13,11 @@ import {
 } from 'react-native';
 import VoiceARControl from '../VoiceARControl';
 
+type Node = {
+  name: string;
+  ip: string;
+};
+
 type NodeStatus = {
   status?: string;
   sensor?: number;
@@ -20,30 +25,31 @@ type NodeStatus = {
   error?: string;
 };
 
-const nodes = [
+const nodes: Node[] = [
   { name: 'ESP32_VESPA', ip: '192.168.15.166' },
   { name: 'NODEMCU', ip: '192.168.4.1' },
   { name: 'HIVE_MESH', ip: '192.168.4.2' },
 ];
 
-export default function HiveScreen() {
+export default function HiveScreen(): JSX.Element {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [activated, setActivated] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
 
-  const fetchStatus = async () => {
+  const fetchStatus = async (): Promise<void> => {
     setLoading(true);
     const newStatus: Record<string, NodeStatus> = {};
 
     for (let node of nodes) {
       try {
         const response = await axios.get(`http://${node.ip}/status`);
-        const sensorValue = response.data.sensor;
-        const anomaly = sensorValue > 800 || sensorValue < 100;
+        const { status: nodeStatus, sensor } = response.data;
+        const anomaly = sensor > 800 || sensor < 100;
 
         newStatus[node.name] = {
-          ...response.data,
+          status: nodeStatus,
+          sensor,
           anomaly: anomaly ? 'Anômalo' : 'Normal',
         };
       } catch (err) {
@@ -55,20 +61,21 @@ export default function HiveScreen() {
     setLoading(false);
   };
 
-  const sendCommand = async (node: string, command: string) => {
-    const ip = nodes.find((n) => n.name === node)?.ip;
-    if (!ip) return;
+  const sendCommand = async (nodeName: string, command: string): Promise<void> => {
+    const node = nodes.find((n) => n.name === nodeName);
+    if (!node) return;
 
     try {
-      await axios.post(`http://${ip}/command`, { command });
+      await axios.post(`http://${node.ip}/command`, { command });
       fetchStatus();
     } catch (error) {
-      console.warn(`Erro ao enviar comando para ${node}:`, error);
+      console.warn(`Erro ao enviar comando para ${nodeName}:`, error);
     }
   };
 
-  const handleVoiceCommand = (cmd: string) => {
+  const handleVoiceCommand = (cmd: string): void => {
     const normalized = cmd.toLowerCase();
+
     if (normalized.includes('ativar')) {
       nodes.forEach((node) => sendCommand(node.name, 'activate'));
       setMessage('Comando de voz: Ativar');
@@ -83,17 +90,17 @@ export default function HiveScreen() {
     }
   };
 
+  const toggleActivation = (): void => {
+    setActivated((prev) => {
+      const newState = !prev;
+      setMessage(newState ? 'Ativado!' : 'Desativado!');
+      return newState;
+    });
+  };
+
   useEffect(() => {
     fetchStatus();
   }, []);
-
-  const toggleActivation = () => {
-    setActivated((prev) => {
-      const newValue = !prev;
-      setMessage(newValue ? 'Ativado!' : 'Desativado!');
-      return newValue;
-    });
-  };
 
   return (
     <View style={styles.wrapper}>
@@ -115,7 +122,7 @@ export default function HiveScreen() {
               <Text style={styles.statusText}>
                 {status[node.name]?.error
                   ? `❌ ${status[node.name].error}`
-                  : `✅ ${status[node.name].status} | Sensor: ${status[node.name].sensor} | Padrão: ${status[node.name].anomaly}`}
+                  : `✅ ${status[node.name]?.status} | Sensor: ${status[node.name]?.sensor} | Padrão: ${status[node.name]?.anomaly}`}
               </Text>
               <Button title="⚡ Ativar Nó" onPress={() => sendCommand(node.name, 'activate')} />
             </View>

@@ -2,11 +2,11 @@
 #include <painlessMesh.h>
 #include <ArduinoJson.h>
 
-// 📶 Configurações Wi-Fi (STA)
+// 📶 Configurações da rede Wi-Fi local (para React Native)
 const char* ssid = "FAMILIA SANTOS";
 const char* password = "6z2h1j3k9f";
 
-// 📶 Configurações da malha Wi-Fi Mesh
+// 🔗 Configurações da rede Mesh
 #define MESH_PREFIX     "HIVE_MESH"
 #define MESH_PASSWORD   "hive2025"
 #define MESH_PORT       5555
@@ -18,14 +18,15 @@ bool activated = false;
 int sensorValue = 0;
 IPAddress localIP;
 
-// 🔁 Função que será chamada a cada 10 segundos
+// ⏱️ Tarefa periódica
 void sendMeshStatus();
 Task taskSendMeshStatus(TASK_SECOND * 10, TASK_FOREVER, &sendMeshStatus);
 
-// 🔄 Envia status com sensor e detecção de anomalia via Mesh e WiFi
+// 📤 Envia status com sensor e anomalias via Mesh (e visível ao app React Native)
 void sendMeshStatus() {
   DynamicJsonDocument doc(256);
-  sensorValue = analogRead(34);
+
+  sensorValue = analogRead(34); // Lê o valor de um sensor no pino 34
   bool anomaly = sensorValue > 3000;
 
   doc["device"] = "ESP32_VESPA";
@@ -39,11 +40,12 @@ void sendMeshStatus() {
   serializeJson(doc, msg);
 
   mesh.sendBroadcast(msg);
+
   Serial.println("📤 Broadcast enviado:");
   Serial.println(msg);
 }
 
-// 📥 Quando uma mensagem chega de outro nó Mesh
+// 📥 Trata mensagens recebidas pela Mesh
 void receivedCallback(uint32_t from, String &msg) {
   Serial.printf("📩 Mensagem recebida de %u: %s\n", from, msg.c_str());
 
@@ -72,6 +74,7 @@ void receivedCallback(uint32_t from, String &msg) {
   }
 }
 
+// 🌐 Conecta à rede Wi-Fi local (para comunicação com app React Native)
 void connectToWiFi() {
   Serial.println("🌐 Conectando ao Wi-Fi local...");
   WiFi.begin(ssid, password);
@@ -93,24 +96,27 @@ void connectToWiFi() {
   }
 }
 
+// 🔧 Inicialização
 void setup() {
   Serial.begin(115200);
-  pinMode(2, OUTPUT);
-  digitalWrite(2, LOW); // LED OFF no início
+  pinMode(2, OUTPUT);      // LED ou atuador no pino 2
+  digitalWrite(2, LOW);    // Começa desligado
 
-  connectToWiFi();
+  connectToWiFi();         // Conecta ao Wi-Fi local
 
   Serial.println("🚀 Iniciando Vespa com suporte Mesh...");
 
+  // Inicializa a malha
   mesh.setDebugMsgTypes(ERROR | STARTUP | CONNECTION);
   mesh.init(MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT);
   mesh.onReceive(&receivedCallback);
 
-  // ⏱️ Inicia tarefa periódica para enviar status
+  // Tarefa periódica para enviar dados para Mesh e app React Native
   userScheduler.addTask(taskSendMeshStatus);
   taskSendMeshStatus.enable();
 }
 
+// 🔁 Loop principal
 void loop() {
   mesh.update();
 }
