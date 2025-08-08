@@ -2,19 +2,22 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Button,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
+// Mapa de IPs dos dispositivos conectados
 const nodes = [
-  { name: 'ESP32', ip: '192.168.15.166' }, // ✅ Substitua com IP real do ESP32
-  { name: 'GATEWAY', ip: '192.168.4.2' }, // ✅ Substitua com IP real do ESP32
+  { name: 'ESP32', ip: '192.168.15.166' }, // Substitua com o IP real do ESP32
 ];
 
 type NodeStatus = {
+  device?: string;
   status?: string;
   sensor?: number;
   anomaly?: boolean;
@@ -29,14 +32,18 @@ export default function HiveScreen() {
   const fetchStatus = async () => {
     setLoading(true);
     const newStatus: Record<string, NodeStatus> = {};
+
     for (let node of nodes) {
       try {
-        const res = await axios.get(`http://${node.ip}/status`);
+        const res = await axios.get(`http://${node.ip}/status`, {
+          timeout: 3000, // ⏱ Timeout para evitar travamento
+        });
         newStatus[node.name] = res.data;
       } catch (err) {
         newStatus[node.name] = { error: 'Offline ou inacessível' };
       }
     }
+
     setStatus(newStatus);
     setLoading(false);
   };
@@ -44,11 +51,13 @@ export default function HiveScreen() {
   const sendCommand = async (node: string, command: string) => {
     const ip = nodes.find(n => n.name === node)?.ip;
     if (!ip) return;
+
     try {
-      await axios.post(`http://${ip}/command`, { command });
+      await axios.post(`http://${ip}/command`, { command }, { timeout: 3000 });
+      Alert.alert('✅ Comando enviado', `Comando "${command}" enviado com sucesso para ${node}.`);
       fetchStatus();
     } catch (err) {
-      console.warn(`Erro ao enviar comando para ${node}:`, err);
+      Alert.alert('❌ Erro', `Falha ao enviar comando "${command}" para ${node}.`);
     }
   };
 
@@ -58,7 +67,12 @@ export default function HiveScreen() {
 
   return (
     <View style={styles.wrapper}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={fetchStatus} colors={['#facc15']} />
+        }
+      >
         <Text style={styles.title}>🧠 HIVE Central Interface</Text>
 
         <View style={styles.reloadButton}>
@@ -79,6 +93,9 @@ export default function HiveScreen() {
                 ) : (
                   <>
                     <Text style={styles.statusText}>
+                      🖥️ Aparelho: {s.device?.toUpperCase()}
+                    </Text>
+                    <Text style={styles.statusText}>
                       ✅ Estado: {s.status?.toUpperCase()}
                     </Text>
                     <Text style={styles.statusText}>
@@ -87,13 +104,34 @@ export default function HiveScreen() {
                     <Text style={styles.statusText}>
                       🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}
                     </Text>
-                    <Text style={[styles.statusText, { color: s.anomaly ? '#f87171' : '#4ade80' }]}>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        { color: s.anomaly ? '#f87171' : '#4ade80' },
+                      ]}
+                    >
                       ⚠️ Anomalia: {s.anomaly ? 'Detectada' : 'Normal'}
                     </Text>
+
                     <View style={styles.buttonRow}>
-                      <Button title="⚡ Ativar" onPress={() => sendCommand(node.name, 'activate')} />
-                      <Button title="🛑 Desativar" onPress={() => sendCommand(node.name, 'deactivate')} />
-                      <Button title="📡 Ping" onPress={() => sendCommand(node.name, 'ping')} />
+                      <View style={styles.buttonItem}>
+                        <Button
+                          title="⚡ Ativar"
+                          onPress={() => sendCommand(node.name, 'activate')}
+                        />
+                      </View>
+                      <View style={styles.buttonItem}>
+                        <Button
+                          title="🛑 Desativar"
+                          onPress={() => sendCommand(node.name, 'deactivate')}
+                        />
+                      </View>
+                      <View style={styles.buttonItem}>
+                        <Button
+                          title="📡 Ping"
+                          onPress={() => sendCommand(node.name, 'ping')}
+                        />
+                      </View>
                     </View>
                   </>
                 )}
@@ -130,7 +168,7 @@ const styles = StyleSheet.create({
     width: 200,
   },
   nodeCard: {
-    width: 300,
+    width: 320,
     padding: 20,
     backgroundColor: '#1e293b',
     marginVertical: 12,
@@ -153,7 +191,14 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 10,
-    marginTop: 10,
+    marginTop: 12,
+  },
+  buttonItem: {
+    marginHorizontal: 5,
+    marginVertical: 4,
+    minWidth: 90,
   },
 });

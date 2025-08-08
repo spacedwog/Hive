@@ -12,8 +12,9 @@ bool activated = false;
 void handleStatus() {
   DynamicJsonDocument doc(128);
   doc["device"] = "Vespa";
-  doc["status"] = activated ? "active" : "idle";
+  doc["status"] = activated ? "ativo" : "parado";
   doc["sensor"] = analogRead(34);
+  doc["mesh"] = WiFi.status();
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
@@ -35,10 +36,10 @@ void handleCommand() {
 
   if (command == "activate") {
     activated = true;
-    digitalWrite(2, HIGH);
+    digitalWrite(32, HIGH);
   } else if (command == "deactivate") {
     activated = false;
-    digitalWrite(2, LOW);
+    digitalWrite(32, LOW);
   }
 
   server.send(200, "text/plain", "Command received");
@@ -46,8 +47,8 @@ void handleCommand() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(2, OUTPUT);
-  digitalWrite(2, LOW); // Garante que o LED comece desligado
+  pinMode(32, OUTPUT);
+  digitalWrite(32, LOW); // Garante que o LED comece desligado
 
   Serial.print("Conectando à rede: ");
   Serial.println(ssid);
