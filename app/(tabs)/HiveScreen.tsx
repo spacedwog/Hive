@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 const nodes = [
-  { name: 'ESP32_VESPA', ip: '192.168.15.166' }, // ✅ Substitua com IP real do ESP32
+  { name: 'ESP32', ip: '192.168.15.166' }, // ✅ Substitua com IP real do ESP32
 ];
 
 type NodeStatus = {
