@@ -11,6 +11,7 @@ import {
 
 const nodes = [
   { name: 'ESP32', ip: '192.168.15.166' }, // ✅ Substitua com IP real do ESP32
+  { name: 'GATEWAY', ip: '192.168.4.2' }, // ✅ Substitua com IP real do ESP32
 ];
 
 type NodeStatus = {
