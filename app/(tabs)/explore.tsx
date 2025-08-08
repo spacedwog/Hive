@@ -1,54 +1,46 @@
+import { Camera, CameraType } from 'expo-camera';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Camera, CameraPermissionStatus, useCameraDevices } from 'react-native-vision-camera';
 
 export default function ExploreScreen() {
-  const devices = useCameraDevices();
-  const device = devices?.find(d => d.position === 'back');
-
-  const cameraRef = useRef<Camera>(null);
-  const [hasPermission, setHasPermission] = useState(false);
+  const cameraRef = useRef<React.ComponentRef<typeof Camera> | null>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [type, setType] = useState<CameraType>(CameraType.back);
 
   useEffect(() => {
-    async function requestPermission() {
-      const status: CameraPermissionStatus = await Camera.requestCameraPermission();
-
-      // Correção: comparar com 'granted'
-      const authorized = status === 'granted';
-
-      setHasPermission(authorized);
-
-      if (!authorized) {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === 'granted');
+      if (status !== 'granted') {
         Alert.alert(
           'Permissão negada',
-          'Você precisa liberar acesso à câmera nas configurações do iOS.'
+          'Você precisa liberar acesso à câmera nas configurações do dispositivo.'
         );
       }
-    }
-    requestPermission();
+    })();
   }, []);
 
   const takePhoto = async () => {
     if (!cameraRef.current) return;
 
     try {
-      const photo = await cameraRef.current.takePhoto({ flash: 'off' });
-      setPhotoUri('file://' + photo.path);
-    } catch {
+      const photo = await cameraRef.current.takePictureAsync();
+      setPhotoUri(photo.uri);
+    } catch (e) {
       Alert.alert('Erro', 'Falha ao tirar a foto.');
     }
   };
 
-  if (!device) {
+  if (hasPermission === null) {
     return (
       <View style={styles.centered}>
-        <Text style={{ color: '#fff' }}>Carregando câmera...</Text>
+        <Text style={{ color: '#fff' }}>Solicitando permissão da câmera...</Text>
       </View>
     );
   }
 
-  if (!hasPermission) {
+  if (hasPermission === false) {
     return (
       <View style={styles.centered}>
         <Text style={{ color: '#fff' }}>Permissão para câmera negada.</Text>
@@ -63,9 +55,8 @@ export default function ExploreScreen() {
           <Camera
             ref={cameraRef}
             style={StyleSheet.absoluteFill}
-            device={device}
-            isActive={true}
-            photo={true}
+            type={type}
+            ratio="16:9"
           />
           <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
             <Text style={styles.captureButtonText}>📸</Text>
