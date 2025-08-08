@@ -9,6 +9,8 @@
     }
   },
   "include": [
+    "src",
+    "victory-native.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",

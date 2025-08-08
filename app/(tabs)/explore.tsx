@@ -1,27 +1,83 @@
-import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Alert, Button, Platform, StyleSheet, View } from 'react-native';
+import { Alert, Button, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Collapsible } from '@/components/Collapsible';
-import { ExternalLink } from '@/components/ExternalLink';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
+// Import Victory Native para gráficos
+import {
+  VictoryAxis,
+  VictoryChart,
+  VictoryLine,
+  VictoryTheme,
+} from 'victory-native';
+
+type SensorData = {
+  temperatura: number;
+  umidade: number;
+  luminosidade: number;
+  pressao: number;
+};
+
 export default function TabTwoScreen() {
-  const [espResponse, setEspResponse] = useState<string | null>(null);
+  const [espResponse, setEspResponse] = useState<SensorData | null>(null);
+  const [historico, setHistorico] = useState<SensorData[]>([]);
 
   const fetchESP32Data = async () => {
     try {
-      const response = await fetch('http://192.168.15.166/status'); // Substitua pelo IP real do ESP32
-      const data = await response.json();
-      setEspResponse(JSON.stringify(data, null, 2));
+      const response = await fetch('http://192.168.15.166/status'); // IP do ESP32
+      const data: SensorData = await response.json();
+      setEspResponse(data);
+
+      // Mantém histórico com no máximo 20 leituras
+      setHistorico((old) => [...old.slice(-19), data]);
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível conectar ao ESP32');
       console.error(error);
     }
   };
+
+  const calcularMedia = (valores: number[]) => {
+    if (valores.length === 0) return 0;
+    return valores.reduce((a, b) => a + b, 0) / valores.length;
+  };
+
+  const resumoEstatistico = () => {
+    const temp = historico.map((h) => h.temperatura);
+    const umid = historico.map((h) => h.umidade);
+    const lum = historico.map((h) => h.luminosidade);
+    const press = historico.map((h) => h.pressao);
+
+    return {
+      temperatura: {
+        min: Math.min(...temp),
+        max: Math.max(...temp),
+        media: calcularMedia(temp),
+      },
+      umidade: {
+        min: Math.min(...umid),
+        max: Math.max(...umid),
+        media: calcularMedia(umid),
+      },
+      luminosidade: {
+        min: Math.min(...lum),
+        max: Math.max(...lum),
+        media: calcularMedia(lum),
+      },
+      pressao: {
+        min: Math.min(...press),
+        max: Math.max(...press),
+        media: calcularMedia(press),
+      },
+    };
+  };
+
+  const resumo = resumoEstatistico();
+
+  // Função auxiliar para formatar dados para Victory (x = índice, y = valor)
+  const formatarDados = (arr: number[]) => arr.map((v, i) => ({ x: i + 1, y: v }));
 
   return (
     <ParallaxScrollView
@@ -33,95 +89,152 @@ export default function TabTwoScreen() {
           name="chevron.left.forwardslash.chevron.right"
           style={styles.headerImage}
         />
-      }>
+      }
+    >
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Explore</ThemedText>
+        <ThemedText type="title">Explore - Data Science</ThemedText>
       </ThemedView>
 
-      {/* Botão e exibição de resposta do ESP32 */}
       <View style={{ marginVertical: 16 }}>
-        <Button title="Conectar ao ESP32" onPress={fetchESP32Data} />
+        <Button title="Buscar dados do ESP32" onPress={fetchESP32Data} />
         {espResponse && (
           <ThemedText style={{ marginTop: 10 }}>
-            Resposta do ESP32: {espResponse}
+            Última leitura: {JSON.stringify(espResponse, null, 2)}
           </ThemedText>
         )}
       </View>
 
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image source={require('@/assets/images/react-logo.png')} style={{ alignSelf: 'center' }} />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-
-      <Collapsible title="Custom fonts">
-        <ThemedText>
-          Open <ThemedText type="defaultSemiBold">app/_layout.tsx</ThemedText> to see how to load{' '}
-          <ThemedText style={{ fontFamily: 'SpaceMono' }}>
-            custom fonts such as this one.
-          </ThemedText>
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/versions/latest/sdk/font">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful <ThemedText type="defaultSemiBold">react-native-reanimated</ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
+      <ScrollView horizontal style={{ height: 220, marginVertical: 20 }}>
+        <View style={{ flexDirection: 'row', paddingHorizontal: 10 }}>
+          {/* Temperatura */}
+          <View style={{ width: 180, marginRight: 20 }}>
+            <ThemedText type="defaultSemiBold" style={{ textAlign: 'center' }}>
+              Temperatura (°C)
             </ThemedText>
-          ),
-        })}
-      </Collapsible>
+            <VictoryChart
+              theme={VictoryTheme.material}
+              height={150}
+              width={180}
+              domainPadding={{ x: 10, y: 20 }}
+            >
+              <VictoryAxis
+                tickFormat={() => ''}
+                style={{ axis: { stroke: 'none' }, ticks: { stroke: 'none' } }}
+              />
+              <VictoryAxis dependentAxis />
+              <VictoryLine
+                style={{ data: { stroke: 'red' } }}
+                data={formatarDados(historico.map((h) => h.temperatura))}
+              />
+            </VictoryChart>
+          </View>
+
+          {/* Umidade */}
+          <View style={{ width: 180, marginRight: 20 }}>
+            <ThemedText type="defaultSemiBold" style={{ textAlign: 'center' }}>
+              Umidade (%)
+            </ThemedText>
+            <VictoryChart
+              theme={VictoryTheme.material}
+              height={150}
+              width={180}
+              domainPadding={{ x: 10, y: 20 }}
+            >
+              <VictoryAxis
+                tickFormat={() => ''}
+                style={{ axis: { stroke: 'none' }, ticks: { stroke: 'none' } }}
+              />
+              <VictoryAxis dependentAxis />
+              <VictoryLine
+                style={{ data: { stroke: 'blue' } }}
+                data={formatarDados(historico.map((h) => h.umidade))}
+              />
+            </VictoryChart>
+          </View>
+
+          {/* Luminosidade */}
+          <View style={{ width: 180, marginRight: 20 }}>
+            <ThemedText type="defaultSemiBold" style={{ textAlign: 'center' }}>
+              Luminosidade (lx)
+            </ThemedText>
+            <VictoryChart
+              theme={VictoryTheme.material}
+              height={150}
+              width={180}
+              domainPadding={{ x: 10, y: 20 }}
+            >
+              <VictoryAxis
+                tickFormat={() => ''}
+                style={{ axis: { stroke: 'none' }, ticks: { stroke: 'none' } }}
+              />
+              <VictoryAxis dependentAxis />
+              <VictoryLine
+                style={{ data: { stroke: 'orange' } }}
+                data={formatarDados(historico.map((h) => h.luminosidade))}
+              />
+            </VictoryChart>
+          </View>
+
+          {/* Pressão */}
+          <View style={{ width: 180 }}>
+            <ThemedText type="defaultSemiBold" style={{ textAlign: 'center' }}>
+              Pressão (hPa)
+            </ThemedText>
+            <VictoryChart
+              theme={VictoryTheme.material}
+              height={150}
+              width={180}
+              domainPadding={{ x: 10, y: 20 }}
+            >
+              <VictoryAxis
+                tickFormat={() => ''}
+                style={{ axis: { stroke: 'none' }, ticks: { stroke: 'none' } }}
+              />
+              <VictoryAxis dependentAxis />
+              <VictoryLine
+                style={{ data: { stroke: 'green' } }}
+                data={formatarDados(historico.map((h) => h.pressao))}
+              />
+            </VictoryChart>
+          </View>
+        </View>
+      </ScrollView>
+
+      <View style={{ paddingHorizontal: 20 }}>
+        <ThemedText
+          type="defaultSemiBold"
+          style={{ fontSize: 16, marginBottom: 10 }}
+        >
+          Resumo Estatístico (últimos {historico.length} registros)
+        </ThemedText>
+        {historico.length > 0 ? (
+          <>
+            <ThemedText>
+              Temperatura: min {resumo.temperatura.min.toFixed(1)}°C, max{' '}
+              {resumo.temperatura.max.toFixed(1)}°C, média{' '}
+              {resumo.temperatura.media.toFixed(1)}°C
+            </ThemedText>
+            <ThemedText>
+              Umidade: min {resumo.umidade.min.toFixed(1)}%, max{' '}
+              {resumo.umidade.max.toFixed(1)}%, média {resumo.umidade.media.toFixed(1)}%
+            </ThemedText>
+            <ThemedText>
+              Luminosidade: min {resumo.luminosidade.min.toFixed(1)}, max{' '}
+              {resumo.luminosidade.max.toFixed(1)}, média{' '}
+              {resumo.luminosidade.media.toFixed(1)}
+            </ThemedText>
+            <ThemedText>
+              Pressão: min {resumo.pressao.min.toFixed(1)} hPa, max{' '}
+              {resumo.pressao.max.toFixed(1)} hPa, média{' '}
+              {resumo.pressao.media.toFixed(1)} hPa
+            </ThemedText>
+          </>
+        ) : (
+          <ThemedText>Nenhum dado coletado ainda.</ThemedText>
+        )}
+      </View>
+
+      {/* Seus collapsibles originais continuam aqui */}
     </ParallaxScrollView>
   );
 }
