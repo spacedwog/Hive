@@ -2,28 +2,54 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 
-// 🚨 Substitua pelos dados da sua rede Wi-Fi
+#define MAX_PILHAS 3
+#define TAM_PILHA 5
+#define TAM_CMD   20
+
+// 🚨 Wi-Fi do Vespa
 const char* ssid = "FAMILIA SANTOS";
 const char* password = "6z2h1j3k9f";
 
 WebServer server(80);
 bool activated = false;
 
-// 🔹 Função para retornar status do dispositivo
+typedef struct {
+  char comando[TAM_CMD];
+  int status; // 1 = acerto, 0 = erro
+} Registro;
+
+Registro banco[MAX_PILHAS][TAM_PILHA];
+int topo[MAX_PILHAS];
+
+// Inicializa as pilhas
+void inicializar() {
+  for (int i = 0; i < MAX_PILHAS; i++) topo[i] = -1;
+}
+
+// Empilha
+bool empilhar(int pilha, const char* cmd, int status) {
+  if (pilha < 0 || pilha >= MAX_PILHAS) return false;
+  if (topo[pilha] >= TAM_PILHA - 1) return false;
+  topo[pilha]++;
+  strncpy(banco[pilha][topo[pilha]].comando, cmd, TAM_CMD);
+  banco[pilha][topo[pilha]].status = status;
+  return true;
+}
+
+// HTTP: Status do dispositivo
 void handleStatus() {
   DynamicJsonDocument doc(128);
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
-  doc["sensor"] = analogRead(34);        // Entrada analógica
-  doc["mesh"] = WiFi.status();           // Estado da conexão
-  doc["server"] = WiFi.localIP().toString(); // IP do servidor
+  doc["sensor"] = analogRead(34);
+  doc["server"] = WiFi.localIP().toString();
 
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
 }
 
-// 🔹 Função para receber comandos JSON
+// HTTP: Receber comando e salvar no histórico
 void handleCommand() {
   if (!server.hasArg("plain")) {
     server.send(400, "application/json", "{\"error\":\"Bad Request\"}");
@@ -31,66 +57,71 @@ void handleCommand() {
   }
 
   DynamicJsonDocument doc(256);
-  DeserializationError error = deserializeJson(doc, server.arg("plain"));
-
-  if (error) {
+  if (deserializeJson(doc, server.arg("plain"))) {
     server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
     return;
   }
 
   String command = doc["command"];
+  int statusCmd = 0;
 
   if (command == "activate") {
     activated = true;
     digitalWrite(32, HIGH);
+    statusCmd = 1;
   } 
   else if (command == "deactivate") {
     activated = false;
     digitalWrite(32, LOW);
-  }
+    statusCmd = 1;
+  } 
   else {
-    server.send(400, "application/json", "{\"error\":\"Unknown command\"}");
-    return;
+    statusCmd = 0; // comando inválido
   }
 
-  // Retorna resposta confirmando o comando recebido
+  // Salva no histórico na pilha 0
+  empilhar(0, command.c_str(), statusCmd);
+
   DynamicJsonDocument res(128);
-  res["result"] = "success";
+  res["result"] = statusCmd ? "success" : "error";
   res["status"] = activated ? "ativo" : "parado";
-  
+
   String jsonResponse;
   serializeJson(res, jsonResponse);
+  server.send(200, "application/json", jsonResponse);
+}
+
+// HTTP: Histórico
+void handleHistory() {
+  DynamicJsonDocument doc(1024);
+  for (int i = 0; i < MAX_PILHAS; i++) {
+    JsonArray pilhaJson = doc.createNestedArray(String("pilha") + i);
+    for (int j = 0; j <= topo[i]; j++) {
+      JsonObject item = pilhaJson.createNestedObject();
+      item["cmd"] = banco[i][j].comando;
+      item["status"] = banco[i][j].status ? "ACERTO" : "ERRO";
+    }
+  }
+  String jsonResponse;
+  serializeJson(doc, jsonResponse);
   server.send(200, "application/json", jsonResponse);
 }
 
 void setup() {
   Serial.begin(115200);
   pinMode(32, OUTPUT);
-  digitalWrite(32, LOW); // Garante que o LED/atuador comece desligado
+  digitalWrite(32, LOW);
+  inicializar();
 
-  Serial.print("Conectando à rede: ");
-  Serial.println(ssid);
   WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  Serial.println("\n✅ Wi-Fi conectado!");
+  Serial.println(WiFi.localIP());
 
-  int tentativas = 0;
-  while (WiFi.status() != WL_CONNECTED && tentativas < 20) {
-    delay(1000);
-    Serial.print(".");
-    tentativas++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nWi-Fi conectado com sucesso!");
-    Serial.print("Endereço IP: ");
-    Serial.println(WiFi.localIP());
-
-    // Endpoints iguais ao NodeMCU
-    server.on("/status", handleStatus);
-    server.on("/command", HTTP_POST, handleCommand);
-    server.begin();
-  } else {
-    Serial.println("\nFalha ao conectar ao Wi-Fi.");
-  }
+  server.on("/status", handleStatus);
+  server.on("/command", HTTP_POST, handleCommand);
+  server.on("/history", handleHistory);
+  server.begin();
 }
 
 void loop() {
