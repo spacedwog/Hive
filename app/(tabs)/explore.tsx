@@ -19,11 +19,12 @@ const nodes = [
 
 type NodeStatus = {
   device?: string;
-  server?: string;
+  server_ip?: string;
   status?: string;
   sensor?: number;
   anomaly?: boolean;
-  mesh?: boolean;
+  mesh_status?: boolean;
+  mesh_connected?: string;
   error?: string;
 };
 
@@ -99,7 +100,7 @@ export default function HiveScreen() {
                       🖥️ Aparelho: {s.device?.toUpperCase()}
                     </Text>
                     <Text style={styles.statusText}>
-                      🗄️ Servidor: {s.server?.toUpperCase()}
+                      🗄️ Servidor: {s.server_ip?.toUpperCase()}
                     </Text>
                     <Text style={styles.statusText}>
                       ✅ Estado: {s.status?.toUpperCase()}
@@ -108,7 +109,7 @@ export default function HiveScreen() {
                       📟 Sensor: {s.sensor}
                     </Text>
                     <Text style={styles.statusText}>
-                      🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}
+                      🧬 Mesh: {s.mesh_status ? 'Conectado' : 'Desconectado'}
                     </Text>
                     <Text
                       style={[
