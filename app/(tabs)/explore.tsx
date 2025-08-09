@@ -24,7 +24,6 @@ type NodeStatus = {
   sensor?: number;
   anomaly?: boolean;
   mesh_status?: boolean;
-  mesh_connected?: string;
   error?: string;
 };
 
