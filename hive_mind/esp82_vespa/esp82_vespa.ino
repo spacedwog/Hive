@@ -6,12 +6,14 @@
 #define TAM_PILHA 100
 #define TAM_CMD   20
 
+// Wi-Fi
 const char* ssid = "FAMILIA SANTOS";
 const char* password = "6z2h1j3k9f";
 
 WebServer server(80);
 bool activated = false;
 
+// Registro de comandos e status
 typedef struct {
   char comando[TAM_CMD];
   int status; // 1 = acerto, 0 = erro
@@ -20,10 +22,12 @@ typedef struct {
 Registro banco[MAX_PILHAS][TAM_PILHA];
 int topo[MAX_PILHAS];
 
+// Inicializa as pilhas
 void inicializar() {
   for (int i = 0; i < MAX_PILHAS; i++) topo[i] = -1;
 }
 
+// Empilha comando na pilha indicada
 bool empilhar(int pilha, const char* cmd, int status) {
   if (pilha < 0 || pilha >= MAX_PILHAS) return false;
   if (topo[pilha] >= TAM_PILHA - 1) return false;
@@ -37,6 +41,7 @@ bool empilhar(int pilha, const char* cmd, int status) {
 
 #define MAX_TASKS 5
 
+// Tipo do ponteiro para função callback da task
 typedef void (*TaskCallback)();
 
 typedef struct {
@@ -48,6 +53,7 @@ typedef struct {
 
 Task tasks[MAX_TASKS];
 
+// Inicializa o scheduler
 void initScheduler() {
   for (int i = 0; i < MAX_TASKS; i++) {
     tasks[i].callback = nullptr;
@@ -57,6 +63,7 @@ void initScheduler() {
   }
 }
 
+// Agenda uma nova task com intervalo em milissegundos
 bool scheduleTask(TaskCallback cb, unsigned long interval) {
   for (int i = 0; i < MAX_TASKS; i++) {
     if (!tasks[i].enabled) {
@@ -67,9 +74,10 @@ bool scheduleTask(TaskCallback cb, unsigned long interval) {
       return true;
     }
   }
-  return false; // não tem slot disponível
+  return false; // não há slot disponível
 }
 
+// Executa as tasks agendadas se o intervalo já passou
 void runScheduler() {
   unsigned long now = millis();
   for (int i = 0; i < MAX_TASKS; i++) {
@@ -82,12 +90,9 @@ void runScheduler() {
   }
 }
 
-// --- Exemplo de tarefa a ser executada ---
-
+// --- Exemplo de tarefa agendada ---
 void tarefaExemplo() {
   Serial.println("Executando tarefa agendada...");
-  // Aqui pode-se verificar sensores, enviar dados, etc.
-  // Exemplo: acender LED por 500ms para debug
   digitalWrite(32, HIGH);
   delay(100);
   digitalWrite(32, LOW);
@@ -169,7 +174,10 @@ void setup() {
   inicializar();
 
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  while (WiFi.status() != WL_CONNECTED) { 
+    delay(500); 
+    Serial.print(".");
+  }
   Serial.println("\n✅ Wi-Fi conectado!");
   Serial.println(WiFi.localIP());
 
