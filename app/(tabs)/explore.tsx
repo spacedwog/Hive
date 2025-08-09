@@ -23,7 +23,7 @@ type NodeStatus = {
   status?: string;
   sensor?: number;
   anomaly?: boolean;
-  mesh_status?: boolean;
+  mesh?: boolean;
   error?: string;
 };
 
@@ -108,7 +108,7 @@ export default function HiveScreen() {
                       📟 Sensor: {s.sensor}
                     </Text>
                     <Text style={styles.statusText}>
-                      🧬 Mesh: {s.mesh_status ? 'Conectado' : 'Desconectado'}
+                      🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}
                     </Text>
                     <Text
                       style={[

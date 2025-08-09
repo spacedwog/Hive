@@ -1,143 +1,169 @@
 #include <ESP8266WiFi.h>
-#include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
-#include <TypeConversionFunctions.h>
-#include <FloodingMesh.h>
 
-// ===== Configurações do Access Point =====
-const char* apSsid = "Vespa_AP";
-const char* apPassword = "vespa_ap"; // mínimo 8 caracteres
+// 📶 Configuração do SoftAP
+const char* ap_ssid = "HIVE EXPLORER";
+const char* ap_password = "explorer"; // mínimo 8 caracteres
 
-// ===== Configurações do Mesh =====
-namespace TypeCast = MeshTypeConversionFunctions;
-constexpr char meshName[] PROGMEM = "HIVE_EXPLORER";
-constexpr char meshPass[] PROGMEM = "explorer";
-
-uint8_t espnowEncryptedConnectionKey[16] = {0x33,0x44,0x33,0x44,0x33,0x44,0x33,0x44,0x33,0x44,0x33,0x44,0x33,0x44,0x32,0x11};
-uint8_t espnowHashKey[16] = {0xEF,0x44,0x33,0x0C,0x33,0x44,0xFE,0x44,0x33,0x44,0x33,0xB0,0x33,0x44,0x32,0xAD};
-
-// ===== Variáveis globais =====
+// 🌐 Servidor HTTP
 ESP8266WebServer server(80);
+
+// 🔄 Estado de controle
 bool activated = false;
-bool meshConnected = false;
+
+// 📟 Variáveis do sensor e status mesh
 int sensorValue = 0;
 bool anomalyDetected = false;
+bool meshConnected = false;  // Pode ser atualizado pela lógica mesh real
 
-// ===== Função de callback da Mesh =====
-bool meshMessageHandler(String &message, FloodingMesh &meshInstance) {
-  meshConnected = true; // recebeu mensagem = conectado
-  Serial.println("Mesh msg: " + message);
+// Parâmetros para detecção de anomalia no sensor (exemplo)
+const int sensorMinThreshold = 100;   // ajuste conforme seu sensor
+const int sensorMaxThreshold = 900;
 
-  // Se receber comando pela mesh, aplica localmente
-  if (message.startsWith("CMD:")) {
-    String cmd = message.substring(5);
-    if (cmd == "activate") {
-      activated = true;
-      digitalWrite(D4, HIGH);
-    } else if (cmd == "deactivate") {
-      activated = false;
-      digitalWrite(D4, LOW);
-    }
-  }
-  return true;
+// -------------------------
+// 📜 Página HTML principal
+// -------------------------
+String htmlPage() {
+  String page = R"rawliteral(
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>NodeMCU SoftAP Control</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        body { font-family: Arial; text-align: center; background-color: #111; color: white; }
+        h1 { color: #4CAF50; }
+        button { padding: 15px; margin: 10px; font-size: 18px; border-radius: 8px; border: none; }
+        .on { background-color: #4CAF50; color: white; }
+        .off { background-color: #f44336; color: white; }
+      </style>
+    </head>
+    <body>
+      <h1>Controle do NodeMCU</h1>
+      <p>Status: <span id="status">Carregando...</span></p>
+      <button class="on" onclick="sendCmd('on')">Ligar</button>
+      <button class="off" onclick="sendCmd('off')">Desligar</button>
+      <script>
+        function sendCmd(cmd) {
+          fetch('/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: cmd })
+          }).then(res => res.json()).then(data => {
+            document.getElementById('status').innerText = data.status;
+          });
+        }
+        function refreshStatus() {
+          fetch('/status').then(res => res.json()).then(data => {
+            document.getElementById('status').innerText = data.status;
+          });
+        }
+        setInterval(refreshStatus, 2000);
+        refreshStatus();
+      </script>
+    </body>
+    </html>
+  )rawliteral";
+  return page;
 }
 
-FloodingMesh floodingMesh = FloodingMesh(
-  meshMessageHandler,
-  FPSTR(meshPass),
-  espnowEncryptedConnectionKey,
-  espnowHashKey,
-  FPSTR(meshName),
-  TypeCast::uint64ToString(ESP.getChipId()),
-  true
-);
-
-// ===== Endpoints HTTP =====
+// -------------------------
+// 📡 Rota: Página principal
+// -------------------------
 void handleRoot() {
-  server.send(200, "text/html", "<h1>Vespa + Hive Explorer online</h1>");
+  server.send(200, "text/html", htmlPage());
 }
 
+// -------------------------
+// 📡 Rota: Status em JSON
+// -------------------------
 void handleStatus() {
-  DynamicJsonDocument doc(256);
-  doc["device"] = "Esp8266";
-  doc["status"] = activated ? "ativo" : "parado";
-  doc["sensor"] = analogRead(A0); // ESP8266 tem apenas A0
-  doc["mesh_status"] = meshConnected ? "online" : "offline";
-  doc["mesh_connected"] = meshConnected;
+  StaticJsonDocument<256> doc;
+  doc["device"] = "ESP8266";
   doc["server_ip"] = WiFi.softAPIP().toString();
-
-  String response;
-  serializeJson(doc, response);
-  server.send(200, "application/json", response);
+  doc["sensor"] = sensorValue;
+  doc["anomaly"] = anomalyDetected;
+  doc["mesh"] = meshConnected;
+  doc["status"] = activated ? "Ligado" : "Desligado";
+  String json;
+  serializeJson(doc, json);
+  server.send(200, "application/json", json);
 }
 
+// -------------------------
+// 📡 Rota: Receber comando JSON
+// -------------------------
 void handleCommand() {
-  if (!server.hasArg("plain")) {
-    server.send(400, "text/plain", "Bad Request - missing JSON body");
+  if (server.hasArg("plain") == false) {
+    server.send(400, "application/json", "{\"error\":\"No body received\"}");
     return;
   }
 
-  DynamicJsonDocument doc(256);
+  StaticJsonDocument<200> doc;
   DeserializationError error = deserializeJson(doc, server.arg("plain"));
 
   if (error) {
-    server.send(400, "application/json", "{\"error\": \"Invalid JSON\"}");
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
     return;
   }
 
-  String command = doc["command"] | "";
+  String action = doc["action"];
 
-  if (command == "activate") {
+  if (action == "on") {
     activated = true;
-    sensorValue = random(50, 100);
-    digitalWrite(D4, HIGH);
-    floodingMesh.broadcast("CMD: activate");
-  } else if (command == "deactivate") {
+    digitalWrite(LED_BUILTIN, LOW);  // Acende LED (ativo LOW no ESP8266)
+    Serial.println("🔵 Comando recebido: LIGAR");
+  } else if (action == "off") {
     activated = false;
-    sensorValue = 0;
-    digitalWrite(D4, LOW);
-    floodingMesh.broadcast("CMD: deactivate");
-  } else if (command == "ping") {
-    floodingMesh.broadcast("CMD: ping");
-  } else {
-    floodingMesh.broadcast("CMD: " + command);
+    digitalWrite(LED_BUILTIN, HIGH); // Apaga LED
+    Serial.println("🔴 Comando recebido: DESLIGAR");
   }
 
-  server.send(200, "application/json", "{\"ok\":true}");
+  handleStatus();
 }
 
-// ===== Setup =====
+// -------------------------
+// ⚙️ Setup inicial
+// -------------------------
 void setup() {
-  delay(1000);
   Serial.begin(115200);
-  pinMode(D4, OUTPUT);
-  digitalWrite(D4, LOW); // começa desligado
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH); // LED apagado
 
-  Serial.println("Iniciando Access Point...");
-  if (WiFi.softAP(apSsid, apPassword)) {
-    Serial.println("Access Point iniciado!");
-    Serial.print("IP do servidor: ");
-    Serial.println(WiFi.softAPIP());
-  } else {
-    Serial.println("Erro ao iniciar o Access Point!");
-  }
+  Serial.println("\n🔧 Iniciando SoftAP...");
+  WiFi.softAP(ap_ssid, ap_password);
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print("📡 SoftAP iniciado! IP: ");
+  Serial.println(myIP);
 
-  // Inicializa Mesh
-  floodingMesh.begin();
-  floodingMesh.activateAP();
-  floodingMeshDelay(2000);
-
-  // Configura HTTP Server
-  server.on("/", handleRoot);
+  // Configura rotas do servidor
+  server.on("/", HTTP_GET, handleRoot);
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
+
   server.begin();
-  Serial.println("Servidor HTTP iniciado");
+  Serial.println("✅ Servidor HTTP iniciado");
 }
 
-// ===== Loop =====
+// -------------------------
+// 🔄 Loop principal
+// -------------------------
 void loop() {
-  floodingMeshDelay(1);
   server.handleClient();
+
+  // Lê sensor analógico A0
+  sensorValue = analogRead(A0);
+
+  // Detecta anomalia: valor fora da faixa permitida
+  if (sensorValue < sensorMinThreshold || sensorValue > sensorMaxThreshold) {
+    anomalyDetected = true;
+  } else {
+    anomalyDetected = false;
+  }
+
+  // Simula status mesh - aqui pode ser substituído por código real de mesh
+  meshConnected = WiFi.softAPgetStationNum() > 0;  // true se pelo menos 1 estação conectada
+
+  delay(10);  // Pequeno delay para estabilidade
 }
