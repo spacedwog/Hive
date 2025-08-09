@@ -1,4 +1,5 @@
 import axios from 'axios';
+import base64 from 'base-64';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,6 +28,10 @@ type NodeStatus = {
   error?: string;
 };
 
+const username = 'spacedwog';
+const password = 'Kimera12@';
+const authHeader = 'Basic ' + base64.encode(`${username}:${password}`);
+
 export default function HiveScreen() {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
   const [loading, setLoading] = useState<boolean>(true);
@@ -40,6 +45,7 @@ export default function HiveScreen() {
       try {
         const res = await axios.get(`http://${node.ip}/status`, {
           timeout: 3000,
+          headers: { Authorization: authHeader },
         });
         newStatus[node.name] = res.data;
       } catch (err) {
@@ -56,7 +62,14 @@ export default function HiveScreen() {
     if (!ip) return;
 
     try {
-      await axios.post(`http://${ip}/command`, { command }, { timeout: 3000 });
+      await axios.post(
+        `http://${ip}/command`,
+        { command },
+        {
+          timeout: 3000,
+          headers: { Authorization: authHeader },
+        }
+      );
       Alert.alert('✅ Comando enviado', `Comando "${command}" enviado com sucesso para ${node}.`);
       fetchStatus();
     } catch (err) {
