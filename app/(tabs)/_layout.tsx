@@ -48,6 +48,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="anomaly"
+        options={{
+          title: 'Anomalias',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name={"dna.fill" as any} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="explore"
         options={{
           title: 'Explore',

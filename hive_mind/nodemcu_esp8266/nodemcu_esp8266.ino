@@ -79,13 +79,27 @@ void handleRoot() {
 // 📡 Rota: Status em JSON
 // -------------------------
 void handleStatus() {
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<512> doc;
   doc["device"] = "ESP8266";
   doc["server_ip"] = WiFi.softAPIP().toString();
   doc["sensor"] = sensorValue;
-  doc["anomaly"] = anomalyDetected;
   doc["mesh"] = meshConnected;
   doc["status"] = activated ? "Ligado" : "Desligado";
+
+  // Dados de anomalia detalhados
+  if (anomalyDetected) {
+    JsonObject anomalyObj = doc.createNestedObject("anomaly");
+    anomalyObj["detected"] = true;
+    anomalyObj["message"] = "Valor do sensor fora do intervalo permitido";
+    anomalyObj["expected_range"] = String(sensorMinThreshold) + " - " + String(sensorMaxThreshold);
+    anomalyObj["current_value"] = sensorValue;
+    anomalyObj["timestamp_ms"] = millis();
+  } else {
+    JsonObject anomalyObj = doc.createNestedObject("anomaly");
+    anomalyObj["detected"] = false;
+    anomalyObj["message"] = "Nenhuma anomalia detectada";
+  }
+
   String json;
   serializeJson(doc, json);
   server.send(200, "application/json", json);
