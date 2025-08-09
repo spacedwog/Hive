@@ -112,15 +112,38 @@ void handleCommand() {
 
   if (action == "on") {
     activated = true;
-    digitalWrite(LED_BUILTIN, LOW);  // Acende LED (ativo LOW no ESP8266)
+    digitalWrite(LED_BUILTIN, LOW);  // Acende LED (ativo LOW)
     Serial.println("🔵 Comando recebido: LIGAR");
+
+    StaticJsonDocument<200> res;
+    res["status"] = "Ligado";
+    String resp;
+    serializeJson(res, resp);
+    server.send(200, "application/json", resp);
+
   } else if (action == "off") {
     activated = false;
-    digitalWrite(LED_BUILTIN, HIGH); // Apaga LED
+    digitalWrite(LED_BUILTIN, HIGH);  // Apaga LED
     Serial.println("🔴 Comando recebido: DESLIGAR");
-  }
 
-  handleStatus();
+    StaticJsonDocument<200> res;
+    res["status"] = "Desligado";
+    String resp;
+    serializeJson(res, resp);
+    server.send(200, "application/json", resp);
+
+  } else if (action == "ping") {
+    Serial.println("📶 Comando recebido: PING");
+    StaticJsonDocument<200> res;
+    res["response"] = "pong";
+    res["timestamp"] = millis();
+    String resp;
+    serializeJson(res, resp);
+    server.send(200, "application/json", resp);
+
+  } else {
+    server.send(400, "application/json", "{\"error\":\"Comando desconhecido\"}");
+  }
 }
 
 // -------------------------

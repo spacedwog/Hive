@@ -14,7 +14,7 @@ import {
 
 // Mapa de IPs dos dispositivos conectados
 const nodes = [
-  { name: 'NODEMCU', ip: '192.168.4.1' }, // Substitua com o IP real do NODEMCU
+  { name: 'NODEMCU', ip: '192.168.4.1' }, // IP do SoftAP do NodeMCU
 ];
 
 type NodeStatus = {
@@ -24,10 +24,11 @@ type NodeStatus = {
   sensor?: number;
   anomaly?: boolean;
   mesh?: boolean;
+  ping?: number; // Novo campo para resposta do comando ping
   error?: string;
 };
 
-export default function HiveScreen() {
+export default function ExploreScreen() {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [customCommands, setCustomCommands] = useState<Record<string, string>>({});
@@ -51,16 +52,28 @@ export default function HiveScreen() {
     setLoading(false);
   };
 
-  const sendCommand = async (node: string, command: string) => {
+  const sendCommand = async (node: string, action: string) => {
     const ip = nodes.find(n => n.name === node)?.ip;
     if (!ip) return;
 
     try {
-      await axios.post(`http://${ip}/command`, { command }, { timeout: 3000 });
-      Alert.alert('✅ Comando enviado', `Comando "${command}" enviado com sucesso para ${node}.`);
+      const res = await axios.post(
+        `http://${ip}/command`,
+        { action }, // <-- Corrigido: usa "action"
+        { timeout: 3000 }
+      );
+
+      let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
+
+      // Se o comando for "ping", exibe o tempo de resposta
+      if (action === 'ping' && res.data?.ping !== undefined) {
+        msg += ` Tempo de resposta: ${res.data.ping} ms`;
+      }
+
+      Alert.alert('✅ Sucesso', msg);
       fetchStatus();
     } catch (err) {
-      Alert.alert('❌ Erro', `Falha ao enviar comando "${command}" para ${node}.`);
+      Alert.alert('❌ Erro', `Falha ao enviar comando "${action}" para ${node}.`);
     }
   };
 
@@ -95,21 +108,11 @@ export default function HiveScreen() {
                   <Text style={styles.statusText}>❌ {s.error}</Text>
                 ) : (
                   <>
-                    <Text style={styles.statusText}>
-                      🖥️ Aparelho: {s.device?.toUpperCase()}
-                    </Text>
-                    <Text style={styles.statusText}>
-                      🗄️ Servidor: {s.server_ip?.toUpperCase()}
-                    </Text>
-                    <Text style={styles.statusText}>
-                      ✅ Estado: {s.status?.toUpperCase()}
-                    </Text>
-                    <Text style={styles.statusText}>
-                      📟 Sensor: {s.sensor}
-                    </Text>
-                    <Text style={styles.statusText}>
-                      🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}
-                    </Text>
+                    <Text style={styles.statusText}>🖥️ Aparelho: {s.device?.toUpperCase()}</Text>
+                    <Text style={styles.statusText}>🗄️ Servidor: {s.server_ip?.toUpperCase()}</Text>
+                    <Text style={styles.statusText}>✅ Estado: {s.status?.toUpperCase()}</Text>
+                    <Text style={styles.statusText}>📟 Sensor: {s.sensor}</Text>
+                    <Text style={styles.statusText}>🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}</Text>
                     <Text
                       style={[
                         styles.statusText,
@@ -118,13 +121,16 @@ export default function HiveScreen() {
                     >
                       ⚠️ Anomalia: {s.anomaly ? 'Detectada' : 'Normal'}
                     </Text>
+                    {s.ping !== undefined && (
+                      <Text style={styles.statusText}>📡 Ping: {s.ping} ms</Text>
+                    )}
 
                     <View style={styles.buttonRow}>
                       <View style={styles.buttonItem}>
-                        <Button title="⚡ Ativar" onPress={() => sendCommand(node.name, 'activate')} />
+                        <Button title="⚡ Ativar" onPress={() => sendCommand(node.name, 'on')} />
                       </View>
                       <View style={styles.buttonItem}>
-                        <Button title="🛑 Desativar" onPress={() => sendCommand(node.name, 'deactivate')} />
+                        <Button title="🛑 Desativar" onPress={() => sendCommand(node.name, 'off')} />
                       </View>
                       <View style={styles.buttonItem}>
                         <Button title="📡 Ping" onPress={() => sendCommand(node.name, 'ping')} />
