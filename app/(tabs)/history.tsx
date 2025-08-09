@@ -1,12 +1,16 @@
+import base64 from 'base-64';
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    FlatList,
-    RefreshControl,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    View,
+  FlatList,
+  RefreshControl,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
+
+const username = 'spacedwog';
+const password = 'Kimera12@';
 
 export default function HistoryScreen() {
   const [history, setHistory] = useState<any>({});
@@ -14,8 +18,15 @@ export default function HistoryScreen() {
 
   const fetchHistory = useCallback(() => {
     setRefreshing(true);
-    fetch("http://192.168.15.166/history") // IP do ESP32/NodeMCU
-      .then((res) => res.json())
+
+    const headers = new Headers();
+    headers.append('Authorization', 'Basic ' + base64.encode(`${username}:${password}`));
+
+    fetch("http://192.168.15.166/history", { headers })
+      .then((res) => {
+        if (!res.ok) throw new Error('Erro na autenticação ou na requisição');
+        return res.json();
+      })
       .then((data) => setHistory(data))
       .catch((err) => console.error("Erro ao buscar histórico:", err))
       .finally(() => setRefreshing(false));
@@ -65,17 +76,17 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: "#fff",
-    alignItems: "center", // centraliza horizontalmente
+    alignItems: "center",
   },
   title: {
     fontSize: 22,
     fontWeight: "bold",
     marginBottom: 20,
-    textAlign: "center", // centraliza texto
+    textAlign: "center",
   },
   pilhaBox: {
     marginBottom: 20,
-    alignItems: "center", // centraliza conteúdo da pilha
+    alignItems: "center",
     width: "100%",
   },
   pilhaTitle: {
@@ -86,10 +97,10 @@ const styles = StyleSheet.create({
   item: {
     fontSize: 16,
     marginVertical: 4,
-    textAlign: "center", // centraliza o texto de cada item
+    textAlign: "center",
   },
   listContent: {
-    alignItems: "center", // centraliza os itens na lista
+    alignItems: "center",
     paddingBottom: 10,
   },
   emptyText: {
