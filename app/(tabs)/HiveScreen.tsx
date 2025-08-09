@@ -73,7 +73,14 @@ export default function HiveScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={fetchStatus} colors={['#facc15']} />
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={fetchStatus}
+            colors={['#facc15']}
+            tintColor="#facc15"
+            title="Atualizando..."
+            titleColor="#facc15"
+          />
         }
       >
         <Text style={styles.title}>🧠 HIVE Central</Text>
@@ -95,21 +102,11 @@ export default function HiveScreen() {
                   <Text style={styles.statusText}>❌ {s.error}</Text>
                 ) : (
                   <>
-                    <Text style={styles.statusText}>
-                      🖥️ Aparelho: {s.device?.toUpperCase()}
-                    </Text>
-                    <Text style={styles.statusText}>
-                      🗄️ Servidor: {s.server?.toUpperCase()}
-                    </Text>
-                    <Text style={styles.statusText}>
-                      ✅ Estado: {s.status?.toUpperCase()}
-                    </Text>
-                    <Text style={styles.statusText}>
-                      📟 Sensor: {s.sensor}
-                    </Text>
-                    <Text style={styles.statusText}>
-                      🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}
-                    </Text>
+                    <Text style={styles.statusText}>🖥️ Aparelho: {s.device?.toUpperCase()}</Text>
+                    <Text style={styles.statusText}>🗄️ Servidor: {s.server?.toUpperCase()}</Text>
+                    <Text style={styles.statusText}>✅ Estado: {s.status?.toUpperCase()}</Text>
+                    <Text style={styles.statusText}>📟 Sensor: {s.sensor}</Text>
+                    <Text style={styles.statusText}>🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}</Text>
                     <Text
                       style={[
                         styles.statusText,
@@ -131,7 +128,6 @@ export default function HiveScreen() {
                       </View>
                     </View>
 
-                    {/* Campo de comando personalizado */}
                     <TextInput
                       style={styles.input}
                       placeholder="Digite um comando personalizado..."
