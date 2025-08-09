@@ -51,9 +51,7 @@ export default function TabLayout() {
         name="anomaly"
         options={{
           title: 'Anomalias',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name={"dna.fill" as any} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="drone" color={color} />,
         }}
       />
       <Tabs.Screen

@@ -18,7 +18,7 @@ bool anomalyDetected = false;
 bool meshConnected = false;  // Pode ser atualizado pela lógica mesh real
 
 // Parâmetros para detecção de anomalia no sensor (exemplo)
-const int sensorMinThreshold = 100;   // ajuste conforme seu sensor
+const int sensorMinThreshold = 1;   // ajuste conforme seu sensor
 const int sensorMaxThreshold = 900;
 
 // -------------------------
