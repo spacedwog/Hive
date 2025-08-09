@@ -2,8 +2,8 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 
-#define MAX_PILHAS 3
-#define TAM_PILHA 5
+#define MAX_PILHAS 1
+#define TAM_PILHA 100
 #define TAM_CMD   20
 
 // 🚨 Wi-Fi do Vespa
@@ -95,7 +95,7 @@ void handleCommand() {
 void handleHistory() {
   DynamicJsonDocument doc(1024);
   for (int i = 0; i < MAX_PILHAS; i++) {
-    JsonArray pilhaJson = doc.createNestedArray(String("pilha") + i);
+    JsonArray pilhaJson = doc.createNestedArray(String("Comando"));
     for (int j = 0; j <= topo[i]; j++) {
       JsonObject item = pilhaJson.createNestedObject();
       item["cmd"] = banco[i][j].comando;
