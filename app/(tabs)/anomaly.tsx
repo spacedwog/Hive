@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface AnomalyData {
   device: string;
@@ -18,49 +18,62 @@ interface AnomalyData {
 
 export default function AnomalyScreen() {
   const [statusData, setStatusData] = useState<AnomalyData | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("http://192.168.4.1/status");
+      const data: AnomalyData = await res.json();
+      setStatusData(data);
+    } catch (error) {
+      console.error("Erro ao buscar status:", error);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch("http://192.168.4.1/status");
-        const data: AnomalyData = await res.json();
-        setStatusData(data);
-      } catch (error) {
-        console.error("Erro ao buscar status:", error);
-      }
-    };
-
     fetchStatus();
+
     const interval = setInterval(fetchStatus, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchStatus]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchStatus();
+    setRefreshing(false);
+  }, [fetchStatus]);
 
   if (!statusData) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Carregando dados...</Text>
+        <Text style={[styles.text, styles.loading]}>Carregando dados...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>📡 Status do NodeMCU</Text>
-      <Text>Dispositivo: {statusData.device}</Text>
-      <Text>IP: {statusData.server_ip}</Text>
-      <Text>Status: {statusData.status}</Text>
-      <Text>Valor do sensor: {statusData.sensor}</Text>
-      <Text>Mesh conectado: {statusData.mesh ? "Sim" : "Não"}</Text>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />
+      }
+    >
+      <Text style={[styles.text, styles.title]}>📡 Status do NodeMCU</Text>
+      <Text style={styles.text}>Dispositivo: {statusData.device}</Text>
+      <Text style={styles.text}>IP: {statusData.server_ip}</Text>
+      <Text style={styles.text}>Status: {statusData.status}</Text>
+      <Text style={styles.text}>Valor do sensor: {statusData.sensor}</Text>
+      <Text style={styles.text}>Mesh conectado: {statusData.mesh ? "Sim" : "Não"}</Text>
 
       <View style={styles.anomalyBox}>
-        <Text style={styles.anomalyTitle}>🔍 Anomalia</Text>
-        <Text>Detectada: {statusData.anomaly.detected ? "Sim" : "Não"}</Text>
-        <Text>Mensagem: {statusData.anomaly.message}</Text>
+        <Text style={[styles.text, styles.anomalyTitle]}>🔍 Anomalia</Text>
+        <Text style={styles.text}>Detectada: {statusData.anomaly.detected ? "Sim" : "Não"}</Text>
+        <Text style={styles.text}>Mensagem: {statusData.anomaly.message}</Text>
         {statusData.anomaly.detected && (
           <>
-            <Text>Faixa esperada: {statusData.anomaly.expected_range}</Text>
-            <Text>Valor atual: {statusData.anomaly.current_value}</Text>
-            <Text>Timestamp (ms): {statusData.anomaly.timestamp_ms}</Text>
+            <Text style={styles.text}>Faixa esperada: {statusData.anomaly.expected_range}</Text>
+            <Text style={styles.text}>Valor atual: {statusData.anomaly.current_value}</Text>
+            <Text style={styles.text}>Timestamp (ms): {statusData.anomaly.timestamp_ms}</Text>
           </>
         )}
       </View>
@@ -69,9 +82,10 @@ export default function AnomalyScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#111" },
+  container: { flex: 1, padding: 20, backgroundColor: "#0f172a" },
+  text: { color: "#fff" },
   title: { fontSize: 20, fontWeight: "bold", marginBottom: 10, color: "#4CAF50" },
   anomalyBox: { marginTop: 20, padding: 15, backgroundColor: "#222", borderRadius: 8 },
   anomalyTitle: { fontSize: 18, fontWeight: "bold", color: "#f44336", marginBottom: 5 },
-  loading: { color: "#fff", textAlign: "center", marginTop: 20 }
+  loading: { textAlign: "center", marginTop: 20 },
 });
