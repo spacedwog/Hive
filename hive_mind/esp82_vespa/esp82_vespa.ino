@@ -1,7 +1,8 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
-#include <mbedtls/base64.h>  // Inclua para base64 decode
+#include <HTTPClient.h>
+#include <mbedtls/base64.h>
 
 #define MAX_PILHAS 1
 #define TAM_PILHA 100
@@ -40,10 +41,9 @@ bool empilhar(int pilha, const char* cmd, int status) {
 String base64Decode(const String &input) {
   size_t out_len = 0;
   size_t input_len = input.length();
-  unsigned char output[input_len]; // buffer
-
+  unsigned char output[input_len];
   int ret = mbedtls_base64_decode(output, input_len, &out_len, 
-                                 (const unsigned char*)input.c_str(), input_len);
+                                  (const unsigned char*)input.c_str(), input_len);
   if (ret == 0) {
     return String((char*)output).substring(0, out_len);
   }
@@ -56,36 +56,27 @@ bool checkAuth() {
     server.send(401, "text/plain", "Unauthorized");
     return false;
   }
-
   String authHeader = server.header("Authorization");
   if (!authHeader.startsWith("Basic ")) {
     server.sendHeader("WWW-Authenticate", "Basic realm=\"ESP32\"");
     server.send(401, "text/plain", "Unauthorized");
     return false;
   }
-
   String encoded = authHeader.substring(6);
   String decoded = base64Decode(encoded);
-
   String expected = String(authUsername) + ":" + authPassword;
-
   if (decoded != expected) {
     server.sendHeader("WWW-Authenticate", "Basic realm=\"ESP32\"");
     server.send(401, "text/plain", "Unauthorized");
     return false;
   }
-
   return true;
 }
-
-// Os seus handlers (handleStatus, handleCommand, handleHistory) ficam iguais,
-// só adicione no início de cada um:
-// if (!checkAuth()) return;
 
 void handleStatus() {
   if (!checkAuth()) return;
 
-  DynamicJsonDocument doc(128);
+  DynamicJsonDocument doc(256);
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
   doc["sensor"] = analogRead(34);
@@ -128,9 +119,6 @@ void handleCommand() {
     analogRead(34);
     statusCmd = 1;
   }
-  else {
-    statusCmd = 0;
-  }
 
   empilhar(0, command.c_str(), statusCmd);
 
@@ -147,7 +135,6 @@ void handleHistory() {
   if (!checkAuth()) return;
 
   DynamicJsonDocument doc(1024);
-
   for (int i = 0; i < MAX_PILHAS; i++) {
     JsonArray pilhaJson = doc.createNestedArray(String("Comando"));
     for (int j = 0; j <= topo[i]; j++) {
@@ -162,6 +149,49 @@ void handleHistory() {
   server.send(200, "application/json", jsonResponse);
 }
 
+// Pesquisa no Google
+void handleSearch() {
+  if (!checkAuth()) return;
+
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"No query provided\"}");
+    return;
+  }
+
+  DynamicJsonDocument reqDoc(256);
+  DeserializationError err = deserializeJson(reqDoc, server.arg("plain"));
+  if (err) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  String query = reqDoc["query"];
+  if (query.length() == 0) {
+    server.send(400, "application/json", "{\"error\":\"Empty query\"}");
+    return;
+  }
+
+  HTTPClient http;
+  String url = "https://www.google.com/search?q=" + query;
+  http.begin(url);
+  http.setUserAgent("ESP32Bot/1.0");
+  int httpCode = http.GET();
+
+  DynamicJsonDocument resDoc(512);
+  if (httpCode == 200) {
+    String payload = http.getString();
+    // Corrigido o min() com cast para int
+    resDoc["result"] = payload.substring(0, min((int)payload.length(), 500));
+  } else {
+    resDoc["error"] = "Falha ao acessar Google";
+  }
+
+  http.end();
+  String response;
+  serializeJson(resDoc, response);
+  server.send(200, "application/json", response);
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(32, OUTPUT);
@@ -170,21 +200,25 @@ void setup() {
 
   WiFi.begin(ssid, password);
   Serial.print("Conectando WiFi");
-  while (WiFi.status() != WL_CONNECTED) { 
-    delay(500); 
-    Serial.print("."); 
-  }
+  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   Serial.println("\n✅ Wi-Fi conectado!");
   Serial.println(WiFi.localIP());
 
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
   server.on("/history", handleHistory);
-
+  server.on("/search", HTTP_POST, handleSearch);
   server.begin();
+
   Serial.println("Servidor HTTP iniciado");
 }
 
+unsigned long ultimoSync = 0;
+
 void loop() {
   server.handleClient();
+
+  if (millis() - ultimoSync > 5000) { // Loop de sincronização
+    ultimoSync = millis();
+  }
 }

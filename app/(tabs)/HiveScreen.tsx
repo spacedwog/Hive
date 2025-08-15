@@ -15,7 +15,7 @@ import {
 
 // Mapa de IPs dos dispositivos conectados
 const nodes = [
-  { name: 'ESP32', ip: '192.168.15.166' }, // Substitua com o IP real do ESP32
+  { name: 'ESP32', ip: '192.168.15.166' }, // Substitua pelo IP real do ESP32
 ];
 
 type NodeStatus = {
@@ -32,10 +32,17 @@ const username = 'spacedwog';
 const password = 'Kimera12@';
 const authHeader = 'Basic ' + base64.encode(`${username}:${password}`);
 
+type SearchResult = {
+  title: string;
+  link: string;
+};
+
 export default function HiveScreen() {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [customCommands, setCustomCommands] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState<Record<string, string>>({});
+  const [searchResults, setSearchResults] = useState<Record<string, SearchResult[]>>({});
 
   const fetchStatus = async () => {
     setLoading(true);
@@ -65,15 +72,42 @@ export default function HiveScreen() {
       await axios.post(
         `http://${ip}/command`,
         { command },
-        {
-          timeout: 3000,
-          headers: { Authorization: authHeader },
-        }
+        { timeout: 3000, headers: { Authorization: authHeader } }
       );
-      Alert.alert('✅ Comando enviado', `Comando "${command}" enviado com sucesso para ${node}.`);
+      Alert.alert('✅ Comando enviado', `Comando "${command}" enviado para ${node}.`);
       fetchStatus();
     } catch (err) {
       Alert.alert('❌ Erro', `Falha ao enviar comando "${command}" para ${node}.`);
+    }
+  };
+
+  const sendSearch = async (node: string, query: string) => {
+    const ip = nodes.find(n => n.name === node)?.ip;
+    if (!ip || query.length === 0) return;
+
+    try {
+      const res = await axios.post(
+        `http://${ip}/search`,
+        { query },
+        { timeout: 5000, headers: { Authorization: authHeader } }
+      );
+
+      // Parse HTML simples: pega <a href="/url?q=..."...> e títulos <h3>
+      const html = res.data.html as string;
+      const results: SearchResult[] = [];
+      const regex = /<a href="\/url\?q=([^"&]+)[^>]*".*?><.*?>(.*?)<\/.*?>/g;
+
+      let match;
+      while ((match = regex.exec(html)) !== null && results.length < 10) {
+        const link = decodeURIComponent(match[1]);
+        const title = match[2].replace(/<[^>]+>/g, ''); // remove tags internas
+        results.push({ title, link });
+      }
+
+      setSearchResults({ ...searchResults, [node]: results });
+      Alert.alert('🔎 Pesquisa realizada', `Query: "${query}"`);
+    } catch (err) {
+      Alert.alert('❌ Erro', `Falha ao pesquisar "${query}" em ${node}`);
     }
   };
 
@@ -141,23 +175,35 @@ export default function HiveScreen() {
                       </View>
                     </View>
 
+                    {/* Pesquisa Google */}
                     <TextInput
                       style={styles.input}
-                      placeholder="Digite um comando personalizado..."
+                      placeholder="Pesquisar no Google..."
                       placeholderTextColor="#94a3b8"
-                      value={customCommands[node.name] || ''}
+                      value={searchQuery[node.name] || ''}
                       onChangeText={(text) =>
-                        setCustomCommands({ ...customCommands, [node.name]: text })
+                        setSearchQuery({ ...searchQuery, [node.name]: text })
                       }
                     />
                     <View style={styles.customCommandButton}>
                       <Button
-                        title="🚀 Enviar Comando"
-                        onPress={() =>
-                          sendCommand(node.name, customCommands[node.name] || '')
-                        }
+                        title="🔎 Pesquisar"
+                        onPress={() => sendSearch(node.name, searchQuery[node.name] || '')}
                       />
                     </View>
+
+                    {searchResults[node.name]?.length ? (
+                      <View style={{ marginTop: 10, width: '100%' }}>
+                        {searchResults[node.name].map((res, idx) => (
+                          <View key={idx} style={{ marginBottom: 6 }}>
+                            <Text style={{ color: '#facc15', fontWeight: 'bold' }}>
+                              {res.title}
+                            </Text>
+                            <Text style={{ color: '#94a3b8' }}>{res.link}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
                   </>
                 )}
               </View>
