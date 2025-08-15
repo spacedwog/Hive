@@ -149,17 +149,26 @@ void handleHistory() {
   server.send(200, "application/json", jsonResponse);
 }
 
-// Pesquisa no Google
+// Função de busca SIMULADA para economizar memória
 void handleSearch() {
   if (!checkAuth()) return;
 
-  if (!server.hasArg("plain")) {
+  // Lê o corpo da requisição
+  String body;
+  if (server.hasArg("plain")) {
+    body = server.arg("plain");
+  } else if (server.args() > 0) {
+    body = server.arg(0); // fallback para JSON
+  }
+
+  if (body.length() == 0) {
     server.send(400, "application/json", "{\"error\":\"No query provided\"}");
     return;
   }
 
+  // Deserializa JSON
   DynamicJsonDocument reqDoc(256);
-  DeserializationError err = deserializeJson(reqDoc, server.arg("plain"));
+  DeserializationError err = deserializeJson(reqDoc, body);
   if (err) {
     server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
     return;
@@ -171,22 +180,15 @@ void handleSearch() {
     return;
   }
 
-  HTTPClient http;
-  String url = "https://www.google.com/search?q=" + query;
-  http.begin(url);
-  http.setUserAgent("ESP32Bot/1.0");
-  int httpCode = http.GET();
-
+  // Simula resultados
   DynamicJsonDocument resDoc(512);
-  if (httpCode == 200) {
-    String payload = http.getString();
-    // Corrigido o min() com cast para int
-    resDoc["result"] = payload.substring(0, min((int)payload.length(), 500));
-  } else {
-    resDoc["error"] = "Falha ao acessar Google";
+  JsonArray results = resDoc.createNestedArray("results");
+  for (int i = 1; i <= 3; i++) {
+    JsonObject item = results.createNestedObject();
+    item["title"] = "Resultado simulado " + String(i) + " para: " + query;
+    item["link"] = "https://example.com/search?q=" + query + "&r=" + String(i);
   }
 
-  http.end();
   String response;
   serializeJson(resDoc, response);
   server.send(200, "application/json", response);
@@ -213,12 +215,6 @@ void setup() {
   Serial.println("Servidor HTTP iniciado");
 }
 
-unsigned long ultimoSync = 0;
-
 void loop() {
   server.handleClient();
-
-  if (millis() - ultimoSync > 5000) { // Loop de sincronização
-    ultimoSync = millis();
-  }
 }

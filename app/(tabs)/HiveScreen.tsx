@@ -92,17 +92,11 @@ export default function HiveScreen() {
         { timeout: 5000, headers: { Authorization: authHeader } }
       );
 
-      // Parse HTML simples: pega <a href="/url?q=..."...> e títulos <h3>
-      const html = res.data.html as string;
-      const results: SearchResult[] = [];
-      const regex = /<a href="\/url\?q=([^"&]+)[^>]*".*?><.*?>(.*?)<\/.*?>/g;
-
-      let match;
-      while ((match = regex.exec(html)) !== null && results.length < 10) {
-        const link = decodeURIComponent(match[1]);
-        const title = match[2].replace(/<[^>]+>/g, ''); // remove tags internas
-        results.push({ title, link });
-      }
+      // Agora res.data é JSON direto
+      const results: SearchResult[] = res.data.results.map((item: any) => ({
+        title: item.title,
+        link: item.link,
+      }));
 
       setSearchResults({ ...searchResults, [node]: results });
       Alert.alert('🔎 Pesquisa realizada', `Query: "${query}"`);
