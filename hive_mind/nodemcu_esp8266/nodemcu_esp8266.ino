@@ -1,13 +1,22 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
+#include <DNSServer.h>
 
 // 📶 Configuração do SoftAP
 const char* ap_ssid = "HIVE EXPLORER";
 const char* ap_password = "explorer"; // mínimo 8 caracteres
 
+// 🌐 Configuração da conexão STA (internet)
+const char* sta_ssid = "FAMILIA SANTOS";
+const char* sta_password = "6z2h1j3k9f";
+
 // 🌐 Servidor HTTP
 ESP8266WebServer server(80);
+
+// 📡 Servidor DNS para Captive Portal
+DNSServer dnsServer;
+const byte DNS_PORT = 53;
 
 // 🔄 Estado de controle
 bool activated = false;
@@ -15,10 +24,10 @@ bool activated = false;
 // 📟 Variáveis do sensor e status mesh
 int sensorValue = 0;
 bool anomalyDetected = false;
-bool meshConnected = false;  // Pode ser atualizado pela lógica mesh real
+bool meshConnected = false;
 
-// Parâmetros para detecção de anomalia no sensor (exemplo)
-const int sensorMinThreshold = 100;   // ajuste conforme seu sensor
+// Limites para detecção de anomalia
+const int sensorMinThreshold = 100;
 const int sensorMaxThreshold = 900;
 
 // -------------------------
@@ -29,7 +38,7 @@ String htmlPage() {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>NodeMCU SoftAP Control</title>
+      <title>NodeMCU HIVE EXPLORER</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <style>
         body { font-family: Arial; text-align: center; background-color: #111; color: white; }
@@ -40,7 +49,7 @@ String htmlPage() {
       </style>
     </head>
     <body>
-      <h1>Controle do NodeMCU</h1>
+      <h1>HIVE EXPLORER</h1>
       <p>Status: <span id="status">Carregando...</span></p>
       <button class="on" onclick="sendCmd('on')">Ligar</button>
       <button class="off" onclick="sendCmd('off')">Desligar</button>
@@ -86,7 +95,6 @@ void handleStatus() {
   doc["mesh"] = meshConnected;
   doc["status"] = activated ? "Ligado" : "Desligado";
 
-  // Dados de anomalia detalhados
   if (anomalyDetected) {
     JsonObject anomalyObj = doc.createNestedObject("anomaly");
     anomalyObj["detected"] = true;
@@ -109,14 +117,13 @@ void handleStatus() {
 // 📡 Rota: Receber comando JSON
 // -------------------------
 void handleCommand() {
-  if (server.hasArg("plain") == false) {
+  if (!server.hasArg("plain")) {
     server.send(400, "application/json", "{\"error\":\"No body received\"}");
     return;
   }
 
   StaticJsonDocument<200> doc;
   DeserializationError error = deserializeJson(doc, server.arg("plain"));
-
   if (error) {
     server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
     return;
@@ -126,9 +133,7 @@ void handleCommand() {
 
   if (action == "on") {
     activated = true;
-    digitalWrite(LED_BUILTIN, LOW);  // Acende LED (ativo LOW)
-    Serial.println("🔵 Comando recebido: LIGAR");
-
+    digitalWrite(LED_BUILTIN, LOW);
     StaticJsonDocument<200> res;
     res["status"] = "Ligado";
     String resp;
@@ -137,9 +142,7 @@ void handleCommand() {
 
   } else if (action == "off") {
     activated = false;
-    digitalWrite(LED_BUILTIN, HIGH);  // Apaga LED
-    Serial.println("🔴 Comando recebido: DESLIGAR");
-
+    digitalWrite(LED_BUILTIN, HIGH);
     StaticJsonDocument<200> res;
     res["status"] = "Desligado";
     String resp;
@@ -147,7 +150,6 @@ void handleCommand() {
     server.send(200, "application/json", resp);
 
   } else if (action == "ping") {
-    Serial.println("📶 Comando recebido: PING");
     StaticJsonDocument<200> res;
     res["response"] = "pong";
     res["timestamp"] = millis();
@@ -166,41 +168,49 @@ void handleCommand() {
 void setup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH); // LED apagado
+  digitalWrite(LED_BUILTIN, HIGH);
 
-  Serial.println("\n🔧 Iniciando SoftAP...");
+  // Modo AP + STA
+  WiFi.mode(WIFI_AP_STA);
+
+  // Inicia AP
   WiFi.softAP(ap_ssid, ap_password);
-  IPAddress myIP = WiFi.softAPIP();
   Serial.print("📡 SoftAP iniciado! IP: ");
-  Serial.println(myIP);
+  Serial.println(WiFi.softAPIP());
 
-  // Configura rotas do servidor
+  // Conecta na rede com internet
+  WiFi.begin(sta_ssid, sta_password);
+  Serial.print("Conectando à internet");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\n✅ Conectado à internet");
+  Serial.print("IP STA: ");
+  Serial.println(WiFi.localIP());
+
+  // Inicia DNS para Captive Portal
+  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+
+  // Configura rotas
   server.on("/", HTTP_GET, handleRoot);
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
 
   server.begin();
-  Serial.println("✅ Servidor HTTP iniciado");
+  Serial.println("Servidor HTTP iniciado");
 }
 
 // -------------------------
 // 🔄 Loop principal
 // -------------------------
 void loop() {
+  dnsServer.processNextRequest();
   server.handleClient();
 
-  // Lê sensor analógico A0
   sensorValue = analogRead(A0);
+  anomalyDetected = (sensorValue < sensorMinThreshold || sensorValue > sensorMaxThreshold);
+  meshConnected = WiFi.softAPgetStationNum() > 0;
 
-  // Detecta anomalia: valor fora da faixa permitida
-  if (sensorValue < sensorMinThreshold || sensorValue > sensorMaxThreshold) {
-    anomalyDetected = true;
-  } else {
-    anomalyDetected = false;
-  }
-
-  // Simula status mesh - aqui pode ser substituído por código real de mesh
-  meshConnected = WiFi.softAPgetStationNum() > 0;  // true se pelo menos 1 estação conectada
-
-  delay(10);  // Pequeno delay para estabilidade
+  delay(10);
 }

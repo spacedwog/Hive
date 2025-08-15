@@ -123,7 +123,11 @@ void handleCommand() {
     activated = false;
     digitalWrite(32, LOW);
     statusCmd = 1;
-  } 
+  }
+  else if (command == "ping"){
+    analogRead(34);
+    statusCmd = 1;
+  }
   else {
     statusCmd = 0;
   }
