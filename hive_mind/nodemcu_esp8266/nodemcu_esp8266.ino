@@ -2,6 +2,7 @@
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
 #include <DNSServer.h>
+#include <SerialRelay.h> // Biblioteca do módulo de relé serial
 
 // 📶 Configuração do SoftAP
 const char* ap_ssid = "HIVE EXPLORER";
@@ -29,6 +30,14 @@ bool meshConnected = false;
 // Limites para detecção de anomalia
 const int sensorMinThreshold = 100;
 const int sensorMaxThreshold = 900;
+
+// -------------------------
+// Configuração do módulo Serial Relay
+// -------------------------
+const int NumModules = 1;  // quantidade de módulos (4 relés cada)
+const int DataPin = D2;    // pino de dados
+const int ClockPin = D1;   // pino de clock
+SerialRelay relays(DataPin, ClockPin, NumModules);
 
 // -------------------------
 // 📜 Página HTML principal
@@ -133,7 +142,12 @@ void handleCommand() {
 
   if (action == "on") {
     activated = true;
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(LED_BUILTIN, LOW);  // LED aceso
+    for (int m = 1; m <= NumModules; m++) {
+      for (int r = 1; r <= 4; r++) {
+        relays.SetRelay(r, SERIAL_RELAY_ON, m);
+      }
+    }
     StaticJsonDocument<200> res;
     res["status"] = "Ligado";
     String resp;
@@ -142,7 +156,12 @@ void handleCommand() {
 
   } else if (action == "off") {
     activated = false;
-    digitalWrite(LED_BUILTIN, HIGH);
+    digitalWrite(LED_BUILTIN, HIGH); // LED apagado
+    for (int m = 1; m <= NumModules; m++) {
+      for (int r = 1; r <= 4; r++) {
+        relays.SetRelay(r, SERIAL_RELAY_OFF, m);
+      }
+    }
     StaticJsonDocument<200> res;
     res["status"] = "Desligado";
     String resp;
@@ -168,7 +187,14 @@ void handleCommand() {
 void setup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
+  digitalWrite(LED_BUILTIN, HIGH); // LED apagado
+
+  // Inicializa relés seriais desligados
+  for (int m = 1; m <= NumModules; m++) {
+    for (int r = 1; r <= 4; r++) {
+      relays.SetRelay(r, SERIAL_RELAY_OFF, m);
+    }
+  }
 
   // Modo AP + STA
   WiFi.mode(WIFI_AP_STA);

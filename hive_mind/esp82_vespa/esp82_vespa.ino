@@ -3,17 +3,31 @@
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <mbedtls/base64.h>
+#include <TM1637Display.h>
 
+// ==== Configurações Display ====
+#define CLK 25
+#define DIO 26
+TM1637Display display(CLK, DIO);
+
+// ==== Constantes do sistema ====
 #define MAX_PILHAS 1
 #define TAM_PILHA 100
 #define TAM_CMD   20
 
+// ==== Credenciais Wi-Fi ====
 const char* ssid = "FAMILIA SANTOS";
 const char* password = "6z2h1j3k9f";
 
+// ==== Google Search API ====
+const char* googleApiKey = "HIVE SEARCH";       // <- substitua aqui
+const char* googleCx     = "5654511a161374a33"; // <- substitua aqui
+
+// ==== Servidor Web ====
 WebServer server(80);
 bool activated = false;
 
+// ==== Estrutura para histórico ====
 typedef struct {
   char comando[TAM_CMD];
   int status;
@@ -22,9 +36,11 @@ typedef struct {
 Registro banco[MAX_PILHAS][TAM_PILHA];
 int topo[MAX_PILHAS];
 
+// ==== Autenticação ====
 const char* authUsername = "spacedwog";
 const char* authPassword = "Kimera12@";
 
+// ==== Funções internas ====
 void inicializar() {
   for (int i = 0; i < MAX_PILHAS; i++) topo[i] = -1;
 }
@@ -73,6 +89,7 @@ bool checkAuth() {
   return true;
 }
 
+// ==== Endpoints HTTP ====
 void handleStatus() {
   if (!checkAuth()) return;
 
@@ -115,8 +132,7 @@ void handleCommand() {
     digitalWrite(32, LOW);
     statusCmd = 1;
   }
-  else if (command == "ping"){
-    analogRead(34);
+  else if (command == "ping") {
     statusCmd = 1;
   }
 
@@ -149,16 +165,14 @@ void handleHistory() {
   server.send(200, "application/json", jsonResponse);
 }
 
-// Função de busca SIMULADA para economizar memória
 void handleSearch() {
   if (!checkAuth()) return;
 
-  // Lê o corpo da requisição
   String body;
   if (server.hasArg("plain")) {
     body = server.arg("plain");
   } else if (server.args() > 0) {
-    body = server.arg(0); // fallback para JSON
+    body = server.arg(0);
   }
 
   if (body.length() == 0) {
@@ -166,7 +180,6 @@ void handleSearch() {
     return;
   }
 
-  // Deserializa JSON
   DynamicJsonDocument reqDoc(256);
   DeserializationError err = deserializeJson(reqDoc, body);
   if (err) {
@@ -180,22 +193,34 @@ void handleSearch() {
     return;
   }
 
-  // Simula resultados
-  DynamicJsonDocument resDoc(512);
-  JsonArray results = resDoc.createNestedArray("results");
-  for (int i = 1; i <= 3; i++) {
-    JsonObject item = results.createNestedObject();
-    item["title"] = "Resultado simulado " + String(i) + " para: " + query;
-    item["link"] = "https://example.com/search?q=" + query + "&r=" + String(i);
+  // Monta URL da pesquisa real no Google
+  String url = "https://www.googleapis.com/customsearch/v1?q=" + query +
+               "&key=" + googleApiKey + "&cx=" + googleCx;
+
+  HTTPClient http;
+  http.begin(url);
+  int httpCode = http.GET();
+
+  if (httpCode > 0) {
+    String payload = http.getString();
+    server.send(200, "application/json", payload);
+  } else {
+    server.send(500, "application/json", "{\"error\":\"Request failed\"}");
   }
 
-  String response;
-  serializeJson(resDoc, response);
-  server.send(200, "application/json", response);
+  http.end();
 }
+
+// ==== Setup ====
+unsigned long lastUpdate = 0;
 
 void setup() {
   Serial.begin(115200);
+
+  // Inicializa Display
+  display.setBrightness(0x0f);
+  display.showNumberDec(0);
+
   pinMode(32, OUTPUT);
   digitalWrite(32, LOW);
   inicializar();
@@ -215,6 +240,15 @@ void setup() {
   Serial.println("Servidor HTTP iniciado");
 }
 
+// ==== Loop ====
 void loop() {
   server.handleClient();
+
+  // Atualiza display a cada 500ms
+  if (millis() - lastUpdate > 500) {
+    int valor = analogRead(34);
+    int displayValue = map(valor, 0, 4095, 0, 9999); // limita de 0 a 9999
+    display.showNumberDec(displayValue, false);
+    lastUpdate = millis();
+  }
 }
