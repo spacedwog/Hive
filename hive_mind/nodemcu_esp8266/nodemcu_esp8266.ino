@@ -34,7 +34,7 @@ const int sensorMaxThreshold = 900;
 // -------------------------
 // Configuração do módulo Serial Relay
 // -------------------------
-const int NumModules = 1;  // quantidade de módulos (4 relés cada)
+const int NumModules = 1;  // quantidade de módulos (cada módulo tem 4 relés)
 const int DataPin = D2;    // pino de dados
 const int ClockPin = D1;   // pino de clock
 SerialRelay relays(DataPin, ClockPin, NumModules);
@@ -60,8 +60,8 @@ String htmlPage() {
     <body>
       <h1>HIVE EXPLORER</h1>
       <p>Status: <span id="status">Carregando...</span></p>
-      <button class="on" onclick="sendCmd('on')">Ligar</button>
-      <button class="off" onclick="sendCmd('off')">Desligar</button>
+      <button class="on" onclick="sendCmd('on')">Ligar Todas</button>
+      <button class="off" onclick="sendCmd('off')">Desligar Todas</button>
       <script>
         function sendCmd(cmd) {
           fetch('/command', {
@@ -143,13 +143,14 @@ void handleCommand() {
   if (action == "on") {
     activated = true;
     digitalWrite(LED_BUILTIN, LOW);  // LED aceso
+    // Liga TODOS os relés de TODOS os módulos
     for (int m = 1; m <= NumModules; m++) {
       for (int r = 1; r <= 4; r++) {
         relays.SetRelay(r, SERIAL_RELAY_ON, m);
       }
     }
     StaticJsonDocument<200> res;
-    res["status"] = "Ligado";
+    res["status"] = "Ligado - Todos os Relés Ativos";
     String resp;
     serializeJson(res, resp);
     server.send(200, "application/json", resp);
@@ -157,13 +158,14 @@ void handleCommand() {
   } else if (action == "off") {
     activated = false;
     digitalWrite(LED_BUILTIN, HIGH); // LED apagado
+    // Desliga TODOS os relés de TODOS os módulos
     for (int m = 1; m <= NumModules; m++) {
       for (int r = 1; r <= 4; r++) {
         relays.SetRelay(r, SERIAL_RELAY_OFF, m);
       }
     }
     StaticJsonDocument<200> res;
-    res["status"] = "Desligado";
+    res["status"] = "Desligado - Todos os Relés Desativados";
     String resp;
     serializeJson(res, resp);
     server.send(200, "application/json", resp);

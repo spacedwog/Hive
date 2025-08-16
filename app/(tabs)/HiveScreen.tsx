@@ -98,11 +98,14 @@ export default function HiveScreen() {
         title: item.title,
         link: item.link,
       })) || [];
-
+      
+      setLoading(true);
       setSearchResults({ ...searchResults, [node]: results });
       Alert.alert('🔎 Pesquisa realizada', `Query: "${query}"`);
+      setLoading(false);
     } catch (err) {
       Alert.alert('❌ Erro', `Falha ao pesquisar "${query}" em ${node}`);
+      setLoading(false);
     }
   };
 
