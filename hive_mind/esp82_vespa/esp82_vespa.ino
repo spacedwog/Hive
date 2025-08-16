@@ -10,6 +10,22 @@
 #define DIO 26
 TM1637Display display(CLK, DIO);
 
+// ==== Sensor Ultrassônico ====
+#define TRIG 21
+#define ECHO 22
+
+long medirDistancia() {
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+
+  long duracao = pulseIn(ECHO, HIGH, 30000); // timeout 30ms (~5m máx.)
+  long distancia = duracao * 0.034 / 2;      // cm
+  return distancia > 0 ? distancia : -1;     // -1 = sem leitura
+}
+
 // ==== Constantes do sistema ====
 #define MAX_PILHAS 1
 #define TAM_PILHA 100
@@ -96,7 +112,7 @@ void handleStatus() {
   DynamicJsonDocument doc(256);
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
-  doc["sensor"] = analogRead(34);
+  doc["ultrassonico_cm"] = medirDistancia();
   doc["server"] = WiFi.localIP().toString();
 
   String response;
@@ -225,6 +241,10 @@ void setup() {
   digitalWrite(32, LOW);
   inicializar();
 
+  // Sensor ultrassônico
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+
   WiFi.begin(ssid, password);
   Serial.print("Conectando WiFi");
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
@@ -246,8 +266,8 @@ void loop() {
 
   // Atualiza display a cada 500ms
   if (millis() - lastUpdate > 500) {
-    int valor = analogRead(34);
-    int displayValue = map(valor, 0, 4095, 0, 9999); // limita de 0 a 9999
+    long distancia = medirDistancia();
+    int displayValue = distancia > 0 ? distancia : 0;
     display.showNumberDec(displayValue, false);
     lastUpdate = millis();
   }
