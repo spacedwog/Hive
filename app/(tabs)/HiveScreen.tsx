@@ -38,7 +38,7 @@ export default function HiveScreen() {
   // ====== Atualizar status dos nós ======
   const fetchStatus = async () => {
     try {
-      const servers = ["192.168.15.166"]; // lista de IPs dos nós
+      const servers = ["192.168.15.45"]; // lista de IPs dos nós
       const responses: NodeStatus[] = [];
 
       for (const server of servers) {
