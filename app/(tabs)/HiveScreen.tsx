@@ -5,6 +5,7 @@ import {
   Button,
   FlatList,
   Linking,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -35,16 +36,22 @@ export default function HiveScreen() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // ====== Configurações de autenticação ====
+  const authUsername = "spacedwog";
+  const authPassword = "Kimera12@";
+  const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
+
   // ====== Atualizar status dos nós ======
   const fetchStatus = async () => {
     try {
-      const servers = ["192.168.15.166"]; // lista de IPs dos nós
+      const servers = ["192.168.4.1"]; // IP padrão do ESP32 em modo AP
       const responses: NodeStatus[] = [];
 
       for (const server of servers) {
         try {
           const res = await axios.get(`http://${server}/status`, {
             timeout: 3000,
+            headers: { Authorization: authHeader },
           });
           responses.push({ ...res.data, server });
         } catch (err) {
@@ -67,7 +74,11 @@ export default function HiveScreen() {
   // ====== Enviar comando para nó ======
   const sendCommand = async (server: string, command: string) => {
     try {
-      await axios.post(`http://${server}/command`, { command });
+      await axios.post(
+        `http://${server}/command`,
+        { command },
+        { headers: { Authorization: authHeader } }
+      );
       fetchStatus(); // atualiza estado depois do comando
     } catch (err) {
       console.error("Erro ao enviar comando:", err);
@@ -81,7 +92,7 @@ export default function HiveScreen() {
     try {
       const apiKey = "SUA_API_KEY"; // 🔑 insira sua Google API Key
       const cx = "SEU_CX_ID";       // 🔍 insira seu Search Engine ID
-      const encodedQuery = base64.encode(query);
+      const encodedQuery = encodeURIComponent(query);
 
       const res = await axios.get(
         `https://www.googleapis.com/customsearch/v1?q=${encodedQuery}&key=${apiKey}&cx=${cx}`
@@ -102,7 +113,7 @@ export default function HiveScreen() {
 
   // ====== Renderização ======
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.header}>🐝 Hive Explorer</Text>
 
       {/* ---- Lista de nós ---- */}
@@ -157,17 +168,17 @@ export default function HiveScreen() {
           </TouchableOpacity>
         )}
       />
-    </View>
+    </ScrollView>
   );
 }
 
 // ==== Estilos ====
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 16,
     backgroundColor: "#f4f4f8",
-    alignItems: "center", // centraliza horizontalmente
+    alignItems: "center",
+    paddingBottom: 50,
   },
   header: {
     fontSize: 22,
@@ -181,7 +192,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     elevation: 3,
-    width: "90%", // largura controlada
+    width: "90%",
     alignSelf: "center",
   },
   nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
