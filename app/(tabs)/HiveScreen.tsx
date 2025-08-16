@@ -1,281 +1,202 @@
-import axios from 'axios';
-import base64 from 'base-64';
-import React, { useEffect, useState } from 'react';
+import axios from "axios";
+import * as base64 from "base-64";
+import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   Button,
-  RefreshControl,
-  ScrollView,
+  FlatList,
+  Linking,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 
-// Mapa de IPs dos dispositivos conectados
-const nodes = [
-  { name: 'ESP32', ip: '192.168.15.166' }, // Substitua pelo IP real do ESP32
-];
-
+// ==== Tipagens ====
 type NodeStatus = {
   device?: string;
   server?: string;
   status?: string;
-  sensor?: number;
+  ultrassonico_cm?: number;
   anomaly?: boolean;
   mesh?: boolean;
   error?: string;
 };
-
-const username = 'spacedwog';
-const password = 'Kimera12@';
-const authHeader = 'Basic ' + base64.encode(`${username}:${password}`);
 
 type SearchResult = {
   title: string;
   link: string;
 };
 
+// ==== Componente Principal ====
 export default function HiveScreen() {
-  const [status, setStatus] = useState<Record<string, NodeStatus>>({});
-  const [loading, setLoading] = useState<boolean>(true);
-  const [searchQuery, setSearchQuery] = useState<Record<string, string>>({});
-  const [searchResults, setSearchResults] = useState<Record<string, SearchResult[]>>({});
+  const [status, setStatus] = useState<NodeStatus[]>([]);
+  const [query, setQuery] = useState<string>("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
 
+  // ====== Atualizar status dos nós ======
   const fetchStatus = async () => {
-    setLoading(true);
-    const newStatus: Record<string, NodeStatus> = {};
+    try {
+      const servers = ["192.168.15.166"]; // lista de IPs dos nós
+      const responses: NodeStatus[] = [];
 
-    for (let node of nodes) {
-      try {
-        const res = await axios.get(`http://${node.ip}/status`, {
-          timeout: 3000,
-          headers: { Authorization: authHeader },
-        });
-        newStatus[node.name] = res.data;
-      } catch (err) {
-        newStatus[node.name] = { error: 'Offline ou inacessível' };
+      for (const server of servers) {
+        try {
+          const res = await axios.get(`http://${server}/status`, {
+            timeout: 3000,
+          });
+          responses.push({ ...res.data, server });
+        } catch (err) {
+          responses.push({ server, status: "offline", error: String(err) });
+        }
       }
-    }
 
-    setStatus(newStatus);
-    setLoading(false);
-  };
-
-  const sendCommand = async (node: string, command: string) => {
-    const ip = nodes.find(n => n.name === node)?.ip;
-    if (!ip) return;
-
-    try {
-      await axios.post(
-        `http://${ip}/command`,
-        { command },
-        { timeout: 3000, headers: { Authorization: authHeader } }
-      );
-      Alert.alert('✅ Comando enviado', `Comando "${command}" enviado para ${node}.`);
-      fetchStatus();
+      setStatus(responses);
     } catch (err) {
-      Alert.alert('❌ Erro', `Falha ao enviar comando "${command}" para ${node}.`);
-    }
-  };
-
-  const sendSearch = async (node: string, query: string) => {
-    const ip = nodes.find(n => n.name === node)?.ip;
-    if (!ip || query.length === 0) return;
-
-    try {
-      const res = await axios.post(
-        `http://${ip}/search`,
-        { query },
-        { timeout: 5000, headers: { Authorization: authHeader } }
-      );
-
-      // Agora res.data é JSON direto
-      const results: SearchResult[] = res.data.results.map((item: any) => ({
-        title: item.title,
-        link: item.link,
-      }));
-
-      setSearchResults({ ...searchResults, [node]: results });
-      Alert.alert('🔎 Pesquisa realizada', `Query: "${query}"`);
-    } catch (err) {
-      Alert.alert('❌ Erro', `Falha ao pesquisar "${query}" em ${node}`);
+      console.error("Erro ao buscar status:", err);
     }
   };
 
   useEffect(() => {
     fetchStatus();
+    const interval = setInterval(fetchStatus, 10000); // atualizar a cada 10s
+    return () => clearInterval(interval);
   }, []);
 
+  // ====== Enviar comando para nó ======
+  const sendCommand = async (server: string, command: string) => {
+    try {
+      await axios.post(`http://${server}/command`, { command });
+      fetchStatus(); // atualiza estado depois do comando
+    } catch (err) {
+      console.error("Erro ao enviar comando:", err);
+    }
+  };
+
+  // ====== Pesquisa Google ======
+  const searchGoogle = async () => {
+    if (!query) return;
+    setLoading(true);
+    try {
+      const apiKey = "SUA_API_KEY"; // 🔑 insira sua Google API Key
+      const cx = "SEU_CX_ID";       // 🔍 insira seu Search Engine ID
+      const encodedQuery = base64.encode(query);
+
+      const res = await axios.get(
+        `https://www.googleapis.com/customsearch/v1?q=${encodedQuery}&key=${apiKey}&cx=${cx}`
+      );
+
+      const results: SearchResult[] =
+        res.data.items?.map((item: any) => ({
+          title: item.title,
+          link: item.link,
+        })) || [];
+
+      setResults(results);
+    } catch (err) {
+      console.error("Erro na busca Google:", err);
+    }
+    setLoading(false);
+  };
+
+  // ====== Renderização ======
   return (
-    <View style={styles.wrapper}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        refreshControl={
-          <RefreshControl
-            refreshing={loading}
-            onRefresh={fetchStatus}
-            colors={['#facc15']}
-            tintColor="#facc15"
-            title="Atualizando..."
-            titleColor="#facc15"
-          />
-        }
-      >
-        <Text style={styles.title}>🧠 HIVE Central</Text>
+    <View style={styles.container}>
+      <Text style={styles.header}>🐝 Hive Explorer</Text>
 
-        <View style={styles.reloadButton}>
-          <Button title="🔄 Recarregar Status" onPress={fetchStatus} />
-        </View>
-
-        {loading ? (
-          <ActivityIndicator size="large" color="#facc15" style={{ marginTop: 20 }} />
-        ) : (
-          nodes.map((node) => {
-            const s = status[node.name];
-            return (
-              <View key={node.name} style={styles.nodeCard}>
-                <Text style={styles.nodeName}>{node.name}</Text>
-
-                {s?.error ? (
-                  <Text style={styles.statusText}>❌ {s.error}</Text>
-                ) : (
-                  <>
-                    <Text style={styles.statusText}>🖥️ Aparelho: {s.device?.toUpperCase()}</Text>
-                    <Text style={styles.statusText}>🗄️ Servidor: {s.server?.toUpperCase()}</Text>
-                    <Text style={styles.statusText}>✅ Estado: {s.status?.toUpperCase()}</Text>
-                    <Text style={styles.statusText}>📟 Sensor: {s.sensor}</Text>
-                    <Text style={styles.statusText}>🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}</Text>
-                    <Text
-                      style={[
-                        styles.statusText,
-                        { color: s.anomaly ? '#f87171' : '#4ade80' },
-                      ]}
-                    >
-                      ⚠️ Anomalia: {s.anomaly ? 'Detectada' : 'Normal'}
-                    </Text>
-
-                    <View style={styles.buttonRow}>
-                      <View style={styles.buttonItem}>
-                        <Button title="⚡ Ativar" onPress={() => sendCommand(node.name, 'activate')} />
-                      </View>
-                      <View style={styles.buttonItem}>
-                        <Button title="🛑 Desativar" onPress={() => sendCommand(node.name, 'deactivate')} />
-                      </View>
-                      <View style={styles.buttonItem}>
-                        <Button title="📡 Ping" onPress={() => sendCommand(node.name, 'ping')} />
-                      </View>
-                    </View>
-
-                    {/* Pesquisa Google */}
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Pesquisar no Google..."
-                      placeholderTextColor="#94a3b8"
-                      value={searchQuery[node.name] || ''}
-                      onChangeText={(text) =>
-                        setSearchQuery({ ...searchQuery, [node.name]: text })
-                      }
-                    />
-                    <View style={styles.customCommandButton}>
-                      <Button
-                        title="🔎 Pesquisar"
-                        onPress={() => sendSearch(node.name, searchQuery[node.name] || '')}
-                      />
-                    </View>
-
-                    {searchResults[node.name]?.length ? (
-                      <View style={{ marginTop: 10, width: '100%' }}>
-                        {searchResults[node.name].map((res, idx) => (
-                          <View key={idx} style={{ marginBottom: 6 }}>
-                            <Text style={{ color: '#facc15', fontWeight: 'bold' }}>
-                              {res.title}
-                            </Text>
-                            <Text style={{ color: '#94a3b8' }}>{res.link}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
-                  </>
-                )}
-              </View>
-            );
-          })
+      {/* ---- Lista de nós ---- */}
+      <FlatList
+        data={status}
+        keyExtractor={(item) => item.server || Math.random().toString()}
+        renderItem={({ item: s }) => (
+          <View style={styles.nodeCard}>
+            <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+            <Text style={styles.statusText}>
+              📡 {s.server} - {s.status}
+            </Text>
+            <Text style={styles.statusText}>
+              📏 Distância: {s.ultrassonico_cm ?? "-"} cm
+            </Text>
+            <View style={styles.buttonRow}>
+              <Button
+                title="Ativar"
+                onPress={() => s.server && sendCommand(s.server, "activate")}
+              />
+              <Button
+                title="Desativar"
+                onPress={() => s.server && sendCommand(s.server, "deactivate")}
+              />
+              <Button
+                title="Ping"
+                onPress={() => s.server && sendCommand(s.server, "ping")}
+              />
+            </View>
+          </View>
         )}
-      </ScrollView>
+      />
+
+      {/* ---- Campo de busca Google ---- */}
+      <View style={styles.searchBox}>
+        <TextInput
+          style={styles.input}
+          placeholder="Pesquisar no Google..."
+          value={query}
+          onChangeText={setQuery}
+        />
+        <Button title="Buscar" onPress={searchGoogle} disabled={loading} />
+      </View>
+
+      {/* ---- Resultados da busca ---- */}
+      <FlatList
+        data={results}
+        keyExtractor={(item, idx) => idx.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => Linking.openURL(item.link)}>
+            <Text style={styles.resultLink}>{item.title}</Text>
+          </TouchableOpacity>
+        )}
+      />
     </View>
   );
 }
 
+// ==== Estilos ====
 const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  container: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 16,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#facc15',
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  reloadButton: {
-    marginBottom: 20,
-    width: 200,
-  },
+  container: { flex: 1, padding: 16, backgroundColor: "#f4f4f8" },
+  header: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
   nodeCard: {
-    width: 320,
-    padding: 20,
-    backgroundColor: '#1e293b',
-    marginVertical: 12,
-    borderRadius: 16,
-    borderColor: '#334155',
-    borderWidth: 1,
-    alignItems: 'center',
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    elevation: 3,
   },
-  nodeName: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#e2e8f0',
-    marginBottom: 8,
-  },
-  statusText: {
-    fontSize: 16,
-    marginBottom: 6,
-    color: '#94a3b8',
-    textAlign: 'center',
-  },
+  nodeText: { fontSize: 16, fontWeight: "600" },
+  statusText: { fontSize: 14, marginTop: 4 },
   buttonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 10,
-    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 10,
   },
-  buttonItem: {
-    marginHorizontal: 5,
-    marginVertical: 4,
-    minWidth: 90,
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 12,
   },
   input: {
-    backgroundColor: '#334155',
-    color: '#f1f5f9',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ccc",
     borderRadius: 8,
-    marginTop: 14,
-    width: '100%',
+    padding: 8,
+    marginRight: 8,
+    backgroundColor: "#fff",
   },
-  customCommandButton: {
-    marginTop: 10,
-    width: '100%',
+  resultLink: {
+    color: "blue",
+    marginBottom: 8,
+    textDecorationLine: "underline",
   },
 });
