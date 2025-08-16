@@ -40,7 +40,6 @@ type SearchResult = {
 export default function HiveScreen() {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
   const [loading, setLoading] = useState<boolean>(true);
-  const [customCommands, setCustomCommands] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState<Record<string, string>>({});
   const [searchResults, setSearchResults] = useState<Record<string, SearchResult[]>>({});
 
