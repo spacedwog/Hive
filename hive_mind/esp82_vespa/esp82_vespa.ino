@@ -21,7 +21,7 @@ const char* password = "6z2h1j3k9f";
 
 // ==== Google Search API ====
 const char* googleApiKey = "AIzaSyD-eetfXns-7sBnvu_2WAH9ncLR1QL8ud4";
-const char* googleCx     = "5654511a161374a33";
+const char* googleCx     = "124378eb68b7b42a1";
 
 // ==== Servidor Web ====
 WebServer server(80);
