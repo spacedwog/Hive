@@ -28,7 +28,6 @@ type NodeStatus = {
   error?: string;
 };
 
-// ⚠️ Evite deixar usuário e senha hardcoded em produção
 const username = 'spacedwog';
 const password = 'Kimera12@';
 const authHeader = 'Basic ' + base64.encode(`${username}:${password}`);
@@ -93,19 +92,16 @@ export default function HiveScreen() {
         { timeout: 5000, headers: { Authorization: authHeader } }
       );
 
-      // ⚠️ ESP32 devolve "items", não "results"
-      const results: SearchResult[] = res.data.items?.map((item: any) => ({
+      // Agora res.data é JSON direto
+      const results: SearchResult[] = res.data.results.map((item: any) => ({
         title: item.title,
         link: item.link,
-      })) || [];
-      
-      setLoading(true);
+      }));
+
       setSearchResults({ ...searchResults, [node]: results });
       Alert.alert('🔎 Pesquisa realizada', `Query: "${query}"`);
-      setLoading(false);
     } catch (err) {
       Alert.alert('❌ Erro', `Falha ao pesquisar "${query}" em ${node}`);
-      setLoading(false);
     }
   };
 
