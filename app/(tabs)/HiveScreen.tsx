@@ -5,7 +5,6 @@ import {
   Button,
   FlatList,
   Linking,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -36,15 +35,13 @@ export default function HiveScreen() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // ====== Configurações de autenticação ====
   const authUsername = "spacedwog";
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // ====== Atualizar status dos nós ======
   const fetchStatus = async () => {
     try {
-      const servers = ["192.168.4.1"]; // IP padrão do ESP32 em modo AP
+      const servers = ["192.168.4.1"];
       const responses: NodeStatus[] = [];
 
       for (const server of servers) {
@@ -67,11 +64,10 @@ export default function HiveScreen() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 10000); // atualizar a cada 10s
+    const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // ====== Enviar comando para nó ======
   const sendCommand = async (server: string, command: string) => {
     try {
       await axios.post(
@@ -79,19 +75,18 @@ export default function HiveScreen() {
         { command },
         { headers: { Authorization: authHeader } }
       );
-      fetchStatus(); // atualiza estado depois do comando
+      fetchStatus();
     } catch (err) {
       console.error("Erro ao enviar comando:", err);
     }
   };
 
-  // ====== Pesquisa Google ======
   const searchGoogle = async () => {
     if (!query) return;
     setLoading(true);
     try {
-      const apiKey = "SUA_API_KEY"; // 🔑 insira sua Google API Key
-      const cx = "SEU_CX_ID";       // 🔍 insira seu Search Engine ID
+      const apiKey = "SUA_API_KEY";
+      const cx = "SEU_CX_ID";
       const encodedQuery = encodeURIComponent(query);
 
       const res = await axios.get(
@@ -111,64 +106,65 @@ export default function HiveScreen() {
     setLoading(false);
   };
 
-  // ====== Renderização ======
+  // ==== Renderização ====
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>🐝 Hive Explorer</Text>
+    <FlatList
+      data={results}
+      keyExtractor={(item, idx) => idx.toString()}
+      ListHeaderComponent={
+        <>
+          <Text style={styles.header}>🐝 Hive Explorer</Text>
 
-      {/* ---- Lista de nós ---- */}
-      <FlatList
-        data={status}
-        keyExtractor={(item) => item.server || Math.random().toString()}
-        renderItem={({ item: s }) => (
-          <View style={styles.nodeCard}>
-            <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-            <Text style={styles.statusText}>
-              📡 {s.server} - {s.status}
-            </Text>
-            <Text style={styles.statusText}>
-              📏 Distância: {s.ultrassonico_cm ?? "-"} cm
-            </Text>
-            <View style={styles.buttonRow}>
-              <Button
-                title="Ativar"
-                onPress={() => s.server && sendCommand(s.server, "activate")}
-              />
-              <Button
-                title="Desativar"
-                onPress={() => s.server && sendCommand(s.server, "deactivate")}
-              />
-              <Button
-                title="Ping"
-                onPress={() => s.server && sendCommand(s.server, "ping")}
-              />
-            </View>
+          {/* Lista de nós */}
+          <FlatList
+            data={status}
+            keyExtractor={(item) => item.server || Math.random().toString()}
+            renderItem={({ item: s }) => (
+              <View style={styles.nodeCard}>
+                <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+                <Text style={styles.statusText}>
+                  📡 {s.server} - {s.status}
+                </Text>
+                <Text style={styles.statusText}>
+                  📏 Distância: {s.ultrassonico_cm ?? "-"} cm
+                </Text>
+                <View style={styles.buttonRow}>
+                  <Button
+                    title="Ativar"
+                    onPress={() => s.server && sendCommand(s.server, "activate")}
+                  />
+                  <Button
+                    title="Desativar"
+                    onPress={() => s.server && sendCommand(s.server, "deactivate")}
+                  />
+                  <Button
+                    title="Ping"
+                    onPress={() => s.server && sendCommand(s.server, "ping")}
+                  />
+                </View>
+              </View>
+            )}
+          />
+
+          {/* Campo de busca */}
+          <View style={styles.searchBox}>
+            <TextInput
+              style={styles.input}
+              placeholder="Pesquisar no Google..."
+              value={query}
+              onChangeText={setQuery}
+            />
+            <Button title="Buscar" onPress={searchGoogle} disabled={loading} />
           </View>
-        )}
-      />
-
-      {/* ---- Campo de busca Google ---- */}
-      <View style={styles.searchBox}>
-        <TextInput
-          style={styles.input}
-          placeholder="Pesquisar no Google..."
-          value={query}
-          onChangeText={setQuery}
-        />
-        <Button title="Buscar" onPress={searchGoogle} disabled={loading} />
-      </View>
-
-      {/* ---- Resultados da busca ---- */}
-      <FlatList
-        data={results}
-        keyExtractor={(item, idx) => idx.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity onPress={() => Linking.openURL(item.link)}>
-            <Text style={styles.resultLink}>{item.title}</Text>
-          </TouchableOpacity>
-        )}
-      />
-    </ScrollView>
+        </>
+      }
+      renderItem={({ item }) => (
+        <TouchableOpacity onPress={() => Linking.openURL(item.link)}>
+          <Text style={styles.resultLink}>{item.title}</Text>
+        </TouchableOpacity>
+      )}
+      contentContainerStyle={styles.container}
+    />
   );
 }
 

@@ -22,7 +22,7 @@ export default function HistoryScreen() {
     const headers = new Headers();
     headers.append('Authorization', 'Basic ' + base64.encode(`${username}:${password}`));
 
-    fetch("http://192.168.15.166/history", { headers })
+    fetch("http://192.168.4.1/history", { headers })
       .then((res) => {
         if (!res.ok) throw new Error('Erro na autenticação ou na requisição');
         return res.json();
