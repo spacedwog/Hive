@@ -31,9 +31,9 @@ long medirDistancia() {
 #define TAM_PILHA 100
 #define TAM_CMD   20
 
-// ==== Credenciais Wi-Fi ====
-const char* ssid = "FAMILIA SANTOS";
-const char* password = "6z2h1j3k9f";
+// ==== Credenciais AP ====
+const char* ap_ssid = "HIVE VESPA";
+const char* ap_password = "hivemind";  // mínimo 8 caracteres
 
 // ==== Google Search API ====
 const char* googleApiKey = "AIzaSyD-eetfXns-7sBnvu_2WAH9ncLR1QL8ud4";
@@ -113,7 +113,7 @@ void handleStatus() {
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_cm"] = medirDistancia();
-  doc["server"] = WiFi.localIP().toString();
+  doc["server"] = WiFi.softAPIP().toString();
 
   String response;
   serializeJson(doc, response);
@@ -245,19 +245,22 @@ void setup() {
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
 
-  WiFi.begin(ssid, password);
-  Serial.print("Conectando WiFi");
-  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
-  Serial.println("\n✅ Wi-Fi conectado!");
-  Serial.println(WiFi.localIP());
+  // ======== MODO AP ========
+  Serial.println("Inicializando Access Point...");
+  WiFi.softAP(ap_ssid, ap_password);
 
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP: ");
+  Serial.println(IP);
+
+  // Configura servidor HTTP
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
   server.on("/history", handleHistory);
   server.on("/search", HTTP_POST, handleSearch);
   server.begin();
 
-  Serial.println("Servidor HTTP iniciado");
+  Serial.println("Servidor HTTP iniciado em modo AP");
 }
 
 // ==== Loop ====
