@@ -17,10 +17,11 @@
     "@react-navigation/native": "^7.1.6",
     "axios": "^1.11.0",
     "base-64": "^1.0.0",
-    "expo": "~53.0.20",
+    "expo": "^53.0.20",
     "expo-blur": "~14.1.5",
     "expo-camera": "~16.1.11",
     "expo-constants": "~17.1.7",
+    "expo-dev-client": "~5.2.4",
     "expo-font": "~13.3.2",
     "expo-gl": "~15.1.7",
     "expo-haptics": "~14.1.4",
@@ -47,8 +48,7 @@
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
     "three": "^0.166.1",
-    "victory-native": "^41.18.0",
-    "expo-dev-client": "~5.2.4"
+    "victory-native": "^41.18.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -57,6 +57,17 @@
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
     "typescript": "~5.8.3"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-sfsymbols",
+          "base-64",
+          "three"
+        ]
+      }
+    }
   },
   "private": true
 }
