@@ -163,17 +163,29 @@ export default function HiveScreen() {
 
 // ==== Estilos ====
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#f4f4f8" },
-  header: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
+  container: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: "#f4f4f8",
+    alignItems: "center", // centraliza horizontalmente
+  },
+  header: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+  },
   nodeCard: {
     backgroundColor: "#fff",
     padding: 12,
     borderRadius: 12,
     marginBottom: 12,
     elevation: 3,
+    width: "90%", // largura controlada
+    alignSelf: "center",
   },
-  nodeText: { fontSize: 16, fontWeight: "600" },
-  statusText: { fontSize: 14, marginTop: 4 },
+  nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
+  statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
   buttonRow: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -184,6 +196,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
     marginBottom: 12,
+    width: "90%",
+    alignSelf: "center",
   },
   input: {
     flex: 1,
@@ -198,5 +212,6 @@ const styles = StyleSheet.create({
     color: "blue",
     marginBottom: 8,
     textDecorationLine: "underline",
+    textAlign: "center",
   },
 });
