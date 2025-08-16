@@ -20,8 +20,8 @@ const char* ssid = "FAMILIA SANTOS";
 const char* password = "6z2h1j3k9f";
 
 // ==== Google Search API ====
-const char* googleApiKey = "HIVE SEARCH";       // <- substitua aqui
-const char* googleCx     = "5654511a161374a33"; // <- substitua aqui
+const char* googleApiKey = "AIzaSyD-eetfXns-7sBnvu_2WAH9ncLR1QL8ud4";
+const char* googleCx     = "5654511a161374a33";
 
 // ==== Servidor Web ====
 WebServer server(80);
