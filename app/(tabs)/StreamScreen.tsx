@@ -1,73 +1,71 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Button, Image, StyleSheet, Text, View } from "react-native";
 
-// ==== Tipagem ====
-type StreamData = {
-  ultrassonico_cm?: number;
-  analog?: number;
-};
+const ESP32_IP = "192.168.4.1"; // IP padrão do Soft-AP
 
-// ==== Componente Principal ====
-export default function StreamScreen() {
-  const [data, setData] = useState<StreamData[]>([]);
+export default function CameraScreen() {
+  const [frameUrl, setFrameUrl] = useState<string>("");
 
+  // Atualiza frame a cada 1 segundo (pulling simples)
   useEffect(() => {
-    const eventSource = new EventSource("http://192.168.4.1/stream");
-
-    eventSource.onmessage = (event) => {
-      try {
-        const parsed: StreamData = JSON.parse(event.data);
-        setData((prev) => [...prev.slice(-19), parsed]); // mantém últimas 20 leituras
-      } catch (err) {
-        console.error("Erro ao parsear stream:", err);
-      }
-    };
-
-    eventSource.onerror = (err) => {
-      console.error("Erro na conexão SSE:", err);
-      eventSource.close();
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    const interval = setInterval(() => {
+      setFrameUrl(`http://${ESP32_IP}/capture?_=${Date.now()}`);
+    }, 1000);
+    return () => clearInterval(interval);
   }, []);
 
+  const iniciarGravacao = async () => {
+    try {
+      const res = await fetch(`http://${ESP32_IP}/start`);
+      if (res.ok) {
+        Alert.alert("✅ Gravação iniciada");
+      } else {
+        Alert.alert("❌ Erro ao iniciar gravação");
+      }
+    } catch (err) {
+      Alert.alert("Erro de conexão", String(err));
+    }
+  };
+
+  const pararGravacao = async () => {
+    try {
+      const res = await fetch(`http://${ESP32_IP}/stop`);
+      if (res.ok) {
+        Alert.alert("🛑 Gravação parada");
+      } else {
+        Alert.alert("❌ Erro ao parar gravação");
+      }
+    } catch (err) {
+      Alert.alert("Erro de conexão", String(err));
+    }
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>📡 Stream de Dados em Tempo Real</Text>
-      {data.map((item, index) => (
-        <View key={index} style={styles.card}>
-          <Text style={styles.text}>📏 Distância: {item.ultrassonico_cm ?? "-"} cm</Text>
-          <Text style={styles.text}>⚡ Sensor: {item.analog ?? "-"}</Text>
-        </View>
-      ))}
-    </ScrollView>
+    <View style={styles.container}>
+      <Text style={styles.title}>📷 HIVE STREAM</Text>
+
+      {frameUrl ? (
+        <Image
+          source={{ uri: frameUrl }}
+          style={styles.preview}
+          resizeMode="contain"
+        />
+      ) : (
+        <Text style={styles.info}>Conectando à câmera...</Text>
+      )}
+
+      <View style={styles.buttons}>
+        <Button title="▶️ Iniciar Gravação" onPress={iniciarGravacao} />
+        <Button title="⏹ Parar Gravação" onPress={pararGravacao} />
+      </View>
+    </View>
   );
 }
 
-// ==== Estilos ====
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    alignItems: "center",
-    backgroundColor: "#f4f4f8",
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 12,
-  },
-  card: {
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 10,
-    width: "90%",
-    elevation: 3,
-  },
-  text: {
-    fontSize: 14,
-    textAlign: "center",
-  },
+  container: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#111" },
+  title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 20 },
+  preview: { width: "90%", height: 300, borderRadius: 10, backgroundColor: "#000" },
+  info: { color: "#aaa", marginBottom: 20 },
+  buttons: { marginTop: 20, width: "90%", gap: 10 }
 });
