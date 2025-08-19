@@ -1,18 +1,32 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
-#include <HTTPClient.h>
 #include <mbedtls/base64.h>
-#include <TM1637Display.h>
+#include "esp_camera.h"
 
-// ==== Configurações Display ====
-#define CLK 25
-#define DIO 26
-TM1637Display display(CLK, DIO);
+// ==== Configuração da câmera ESP32-CAM RoboCore ====
+// Mapeamento de pinos do módulo ESP32-CAM (AI Thinker / RoboCore)
+#define PWDN_GPIO_NUM    -1
+#define RESET_GPIO_NUM   -1
+#define XCLK_GPIO_NUM     0
+#define SIOD_GPIO_NUM    26
+#define SIOC_GPIO_NUM    27
+
+#define Y9_GPIO_NUM      35
+#define Y8_GPIO_NUM      34
+#define Y7_GPIO_NUM      39
+#define Y6_GPIO_NUM      36
+#define Y5_GPIO_NUM      21
+#define Y4_GPIO_NUM      19
+#define Y3_GPIO_NUM      18
+#define Y2_GPIO_NUM       5
+#define VSYNC_GPIO_NUM   25
+#define HREF_GPIO_NUM    23
+#define PCLK_GPIO_NUM    22
 
 // ==== Sensor Ultrassônico ====
-#define TRIG 21
-#define ECHO 22
+#define TRIG 14
+#define ECHO 15
 
 long medirDistancia() {
   digitalWrite(TRIG, LOW);
@@ -21,55 +35,32 @@ long medirDistancia() {
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);
 
-  long duracao = pulseIn(ECHO, HIGH, 30000); // timeout 30ms (~5m máx.)
+  long duracao = pulseIn(ECHO, HIGH, 30000); // timeout 30ms (~5m)
   long distancia = duracao * 0.034 / 2;      // cm
   return distancia > 0 ? distancia : -1;     // -1 = sem leitura
 }
 
-// ==== Constantes do sistema ====
-#define MAX_PILHAS 1
-#define TAM_PILHA 100
-#define TAM_CMD   20
+// ==== Leitura potenciômetro ====
+#define POT_PIN 33 // pino D33
+
+long lerSensor() {
+  int valor = analogRead(POT_PIN); // lê valor analógico do pino D33
+  return valor;                     // retorna valor de 0 a 4095
+}
 
 // ==== Credenciais AP ====
 const char* ap_ssid = "HIVE VESPA";
-const char* ap_password = "hivemind";  // mínimo 8 caracteres
-
-// ==== Google Search API ====
-const char* googleApiKey = "AIzaSyD-eetfXns-7sBnvu_2WAH9ncLR1QL8ud4";
-const char* googleCx     = "124378eb68b7b42a1";
+const char* ap_password = "hivemind";
 
 // ==== Servidor Web ====
 WebServer server(80);
 bool activated = false;
-
-// ==== Estrutura para histórico ====
-typedef struct {
-  char comando[TAM_CMD];
-  int status;
-} Registro;
-
-Registro banco[MAX_PILHAS][TAM_PILHA];
-int topo[MAX_PILHAS];
 
 // ==== Autenticação ====
 const char* authUsername = "spacedwog";
 const char* authPassword = "Kimera12@";
 
 // ==== Funções internas ====
-void inicializar() {
-  for (int i = 0; i < MAX_PILHAS; i++) topo[i] = -1;
-}
-
-bool empilhar(int pilha, const char* cmd, int status) {
-  if (pilha < 0 || pilha >= MAX_PILHAS) return false;
-  if (topo[pilha] >= TAM_PILHA - 1) return false;
-  topo[pilha]++;
-  strncpy(banco[pilha][topo[pilha]].comando, cmd, TAM_CMD);
-  banco[pilha][topo[pilha]].status = status;
-  return true;
-}
-
 String base64Decode(const String &input) {
   size_t out_len = 0;
   size_t input_len = input.length();
@@ -84,7 +75,7 @@ String base64Decode(const String &input) {
 
 bool checkAuth() {
   if (!server.hasHeader("Authorization")) {
-    server.sendHeader("WWW-Authenticate", "Basic realm=\"ESP32\"");
+    server.sendHeader("WWW-Authenticate", "Basic realm=\"ESP32\"");  
     server.send(401, "text/plain", "Unauthorized");
     return false;
   }
@@ -106,13 +97,16 @@ bool checkAuth() {
 }
 
 // ==== Endpoints HTTP ====
+
+// Status geral (JSON)
 void handleStatus() {
   if (!checkAuth()) return;
 
   DynamicJsonDocument doc(256);
-  doc["device"] = "Vespa";
+  doc["device"] = "Vespa-CAM";
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_cm"] = medirDistancia();
+  doc["analog"] = lerSensor();
   doc["server"] = WiFi.softAPIP().toString();
 
   String response;
@@ -120,6 +114,7 @@ void handleStatus() {
   server.send(200, "application/json", response);
 }
 
+// Comandos
 void handleCommand() {
   if (!checkAuth()) return;
 
@@ -136,114 +131,105 @@ void handleCommand() {
   }
 
   String command = doc["command"];
-  int statusCmd = 0;
+  DynamicJsonDocument res(128);
 
   if (command == "activate") {
     activated = true;
     digitalWrite(32, HIGH);
-    statusCmd = 1;
+    res["result"] = "success";
+    res["status"] = "ativo";
   } 
   else if (command == "deactivate") {
     activated = false;
     digitalWrite(32, LOW);
-    statusCmd = 1;
+    res["result"] = "success";
+    res["status"] = "parado";
   }
   else if (command == "ping") {
-    statusCmd = 1;
+    res["result"] = "success";
+    res["analog"] = lerSensor();
   }
-
-  empilhar(0, command.c_str(), statusCmd);
-
-  DynamicJsonDocument res(128);
-  res["result"] = statusCmd ? "success" : "error";
-  res["status"] = activated ? "ativo" : "parado";
+  else {
+    res["result"] = "error";
+    res["status"] = "comando inválido";
+  }
 
   String jsonResponse;
   serializeJson(res, jsonResponse);
   server.send(200, "application/json", jsonResponse);
 }
 
-void handleHistory() {
+// Stream da câmera
+void handleJpgStream(void) {
   if (!checkAuth()) return;
 
-  DynamicJsonDocument doc(1024);
-  for (int i = 0; i < MAX_PILHAS; i++) {
-    JsonArray pilhaJson = doc.createNestedArray(String("Comando"));
-    for (int j = 0; j <= topo[i]; j++) {
-      JsonObject item = pilhaJson.createNestedObject();
-      item["cmd"] = banco[i][j].comando;
-      item["status"] = banco[i][j].status ? "ACERTO" : "ERRO";
+  WiFiClient client = server.client();
+
+  String response = "HTTP/1.1 200 OK\r\n";
+  response += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
+  server.sendContent(response);
+
+  while (client.connected()) {
+    camera_fb_t * fb = esp_camera_fb_get();
+    if (!fb) {
+      Serial.println("Falha ao capturar frame da câmera");
+      continue;
     }
+
+    response = "--frame\r\n";
+    response += "Content-Type: image/jpeg\r\n\r\n";
+    server.sendContent(response);
+
+    client.write(fb->buf, fb->len);
+    server.sendContent("\r\n");
+
+    esp_camera_fb_return(fb);
+    delay(50);
   }
-
-  String jsonResponse;
-  serializeJson(doc, jsonResponse);
-  server.send(200, "application/json", jsonResponse);
-}
-
-void handleSearch() {
-  if (!checkAuth()) return;
-
-  String body;
-  if (server.hasArg("plain")) {
-    body = server.arg("plain");
-  } else if (server.args() > 0) {
-    body = server.arg(0);
-  }
-
-  if (body.length() == 0) {
-    server.send(400, "application/json", "{\"error\":\"No query provided\"}");
-    return;
-  }
-
-  DynamicJsonDocument reqDoc(256);
-  DeserializationError err = deserializeJson(reqDoc, body);
-  if (err) {
-    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
-    return;
-  }
-
-  String query = reqDoc["query"];
-  if (query.length() == 0) {
-    server.send(400, "application/json", "{\"error\":\"Empty query\"}");
-    return;
-  }
-
-  // Monta URL da pesquisa real no Google
-  String url = "https://www.googleapis.com/customsearch/v1?q=" + query +
-               "&key=" + googleApiKey + "&cx=" + googleCx;
-
-  HTTPClient http;
-  http.begin(url);
-  int httpCode = http.GET();
-
-  if (httpCode > 0) {
-    String payload = http.getString();
-    server.send(200, "application/json", payload);
-  } else {
-    server.send(500, "application/json", "{\"error\":\"Request failed\"}");
-  }
-
-  http.end();
 }
 
 // ==== Setup ====
-unsigned long lastUpdate = 0;
-
 void setup() {
   Serial.begin(115200);
 
-  // Inicializa Display
-  display.setBrightness(0x0f);
-  display.showNumberDec(0);
-
   pinMode(32, OUTPUT);
   digitalWrite(32, LOW);
-  inicializar();
 
-  // Sensor ultrassônico
-  pinMode(TRIG, OUTPUT);
+  pinMode(POT_PIN, INPUT); // potenciômetro
+  pinMode(TRIG, OUTPUT);   // ultrassônico
   pinMode(ECHO, INPUT);
+
+  // ======== CÂMERA ========
+  camera_config_t config;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.pin_d0 = Y2_GPIO_NUM;
+  config.pin_d1 = Y3_GPIO_NUM;
+  config.pin_d2 = Y4_GPIO_NUM;
+  config.pin_d3 = Y5_GPIO_NUM;
+  config.pin_d4 = Y6_GPIO_NUM;
+  config.pin_d5 = Y7_GPIO_NUM;
+  config.pin_d6 = Y8_GPIO_NUM;
+  config.pin_d7 = Y9_GPIO_NUM;
+  config.pin_xclk = XCLK_GPIO_NUM;
+  config.pin_pclk = PCLK_GPIO_NUM;
+  config.pin_vsync = VSYNC_GPIO_NUM;
+  config.pin_href = HREF_GPIO_NUM;
+  config.pin_sscb_sda = SIOD_GPIO_NUM;
+  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_pwdn = PWDN_GPIO_NUM;
+  config.pin_reset = RESET_GPIO_NUM;
+  config.xclk_freq_hz = 20000000;
+  config.pixel_format = PIXFORMAT_JPEG; 
+  config.frame_size = FRAMESIZE_QVGA;   // QVGA para stream mais leve
+  config.jpeg_quality = 12;
+  config.fb_count = 1;
+
+  // Inicializa câmera
+  if (esp_camera_init(&config) != ESP_OK) {
+    Serial.println("Falha ao inicializar a câmera");
+    return;
+  }
 
   // ======== MODO AP ========
   Serial.println("Inicializando Access Point...");
@@ -253,11 +239,10 @@ void setup() {
   Serial.print("AP IP: ");
   Serial.println(IP);
 
-  // Configura servidor HTTP
+  // Endpoints HTTP
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
-  server.on("/history", handleHistory);
-  server.on("/search", HTTP_POST, handleSearch);
+  server.on("/stream", HTTP_GET, handleJpgStream);
   server.begin();
 
   Serial.println("Servidor HTTP iniciado em modo AP");
@@ -266,12 +251,4 @@ void setup() {
 // ==== Loop ====
 void loop() {
   server.handleClient();
-
-  // Atualiza display a cada 500ms
-  if (millis() - lastUpdate > 500) {
-    long distancia = medirDistancia();
-    int displayValue = distancia > 0 ? distancia : 0;
-    display.showNumberDec(displayValue, false);
-    lastUpdate = millis();
-  }
 }

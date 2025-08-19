@@ -4,11 +4,8 @@ import React, { useEffect, useState } from "react";
 import {
   Button,
   FlatList,
-  Linking,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -18,22 +15,13 @@ type NodeStatus = {
   server?: string;
   status?: string;
   ultrassonico_cm?: number;
-  anomaly?: boolean;
-  mesh?: boolean;
+  analog?: number;
   error?: string;
-};
-
-type SearchResult = {
-  title: string;
-  link: string;
 };
 
 // ==== Componente Principal ====
 export default function HiveScreen() {
   const [status, setStatus] = useState<NodeStatus[]>([]);
-  const [query, setQuery] = useState<string>("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const authUsername = "spacedwog";
   const authPassword = "Kimera12@";
@@ -64,104 +52,60 @@ export default function HiveScreen() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 10000);
+    const interval = setInterval(fetchStatus, 1000); // atualiza a cada 1s
     return () => clearInterval(interval);
   }, []);
 
   const sendCommand = async (server: string, command: string) => {
     try {
-      await axios.post(
+      const res = await axios.post(
         `http://${server}/command`,
         { command },
         { headers: { Authorization: authHeader } }
       );
+
+      if (command === "ping" && res.data.analog !== undefined) {
+        alert(`Valor analógico: ${res.data.analog}`);
+      }
+
       fetchStatus();
     } catch (err) {
       console.error("Erro ao enviar comando:", err);
     }
   };
 
-  const searchGoogle = async () => {
-    if (!query) return;
-    setLoading(true);
-    try {
-      const apiKey = "SUA_API_KEY";
-      const cx = "SEU_CX_ID";
-      const encodedQuery = encodeURIComponent(query);
-
-      const res = await axios.get(
-        `https://www.googleapis.com/customsearch/v1?q=${encodedQuery}&key=${apiKey}&cx=${cx}`
-      );
-
-      const results: SearchResult[] =
-        res.data.items?.map((item: any) => ({
-          title: item.title,
-          link: item.link,
-        })) || [];
-
-      setResults(results);
-    } catch (err) {
-      console.error("Erro na busca Google:", err);
-    }
-    setLoading(false);
-  };
-
   // ==== Renderização ====
   return (
     <FlatList
-      data={results}
-      keyExtractor={(item, idx) => idx.toString()}
-      ListHeaderComponent={
-        <>
-          <Text style={styles.header}>🐝 Hive Explorer</Text>
-
-          {/* Lista de nós */}
-          <FlatList
-            data={status}
-            keyExtractor={(item) => item.server || Math.random().toString()}
-            renderItem={({ item: s }) => (
-              <View style={styles.nodeCard}>
-                <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                <Text style={styles.statusText}>
-                  📡 {s.server} - {s.status}
-                </Text>
-                <Text style={styles.statusText}>
-                  📏 Distância: {s.ultrassonico_cm ?? "-"} cm
-                </Text>
-                <View style={styles.buttonRow}>
-                  <Button
-                    title="Ativar"
-                    onPress={() => s.server && sendCommand(s.server, "activate")}
-                  />
-                  <Button
-                    title="Desativar"
-                    onPress={() => s.server && sendCommand(s.server, "deactivate")}
-                  />
-                  <Button
-                    title="Ping"
-                    onPress={() => s.server && sendCommand(s.server, "ping")}
-                  />
-                </View>
-              </View>
-            )}
-          />
-
-          {/* Campo de busca */}
-          <View style={styles.searchBox}>
-            <TextInput
-              style={styles.input}
-              placeholder="Pesquisar no Google..."
-              value={query}
-              onChangeText={setQuery}
+      data={status}
+      keyExtractor={(item) => item.server || Math.random().toString()}
+      renderItem={({ item: s }) => (
+        <View style={styles.nodeCard}>
+          <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+          <Text style={styles.statusText}>
+            📡 {s.server} - {s.status}
+          </Text>
+          <Text style={styles.statusText}>
+            📏 Distância: {s.ultrassonico_cm ?? "-"} cm
+          </Text>
+          {s.analog !== undefined && (
+            <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>
+          )}
+          <View style={styles.buttonRow}>
+            <Button
+              title="Ativar"
+              onPress={() => s.server && sendCommand(s.server, "activate")}
             />
-            <Button title="Buscar" onPress={searchGoogle} disabled={loading} />
+            <Button
+              title="Desativar"
+              onPress={() => s.server && sendCommand(s.server, "deactivate")}
+            />
+            <Button
+              title="Ping"
+              onPress={() => s.server && sendCommand(s.server, "ping")}
+            />
           </View>
-        </>
-      }
-      renderItem={({ item }) => (
-        <TouchableOpacity onPress={() => Linking.openURL(item.link)}>
-          <Text style={styles.resultLink}>{item.title}</Text>
-        </TouchableOpacity>
+        </View>
       )}
       contentContainerStyle={styles.container}
     />
@@ -171,16 +115,11 @@ export default function HiveScreen() {
 // ==== Estilos ====
 const styles = StyleSheet.create({
   container: {
+    flex: 1, // ocupa toda a altura da tela
     padding: 16,
     backgroundColor: "#f4f4f8",
-    alignItems: "center",
-    paddingBottom: 50,
-  },
-  header: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 16,
-    textAlign: "center",
+    justifyContent: "center", // centraliza verticalmente
+    alignItems: "center",     // centraliza horizontalmente
   },
   nodeCard: {
     backgroundColor: "#fff",
@@ -197,28 +136,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     marginTop: 10,
-  },
-  searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 20,
-    marginBottom: 12,
-    width: "90%",
-    alignSelf: "center",
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 8,
-    marginRight: 8,
-    backgroundColor: "#fff",
-  },
-  resultLink: {
-    color: "blue",
-    marginBottom: 8,
-    textDecorationLine: "underline",
-    textAlign: "center",
   },
 });

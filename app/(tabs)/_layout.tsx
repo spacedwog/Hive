@@ -41,17 +41,17 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="history"
-        options={{
-          title: 'Histórico',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="table.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="anomaly"
         options={{
           title: 'Anomalias',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="drone" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="StreamScreen"
+        options={{
+          title: 'Stream',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
         }}
       />
       <Tabs.Screen
