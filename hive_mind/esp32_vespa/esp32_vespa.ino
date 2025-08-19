@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <mbedtls/base64.h>
 
 // ==== Sensor Ultrassônico ====
@@ -14,22 +15,25 @@ long medirDistancia() {
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);
 
-  long duracao = pulseIn(ECHO, HIGH, 30000); // timeout 30ms (~5m)
-  long distancia = duracao * 0.034 / 2;      // cm
-  return distancia > 0 ? distancia : -1;     // -1 = sem leitura
+  long duracao = pulseIn(ECHO, HIGH, 30000);
+  long distancia = duracao * 0.034 / 2;
+  return distancia > 0 ? distancia : -1;
 }
 
-// ==== Leitura potenciômetro ====
-#define POT_PIN 33 // pino D33
-
+// ==== Potenciômetro ====
+#define POT_PIN 33
 long lerSensor() {
-  int valor = analogRead(POT_PIN); // lê valor analógico do pino D33
-  return valor;                     // retorna valor de 0 a 4095
+  return analogRead(POT_PIN);
 }
 
 // ==== Credenciais AP ====
 const char* ap_ssid = "HIVE VESPA";
 const char* ap_password = "hivemind";
+
+// ==== Credenciais da ESP32_CAM ====
+const char* cam_ssid = "HIVE STREAM";
+const char* cam_password = "hvstream";
+const char* cam_ip   = "192.168.4.1";
 
 // ==== Servidor Web ====
 WebServer server(80);
@@ -39,7 +43,6 @@ bool activated = false;
 const char* authUsername = "spacedwog";
 const char* authPassword = "Kimera12@";
 
-// ==== Funções internas ====
 String base64Decode(const String &input) {
   size_t out_len = 0;
   size_t input_len = input.length();
@@ -79,7 +82,7 @@ bool checkAuth() {
 void handleStatus() {
   if (!checkAuth()) return;
 
-  DynamicJsonDocument doc(256);
+  DynamicJsonDocument doc(512);
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_cm"] = medirDistancia();
@@ -135,6 +138,22 @@ void handleCommand() {
   server.send(200, "application/json", jsonResponse);
 }
 
+// ==== Proxy para câmera ====
+void handleCameraFrame() {
+  if (!checkAuth()) return;
+
+  HTTPClient http;
+  http.begin(String("http://") + cam_ip + "/capture");
+  int httpCode = http.GET();
+  if (httpCode == 200) {
+    WiFiClient client = server.client();
+    client.write(http.getStream().readString().c_str());
+  } else {
+    server.send(500, "text/plain", "Falha ao acessar ESP32_CAM");
+  }
+  http.end();
+}
+
 // ==== Setup ====
 void setup() {
   Serial.begin(115200);
@@ -142,26 +161,31 @@ void setup() {
   pinMode(32, OUTPUT);
   digitalWrite(32, LOW);
 
-  pinMode(POT_PIN, INPUT); // configura pino do potenciômetro
+  pinMode(POT_PIN, INPUT);
 
-  // Sensor ultrassônico
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
 
-  // ======== MODO AP ========
-  Serial.println("Inicializando Access Point...");
+  // Conecta-se à ESP32_CAM como STA
+  WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ap_ssid, ap_password);
+  Serial.println("AP Vespa iniciado!");
 
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP: ");
-  Serial.println(IP);
+  WiFi.begin(cam_ssid, cam_password);
+  Serial.print("Conectando à ESP32_CAM...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(" Conectado!");
+  Serial.print("IP STA: "); Serial.println(WiFi.localIP());
 
-  // Configura servidor HTTP
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
-  server.begin();
+  server.on("/camera", handleCameraFrame);
 
-  Serial.println("Servidor HTTP iniciado em modo AP");
+  server.begin();
+  Serial.println("Servidor HTTP Vespa iniciado!");
 }
 
 // ==== Loop ====
