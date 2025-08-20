@@ -22,8 +22,7 @@ long medirDistancia() {
 // ==== Potenciômetro ====
 #define POT_PIN 33
 long lerSensor() {
-  int valor = analogRead(POT_PIN);
-  return valor; // 0 a 4095
+  return analogRead(POT_PIN); // 0 a 4095
 }
 
 // ==== Credenciais do AP ====
@@ -44,12 +43,15 @@ HardwareSerial SerialVESPA(1); // UART1
 #define RX_VESPA 17
 #define BAUD_UART 9600
 
+// ==== Buffer UART ====
+String uartBuffer = "";
+
 // ==== Funções internas ====
 String base64Decode(const String &input) {
-  size_t out_len = 0;
   size_t input_len = input.length();
-  unsigned char output[input_len];
-  int ret = mbedtls_base64_decode(output, input_len, &out_len, 
+  size_t out_len = 3 * ((input_len + 3) / 4);
+  unsigned char output[out_len];
+  int ret = mbedtls_base64_decode(output, out_len, &out_len, 
                                   (const unsigned char*)input.c_str(), input_len);
   if (ret == 0) {
     return String((char*)output).substring(0, out_len);
@@ -79,7 +81,6 @@ bool checkAuth() {
     server.send(401, "text/plain", "Unauthorized");
     return false;
   }
-
   return true;
 }
 
@@ -87,7 +88,7 @@ bool checkAuth() {
 void handleStatus() {
   if (!checkAuth()) return;
 
-  DynamicJsonDocument doc(256);
+  DynamicJsonDocument doc(512);
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_cm"] = medirDistancia();
@@ -123,13 +124,13 @@ void handleCommand() {
   DynamicJsonDocument res(128);
 
   if (command == "activate") {
+    if (!activated) digitalWrite(32, HIGH);
     activated = true;
-    digitalWrite(32, HIGH);
     res["result"] = "success";
     res["status"] = "ativo";
   } else if (command == "deactivate") {
+    if (activated) digitalWrite(32, LOW);
     activated = false;
-    digitalWrite(32, LOW);
     res["result"] = "success";
     res["status"] = "parado";
   } else if (command == "ping") {
@@ -167,8 +168,7 @@ void setup() {
   // Inicia Access Point
   Serial.println("Inicializando Access Point...");
   WiFi.softAP(ap_ssid, ap_password);
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP: "); Serial.println(IP);
+  Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
 
   // Configura endpoints HTTP
   server.on("/status", handleStatus);
@@ -182,9 +182,17 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  // Recebe mensagens da ESP32-CAM
-  if (SerialVESPA.available()) {
-    String msg = SerialVESPA.readStringUntil('\n');
-    Serial.println("Recebido do CAM: " + msg);
+  // Recebe mensagens da ESP32-CAM sem bloquear
+  while (SerialVESPA.available()) {
+    char c = SerialVESPA.read();
+    if (c == '\n') {
+      uartBuffer.trim();
+      if (uartBuffer.length() > 0) {
+        Serial.println("Recebido do CAM: " + uartBuffer);
+      }
+      uartBuffer = "";
+    } else {
+      uartBuffer += c;
+    }
   }
 }
