@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Button, Image, StyleSheet, Text, View } from "react-native";
 
-const ESP32_IP = "192.168.4.1"; // IP padrão do Soft-AP
+const ESP32_IP = "192.168.15.166"; // IP padrão do WiFi(STA)
 
 export default function CameraScreen() {
   const [frameUrl, setFrameUrl] = useState<string>("");
