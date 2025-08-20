@@ -2,15 +2,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
   Button,
-  Dimensions,
   FlatList,
   ScrollView,
   StyleSheet,
   Text,
   Vibration,
-  View,
+  View
 } from "react-native";
-import { LineChart } from "react-native-chart-kit";
 
 // ==== Tipagens ====
 type NodeStatus = {
@@ -20,6 +18,34 @@ type NodeStatus = {
   ultrassonico_cm?: number;
   analog?: number;
   error?: string;
+};
+
+// ==== Componente de gráfico simples com View ====
+const SimpleBarChart = ({ data }: { data: number[] }) => {
+  if (!data.length) return null;
+
+  const max = Math.max(...data);
+
+  return (
+    <View style={{ flexDirection: "row", height: 180, width: "85%", marginVertical: 8 }}>
+      {data.map((value, idx) => {
+        const heightPercent = (value / (max || 1)) * 100;
+        return (
+          <View
+            key={idx}
+            style={{
+              flex: 1,
+              marginHorizontal: 1,
+              backgroundColor: "#007AFF",
+              height: `${heightPercent}%`,
+              alignSelf: "flex-end",
+              borderRadius: 2,
+            }}
+          />
+        );
+      })}
+    </View>
+  );
 };
 
 // ==== Componente Principal ====
@@ -105,7 +131,6 @@ export default function HiveScreen() {
             ? "#d4edda"
             : "#fff";
 
-          // Dados para o gráfico
           const chartData = history[serverKey] || [];
 
           return (
@@ -132,28 +157,7 @@ export default function HiveScreen() {
               )}
 
               {/* Gráfico do analog */}
-              {chartData.length > 0 && (
-                <LineChart
-                  data={{
-                    labels: chartData.map((_, idx) => (idx + 1).toString()),
-                    datasets: [{ data: chartData }],
-                  }}
-                  width={Dimensions.get("window").width * 0.85}
-                  height={180}
-                  chartConfig={{
-                    backgroundColor: "#f4f4f8",
-                    backgroundGradientFrom: "#f4f4f8",
-                    backgroundGradientTo: "#f4f4f8",
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
-                    labelColor: () => "#333",
-                    style: { borderRadius: 12 },
-                    propsForDots: { r: "3", strokeWidth: "1", stroke: "#007AFF" },
-                  }}
-                  bezier
-                  style={{ marginVertical: 8, borderRadius: 12 }}
-                />
-              )}
+              {chartData.length > 0 && <SimpleBarChart data={chartData} />}
 
               <View style={styles.buttonRow}>
                 <Button
