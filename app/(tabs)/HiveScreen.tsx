@@ -1,14 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   Button,
+  Dimensions,
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   Vibration,
   View,
 } from "react-native";
+import { LineChart } from "react-native-chart-kit";
 
 // ==== Tipagens ====
 type NodeStatus = {
@@ -24,13 +26,9 @@ type NodeStatus = {
 export default function HiveScreen() {
   const [status, setStatus] = useState<NodeStatus[]>([]);
   const [pingValues, setPingValues] = useState<{ [key: string]: number }>({});
-  const [history, setHistory] = useState<{ [key: string]: any[] }>({});
+  const [history, setHistory] = useState<{ [key: string]: number[] }>({});
 
-  const authUsername = "spacedwog";
-  const authPassword = "Kimera12@";
-  const authHeader = "Basic " + btoa(`${authUsername}:${authPassword}`);
-
-  // ==== Mock fetchStatus (simula sensores) ====
+  // ==== Simulação de fetchStatus ====
   const fetchStatus = async () => {
     const servers = ["192.168.4.1"];
     const responses: NodeStatus[] = servers.map((server) => ({
@@ -43,7 +41,7 @@ export default function HiveScreen() {
     setStatus(responses);
   };
 
-  // ==== Enviar comando (mock) ====
+  // ==== Enviar comando (simulado) ====
   const sendCommand = async (server: string, command: string) => {
     console.log(`Comando enviado: ${command} -> ${server}`);
     if (command === "ping") {
@@ -57,16 +55,15 @@ export default function HiveScreen() {
 
   // ==== Histórico AsyncStorage ====
   const updateHistory = async (sensor: NodeStatus) => {
-    if (!sensor.ultrassonico_cm || !sensor.server) return;
-
+    if (!sensor.server || sensor.analog === undefined) return;
     const key = `sensor_${sensor.server}`;
+
     try {
       const previous = await AsyncStorage.getItem(key);
       const log = previous ? JSON.parse(previous) : [];
-      const entry = { time: Date.now(), distance: sensor.ultrassonico_cm };
-      log.push(entry);
+      log.push(sensor.analog);
+      if (log.length > 20) log.shift(); // manter últimos 20 valores
       await AsyncStorage.setItem(key, JSON.stringify(log));
-
       setHistory((prev) => ({ ...prev, [sensor.server!]: log }));
     } catch (err) {
       console.error("Erro ao salvar histórico:", err);
@@ -79,16 +76,12 @@ export default function HiveScreen() {
       await fetchStatus();
 
       status.forEach(async (sensor) => {
-        // 1️⃣ Alerta e vibração se distância < 10cm
+        // Vibração se distância < 10cm
         if (sensor.ultrassonico_cm !== undefined && sensor.ultrassonico_cm < 10) {
           Vibration.vibrate(500);
-          Alert.alert(
-            "Atenção!",
-            `${sensor.device || "Dispositivo"} muito próximo!`
-          );
         }
 
-        // 2️⃣ Atualizar histórico
+        // Atualizar histórico
         await updateHistory(sensor);
       });
     }, 1000);
@@ -98,90 +91,107 @@ export default function HiveScreen() {
 
   // ==== Renderização ====
   return (
-    <FlatList
-      data={status}
-      keyExtractor={(item) => item.server || Math.random().toString()}
-      contentContainerStyle={styles.container}
-      renderItem={({ item: s }) => {
-        const serverKey = s.server ?? "unknown";
-        const isOffline = s.status === "offline";
-        const isActive = s.status === "ativo";
-        const cardColor = isOffline
-          ? "#f8d7da"
-          : isActive
-          ? "#d4edda"
-          : "#fff";
+    <ScrollView contentContainerStyle={styles.container}>
+      <FlatList
+        data={status}
+        keyExtractor={(item) => item.server || Math.random().toString()}
+        renderItem={({ item: s }) => {
+          const serverKey = s.server ?? "unknown";
+          const isOffline = s.status === "offline";
+          const isActive = s.status === "ativo";
+          const cardColor = isOffline
+            ? "#f8d7da"
+            : isActive
+            ? "#d4edda"
+            : "#fff";
 
-        return (
-          <View style={[styles.nodeCard, { backgroundColor: cardColor }]}>
-            <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-            <Text style={styles.statusText}>
-              📡 {s.server || "-"} - {s.status || "offline"}
-            </Text>
-            <Text style={styles.statusText}>
-              📏 Distância: {s.ultrassonico_cm ?? "-"} cm
-            </Text>
-            {s.analog !== undefined && (
-              <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>
-            )}
-            {pingValues[serverKey] !== undefined && (
+          // Dados para o gráfico
+          const chartData = history[serverKey] || [];
+
+          return (
+            <View style={[styles.nodeCard, { backgroundColor: cardColor }]}>
+              <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
               <Text style={styles.statusText}>
-                ⚡ Ping Sensor: {pingValues[serverKey]}
+                📡 {s.server || "-"} - {s.status || "offline"}
               </Text>
-            )}
+              <Text style={styles.statusText}>
+                📏 Distância: {s.ultrassonico_cm ?? "-"} cm
+              </Text>
+              {s.ultrassonico_cm !== undefined && s.ultrassonico_cm < 10 && (
+                <Text style={[styles.statusText, { color: "red", fontWeight: "700" }]}>
+                  ⚠️ Dispositivo muito próximo!
+                </Text>
+              )}
+              {s.analog !== undefined && (
+                <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>
+              )}
+              {pingValues[serverKey] !== undefined && (
+                <Text style={styles.statusText}>
+                  ⚡ Ping Sensor: {pingValues[serverKey]}
+                </Text>
+              )}
 
-            {/* Histórico do sensor */}
-            {history[serverKey] && (
-              <View style={{ marginTop: 8 }}>
-                <Text style={{ fontWeight: "600" }}>📜 Histórico:</Text>
-                {history[serverKey]
-                  .slice(-5)
-                  .reverse()
-                  .map((entry, idx) => (
-                    <Text key={idx} style={styles.statusText}>
-                      {new Date(entry.time).toLocaleTimeString()} - {entry.distance} cm
-                    </Text>
-                  ))}
+              {/* Gráfico do analog */}
+              {chartData.length > 0 && (
+                <LineChart
+                  data={{
+                    labels: chartData.map((_, idx) => (idx + 1).toString()),
+                    datasets: [{ data: chartData }],
+                  }}
+                  width={Dimensions.get("window").width * 0.85}
+                  height={180}
+                  chartConfig={{
+                    backgroundColor: "#f4f4f8",
+                    backgroundGradientFrom: "#f4f4f8",
+                    backgroundGradientTo: "#f4f4f8",
+                    decimalPlaces: 0,
+                    color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+                    labelColor: () => "#333",
+                    style: { borderRadius: 12 },
+                    propsForDots: { r: "3", strokeWidth: "1", stroke: "#007AFF" },
+                  }}
+                  bezier
+                  style={{ marginVertical: 8, borderRadius: 12 }}
+                />
+              )}
+
+              <View style={styles.buttonRow}>
+                <Button
+                  title="Ativar"
+                  disabled={isOffline || !s.server}
+                  onPress={() => s.server && sendCommand(s.server, "activate")}
+                />
+                <Button
+                  title="Desativar"
+                  disabled={isOffline || !s.server}
+                  onPress={() => s.server && sendCommand(s.server, "deactivate")}
+                />
+                <Button
+                  title="Ping"
+                  disabled={isOffline || !s.server}
+                  onPress={() => s.server && sendCommand(s.server, "ping")}
+                />
               </View>
-            )}
-
-            <View style={styles.buttonRow}>
-              <Button
-                title="Ativar"
-                disabled={isOffline || !s.server}
-                onPress={() => s.server && sendCommand(s.server, "activate")}
-              />
-              <Button
-                title="Desativar"
-                disabled={isOffline || !s.server}
-                onPress={() => s.server && sendCommand(s.server, "deactivate")}
-              />
-              <Button
-                title="Ping"
-                disabled={isOffline || !s.server}
-                onPress={() => s.server && sendCommand(s.server, "ping")}
-              />
             </View>
-          </View>
-        );
-      }}
-    />
+          );
+        }}
+      />
+    </ScrollView>
   );
 }
 
 // ==== Estilos ====
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 16,
     backgroundColor: "#f4f4f8",
-    justifyContent: "center",
     alignItems: "center",
   },
   nodeCard: {
     padding: 12,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 16,
     elevation: 3,
     width: "90%",
     alignSelf: "center",
