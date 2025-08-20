@@ -22,9 +22,15 @@ type NodeStatus = {
   server_ip?: string;
   status?: string;
   sensor?: number;
-  anomaly?: boolean;
+  anomaly?: {
+    detected: boolean;
+    message: string;
+    expected_range?: string;
+    current_value?: number;
+    timestamp_ms?: number;
+  };
   mesh?: boolean;
-  ping?: number; // Novo campo para resposta do comando ping
+  timestamp?: number; // resposta do ping
   error?: string;
 };
 
@@ -59,15 +65,15 @@ export default function ExploreScreen() {
     try {
       const res = await axios.post(
         `http://${ip}/command`,
-        { action }, // <-- Corrigido: usa "action"
+        { action },
         { timeout: 3000 }
       );
 
       let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
 
-      // Se o comando for "ping", exibe o tempo de resposta
-      if (action === 'ping' && res.data?.ping !== undefined) {
-        msg += ` Tempo de resposta: ${res.data.ping} ms`;
+      // Se o comando for "ping", exibe o timestamp retornado
+      if (action === 'ping' && res.data?.timestamp !== undefined) {
+        msg += ` Timestamp: ${res.data.timestamp} ms`;
       }
 
       Alert.alert('✅ Sucesso', msg);
@@ -116,13 +122,24 @@ export default function ExploreScreen() {
                     <Text
                       style={[
                         styles.statusText,
-                        { color: s.anomaly ? '#f87171' : '#4ade80' },
+                        { color: s.anomaly?.detected ? '#f87171' : '#4ade80' },
                       ]}
                     >
-                      ⚠️ Anomalia: {s.anomaly ? 'Detectada' : 'Normal'}
+                      ⚠️ Anomalia: {s.anomaly?.detected ? 'Detectada' : 'Normal'}
                     </Text>
-                    {s.ping !== undefined && (
-                      <Text style={styles.statusText}>📡 Ping: {s.ping} ms</Text>
+
+                    {s.anomaly?.message && (
+                      <Text style={styles.statusText}>📝 {s.anomaly.message}</Text>
+                    )}
+                    {s.anomaly?.current_value !== undefined && (
+                      <Text style={styles.statusText}>🔢 Valor Atual: {s.anomaly.current_value}</Text>
+                    )}
+                    {s.anomaly?.expected_range && (
+                      <Text style={styles.statusText}>📊 Faixa Esperada: {s.anomaly.expected_range}</Text>
+                    )}
+
+                    {s.timestamp !== undefined && (
+                      <Text style={styles.statusText}>📡 Ping Timestamp: {s.timestamp} ms</Text>
                     )}
 
                     <View style={styles.buttonRow}>

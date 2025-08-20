@@ -29,7 +29,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="HiveScreen"
         options={{
-          title: 'Hive Screen',
+          title: 'Hive Prime',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="apple.intelligence" color={color} />,
         }}
       />
@@ -38,13 +38,6 @@ export default function TabLayout() {
         options={{
           title: 'Tela Principal',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="anomaly"
-        options={{
-          title: 'Anomalias',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="drone" color={color} />,
         }}
       />
       <Tabs.Screen
