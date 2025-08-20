@@ -51,7 +51,7 @@ export default function TabLayout() {
         name="StreamScreen"
         options={{
           title: 'Stream',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="web.camera.fill" color={color} />,
         }}
       />
       <Tabs.Screen
