@@ -16,11 +16,11 @@ export default function CameraScreen() {
 
   // Função auxiliar para interpretar resposta
   const parseResponse = async (res: Response) => {
-    const text = await res.text(); // lê o corpo uma vez
+    const text = await res.text();
     try {
-      return JSON.parse(text); // tenta converter para JSON
+      return JSON.parse(text);
     } catch {
-      return text; // se falhar, retorna texto puro
+      return text;
     }
   };
 
@@ -28,11 +28,10 @@ export default function CameraScreen() {
     try {
       const res = await fetch(`http://${ESP32_IP}/start`);
       const data = await parseResponse(res);
-      if (res.ok) {
-        Alert.alert("✅ Gravação iniciada", typeof data === "string" ? data : JSON.stringify(data));
-      } else {
-        Alert.alert("❌ Erro ao iniciar gravação", typeof data === "string" ? data : JSON.stringify(data));
-      }
+      Alert.alert(
+        res.ok ? "✅ Gravação iniciada" : "❌ Erro ao iniciar gravação",
+        typeof data === "string" ? data : JSON.stringify(data)
+      );
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }
@@ -42,11 +41,10 @@ export default function CameraScreen() {
     try {
       const res = await fetch(`http://${ESP32_IP}/stop`);
       const data = await parseResponse(res);
-      if (res.ok) {
-        Alert.alert("🛑 Gravação parada", typeof data === "string" ? data : JSON.stringify(data));
-      } else {
-        Alert.alert("❌ Erro ao parar gravação", typeof data === "string" ? data : JSON.stringify(data));
-      }
+      Alert.alert(
+        res.ok ? "🛑 Gravação parada" : "❌ Erro ao parar gravação",
+        typeof data === "string" ? data : JSON.stringify(data)
+      );
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }
