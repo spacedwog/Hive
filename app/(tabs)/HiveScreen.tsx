@@ -1,11 +1,12 @@
-import axios from "axios";
-import * as base64 from "base-64";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Button,
   FlatList,
   StyleSheet,
   Text,
+  Vibration,
   View,
 } from "react-native";
 
@@ -22,92 +23,148 @@ type NodeStatus = {
 // ==== Componente Principal ====
 export default function HiveScreen() {
   const [status, setStatus] = useState<NodeStatus[]>([]);
+  const [pingValues, setPingValues] = useState<{ [key: string]: number }>({});
+  const [history, setHistory] = useState<{ [key: string]: any[] }>({});
 
   const authUsername = "spacedwog";
   const authPassword = "Kimera12@";
-  const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
+  const authHeader = "Basic " + btoa(`${authUsername}:${authPassword}`);
 
+  // ==== Mock fetchStatus (simula sensores) ====
   const fetchStatus = async () => {
-    try {
-      const servers = ["192.168.4.1"];
-      const responses: NodeStatus[] = [];
-
-      for (const server of servers) {
-        try {
-          const res = await axios.get(`http://${server}/status`, {
-            timeout: 3000,
-            headers: { Authorization: authHeader },
-          });
-          responses.push({ ...res.data, server });
-        } catch (err) {
-          responses.push({ server, status: "offline", error: String(err) });
-        }
-      }
-
-      setStatus(responses);
-    } catch (err) {
-      console.error("Erro ao buscar status:", err);
-    }
+    const servers = ["192.168.4.1"];
+    const responses: NodeStatus[] = servers.map((server) => ({
+      server,
+      device: "Dispositivo " + server,
+      status: Math.random() > 0.2 ? "ativo" : "offline",
+      ultrassonico_cm: Math.floor(Math.random() * 50),
+      analog: Math.floor(Math.random() * 1024),
+    }));
+    setStatus(responses);
   };
 
-  useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 1000); // atualiza a cada 1s
-    return () => clearInterval(interval);
-  }, []);
-
+  // ==== Enviar comando (mock) ====
   const sendCommand = async (server: string, command: string) => {
+    console.log(`Comando enviado: ${command} -> ${server}`);
+    if (command === "ping") {
+      setPingValues((prev) => ({
+        ...prev,
+        [server]: Math.floor(Math.random() * 1024),
+      }));
+    }
+    fetchStatus();
+  };
+
+  // ==== Histórico AsyncStorage ====
+  const updateHistory = async (sensor: NodeStatus) => {
+    if (!sensor.ultrassonico_cm || !sensor.server) return;
+
+    const key = `sensor_${sensor.server}`;
     try {
-      const res = await axios.post(
-        `http://${server}/command`,
-        { command },
-        { headers: { Authorization: authHeader } }
-      );
+      const previous = await AsyncStorage.getItem(key);
+      const log = previous ? JSON.parse(previous) : [];
+      const entry = { time: Date.now(), distance: sensor.ultrassonico_cm };
+      log.push(entry);
+      await AsyncStorage.setItem(key, JSON.stringify(log));
 
-      if (command === "ping" && res.data.analog !== undefined) {
-        alert(`Valor analógico: ${res.data.analog}`);
-      }
-
-      fetchStatus();
+      setHistory((prev) => ({ ...prev, [sensor.server!]: log }));
     } catch (err) {
-      console.error("Erro ao enviar comando:", err);
+      console.error("Erro ao salvar histórico:", err);
     }
   };
+
+  // ==== Efeito de atualização contínua + métodos nativos ====
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      await fetchStatus();
+
+      status.forEach(async (sensor) => {
+        // 1️⃣ Alerta e vibração se distância < 10cm
+        if (sensor.ultrassonico_cm !== undefined && sensor.ultrassonico_cm < 10) {
+          Vibration.vibrate(500);
+          Alert.alert(
+            "Atenção!",
+            `${sensor.device || "Dispositivo"} muito próximo!`
+          );
+        }
+
+        // 2️⃣ Atualizar histórico
+        await updateHistory(sensor);
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [status]);
 
   // ==== Renderização ====
   return (
     <FlatList
       data={status}
       keyExtractor={(item) => item.server || Math.random().toString()}
-      renderItem={({ item: s }) => (
-        <View style={styles.nodeCard}>
-          <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-          <Text style={styles.statusText}>
-            📡 {s.server} - {s.status}
-          </Text>
-          <Text style={styles.statusText}>
-            📏 Distância: {s.ultrassonico_cm ?? "-"} cm
-          </Text>
-          {s.analog !== undefined && (
-            <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>
-          )}
-          <View style={styles.buttonRow}>
-            <Button
-              title="Ativar"
-              onPress={() => s.server && sendCommand(s.server, "activate")}
-            />
-            <Button
-              title="Desativar"
-              onPress={() => s.server && sendCommand(s.server, "deactivate")}
-            />
-            <Button
-              title="Ping"
-              onPress={() => s.server && sendCommand(s.server, "ping")}
-            />
-          </View>
-        </View>
-      )}
       contentContainerStyle={styles.container}
+      renderItem={({ item: s }) => {
+        const serverKey = s.server ?? "unknown";
+        const isOffline = s.status === "offline";
+        const isActive = s.status === "ativo";
+        const cardColor = isOffline
+          ? "#f8d7da"
+          : isActive
+          ? "#d4edda"
+          : "#fff";
+
+        return (
+          <View style={[styles.nodeCard, { backgroundColor: cardColor }]}>
+            <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+            <Text style={styles.statusText}>
+              📡 {s.server || "-"} - {s.status || "offline"}
+            </Text>
+            <Text style={styles.statusText}>
+              📏 Distância: {s.ultrassonico_cm ?? "-"} cm
+            </Text>
+            {s.analog !== undefined && (
+              <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>
+            )}
+            {pingValues[serverKey] !== undefined && (
+              <Text style={styles.statusText}>
+                ⚡ Ping Sensor: {pingValues[serverKey]}
+              </Text>
+            )}
+
+            {/* Histórico do sensor */}
+            {history[serverKey] && (
+              <View style={{ marginTop: 8 }}>
+                <Text style={{ fontWeight: "600" }}>📜 Histórico:</Text>
+                {history[serverKey]
+                  .slice(-5)
+                  .reverse()
+                  .map((entry, idx) => (
+                    <Text key={idx} style={styles.statusText}>
+                      {new Date(entry.time).toLocaleTimeString()} - {entry.distance} cm
+                    </Text>
+                  ))}
+              </View>
+            )}
+
+            <View style={styles.buttonRow}>
+              <Button
+                title="Ativar"
+                disabled={isOffline || !s.server}
+                onPress={() => s.server && sendCommand(s.server, "activate")}
+              />
+              <Button
+                title="Desativar"
+                disabled={isOffline || !s.server}
+                onPress={() => s.server && sendCommand(s.server, "deactivate")}
+              />
+              <Button
+                title="Ping"
+                disabled={isOffline || !s.server}
+                onPress={() => s.server && sendCommand(s.server, "ping")}
+              />
+            </View>
+          </View>
+        );
+      }}
     />
   );
 }
@@ -115,14 +172,13 @@ export default function HiveScreen() {
 // ==== Estilos ====
 const styles = StyleSheet.create({
   container: {
-    flex: 1, // ocupa toda a altura da tela
+    flex: 1,
     padding: 16,
     backgroundColor: "#f4f4f8",
-    justifyContent: "center", // centraliza verticalmente
-    alignItems: "center",     // centraliza horizontalmente
+    justifyContent: "center",
+    alignItems: "center",
   },
   nodeCard: {
-    backgroundColor: "#fff",
     padding: 12,
     borderRadius: 12,
     marginBottom: 12,
