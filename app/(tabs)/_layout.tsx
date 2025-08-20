@@ -41,6 +41,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="WiFiConnectScreen"
+        options={{
+          title: 'WiFi Conectar',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="wifi" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="StreamScreen"
         options={{
           title: 'Stream',
