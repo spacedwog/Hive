@@ -24,9 +24,9 @@ HardwareSerial SerialCAM(1);
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
-// ==== Configuração STA ====
-const char* ssid = "FAMILIA SANTOS";     // SSID da sua rede WiFi
-const char* password = "6z2h1j3k9f";    // Senha da rede WiFi
+// ==== Configuração SoftAP ====
+const char* ssidAP     = "HIVE_STREAM";
+const char* passwordAP = "hvstream";
 
 // ==== WebServer ====
 WebServer server(80);
@@ -38,7 +38,7 @@ void setup() {
   Serial.begin(115200);
   SerialCAM.begin(9600, SERIAL_8N1, 16, 17); // RX = VP, TX = VN
 
-  // Inicializa câmera
+  // ==== Inicializa câmera ====
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -60,28 +60,23 @@ void setup() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size = FRAMESIZE_QVGA;
-  config.jpeg_quality = 12;
+  config.frame_size = FRAMESIZE_QVGA;   // pode aumentar se quiser (SVGA, VGA, etc.)
+  config.jpeg_quality = 12;             // menor valor = melhor qualidade
   config.fb_count = 1;
 
   if (esp_camera_init(&config) != ESP_OK) {
     Serial.println("Erro ao inicializar a câmera");
     return;
   }
-  Serial.println("Câmera inicializada");
+  Serial.println("Câmera inicializada!");
 
-  // Conecta ao WiFi em modo STA
-  WiFi.begin(ssid, password);
-  Serial.print("Conectando ao WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi conectado!");
+  // ==== Inicia SoftAP ====
+  WiFi.softAP(ssidAP, passwordAP);
+  Serial.println("SoftAP iniciado!");
   Serial.print("IP do ESP32-CAM: ");
-  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.softAPIP());
 
-  // Define rotas
+  // ==== Define rotas ====
   server.on("/start", []() {
     enviarFrames = true;
     server.send(200, "text/plain", "Captura iniciada!");
@@ -98,7 +93,7 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  // Envia frames apenas se ativo
+  // ==== Envia frames apenas se ativo ====
   if (enviarFrames) {
     camera_fb_t *fb = esp_camera_fb_get();
     if (!fb) {
@@ -106,17 +101,17 @@ void loop() {
       return;
     }
 
-    // Envia tamanho do frame pela serial
+    // Envia tamanho e dados via Serial para Vespa
     SerialCAM.println(fb->len);
     for (size_t i = 0; i < fb->len; i++) {
       SerialCAM.write(fb->buf[i]);
     }
     esp_camera_fb_return(fb);
 
-    delay(100); // intervalo entre frames
+    delay(100); // intervalo entre frames (ajuste conforme necessário)
   }
 
-  // Leitura serial da Vespa
+  // ==== Leitura de comandos da Vespa ====
   if (SerialCAM.available()) {
     String comando = SerialCAM.readStringUntil('\n');
     Serial.println("Recebido da Vespa: " + comando);
