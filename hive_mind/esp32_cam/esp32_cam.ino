@@ -24,9 +24,9 @@ HardwareSerial SerialCAM(1);
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
-// ==== Configuração SoftAP ====
-const char* ssidAP = "HIVE STREAM";
-const char* passwordAP = "hvstream";
+// ==== Configuração STA ====
+const char* ssid = "FAMILIA SANTOS";     // SSID da sua rede WiFi
+const char* password = "6z2h1j3k9f";    // Senha da rede WiFi
 
 // ==== WebServer ====
 WebServer server(80);
@@ -70,11 +70,16 @@ void setup() {
   }
   Serial.println("Câmera inicializada");
 
-  // Inicia SoftAP
-  WiFi.softAP(ssidAP, passwordAP);
-  Serial.println("SoftAP iniciado!");
+  // Conecta ao WiFi em modo STA
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando ao WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi conectado!");
   Serial.print("IP do ESP32-CAM: ");
-  Serial.println(WiFi.softAPIP());
+  Serial.println(WiFi.localIP());
 
   // Define rotas
   server.on("/start", []() {
@@ -101,9 +106,8 @@ void loop() {
       return;
     }
 
-    // Envia tamanho
+    // Envia tamanho do frame pela serial
     SerialCAM.println(fb->len);
-    // Envia dados
     for (size_t i = 0; i < fb->len; i++) {
       SerialCAM.write(fb->buf[i]);
     }
