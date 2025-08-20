@@ -1,14 +1,11 @@
 import React, { useEffect } from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Polygon } from 'react-native-svg';
-
-const screenWidth = Dimensions.get('window').width;
 
 export default function HiveHomeScreen() {
   const opacityTitle = useSharedValue(0);
@@ -52,19 +49,16 @@ export default function HiveHomeScreen() {
       </Animated.View>
 
       <Animated.View style={[styles.hexagonWrapper, hexStyle]}>
-        <Svg height="120" width={screenWidth}>
-          <Polygon
-            points="60,10 90,30 90,70 60,90 30,70 30,30"
-            fill="#facc15"
-            stroke="#eab308"
-            strokeWidth="3"
-          />
-        </Svg>
+        <View style={styles.hexagon}>
+          <View style={styles.hexagonInner} />
+        </View>
         <Text style={styles.hexagonLabel}>Nó Ativo</Text>
       </Animated.View>
     </ScrollView>
   );
 }
+
+const HEX_SIZE = 80;
 
 const styles = StyleSheet.create({
   container: {
@@ -104,6 +98,21 @@ const styles = StyleSheet.create({
   hexagonWrapper: {
     marginTop: 20,
     alignItems: 'center',
+  },
+  hexagon: {
+    width: HEX_SIZE,
+    height: HEX_SIZE * 0.866, // altura do hexágono (sin(60°))
+    backgroundColor: '#facc15',
+    marginVertical: HEX_SIZE * 0.133,
+    justifyContent: 'center',
+    alignItems: 'center',
+    transform: [{ rotate: '30deg' }],
+  },
+  hexagonInner: {
+    width: HEX_SIZE,
+    height: HEX_SIZE * 0.866,
+    backgroundColor: '#facc15',
+    transform: [{ rotate: '-30deg' }],
   },
   hexagonLabel: {
     marginTop: 10,
