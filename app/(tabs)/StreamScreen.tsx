@@ -1,71 +1,47 @@
-import React, { useEffect, useState } from "react";
-import { Alert, Button, Image, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { Button, StyleSheet, Text, View } from "react-native";
+import { WebView } from "react-native-webview";
 
-const ESP32_IP = "192.168.4.1"; // IP padrão do Soft-AP
+const ESP32_IP = "http://192.168.4.1";
 
-export default function CameraScreen() {
-  const [frameUrl, setFrameUrl] = useState<string>("");
+export default function CameraStream() {
+  const [streaming, setStreaming] = useState(false);
 
-  // Atualiza frame a cada 1 segundo (pulling simples)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFrameUrl(`http://${ESP32_IP}/capture?_=${Date.now()}`);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const iniciarGravacao = async () => {
-    try {
-      const res = await fetch(`http://${ESP32_IP}/start`);
-      if (res.ok) {
-        Alert.alert("✅ Gravação iniciada");
-      } else {
-        Alert.alert("❌ Erro ao iniciar gravação");
-      }
-    } catch (err) {
-      Alert.alert("Erro de conexão", String(err));
-    }
+  const startStream = async () => {
+    await fetch(`${ESP32_IP}/start`);
+    setStreaming(true);
   };
 
-  const pararGravacao = async () => {
-    try {
-      const res = await fetch(`http://${ESP32_IP}/stop`);
-      if (res.ok) {
-        Alert.alert("🛑 Gravação parada");
-      } else {
-        Alert.alert("❌ Erro ao parar gravação");
-      }
-    } catch (err) {
-      Alert.alert("Erro de conexão", String(err));
-    }
+  const stopStream = async () => {
+    await fetch(`${ESP32_IP}/stop`);
+    setStreaming(false);
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📷 HIVE STREAM</Text>
+      <Text style={styles.title}>📡 Live Stream ESP32-CAM</Text>
 
-      {frameUrl ? (
-        <Image
-          source={{ uri: frameUrl }}
+      {streaming ? (
+        <WebView
+          source={{ html: `<img src="${ESP32_IP}/stream" style="width:100%;height:100%;"/>` }}
           style={styles.preview}
-          resizeMode="contain"
         />
       ) : (
-        <Text style={styles.info}>Conectando à câmera...</Text>
+        <Text style={styles.info}>Stream parado</Text>
       )}
 
       <View style={styles.buttons}>
-        <Button title="▶️ Iniciar Gravação" onPress={iniciarGravacao} />
-        <Button title="⏹ Parar Gravação" onPress={pararGravacao} />
+        <Button title="▶️ Iniciar" onPress={startStream} />
+        <Button title="⏹ Parar" onPress={stopStream} />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#111" },
-  title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 20 },
-  preview: { width: "90%", height: 300, borderRadius: 10, backgroundColor: "#000" },
+  container: { flex: 1, backgroundColor: "#111", alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 20, color: "#fff", marginBottom: 10 },
+  preview: { width: "90%", height: 300, backgroundColor: "#000" },
   info: { color: "#aaa", marginBottom: 20 },
-  buttons: { marginTop: 20, width: "90%", gap: 10 }
+  buttons: { flexDirection: "row", marginTop: 20, gap: 10 }
 });
