@@ -45,7 +45,7 @@ const StreamScreen: React.FC = () => {
       </View>
 
       <Button
-        title="Abrir Câmera"
+        title="Acessar ESP32(CAM)"
         onPress={openCamera}
         disabled={!connected}
       />
