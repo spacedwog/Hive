@@ -1,19 +1,54 @@
-import React, { useState } from "react";
-import { Button, Linking, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  Alert,
+  Button,
+  Linking,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { NetworkInfo } from "react-native-network-info";
 
 const StreamScreen: React.FC = () => {
   const [connected, setConnected] = useState(false);
+  const [checking, setChecking] = useState(false);
 
-  // Configuração do Soft-AP
   const apSSID = "HIVE STREAM";
   const apPassword = "hvstream";
   const esp32IP = "192.168.4.1"; // IP padrão do Soft-AP
 
   const openCamera = () => {
-    Linking.openURL(`http://${esp32IP}`).catch((err) =>
-      console.error("Erro ao abrir a câmera:", err)
-    );
+    Linking.openURL(`http://${esp32IP}`).catch((err) => {
+      console.error("Erro ao abrir a câmera:", err);
+      Alert.alert("Erro", "Não foi possível abrir o link da câmera.");
+    });
   };
+
+  const checkConnection = () => {
+    setChecking(true);
+    NetworkInfo.getSSID()
+      .then((ssid) => {
+        if (ssid === apSSID) {
+          setConnected(true);
+        } else {
+          setConnected(false);
+          Alert.alert(
+            "Rede incorreta",
+            `Conecte-se à rede Wi-Fi "${apSSID}" antes de continuar.`
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("Erro ao obter SSID:", err);
+        Alert.alert("Erro", "Não foi possível verificar a rede.");
+        setConnected(false);
+      })
+      .finally(() => setChecking(false));
+  };
+
+  useEffect(() => {
+    checkConnection(); // verifica automaticamente ao abrir a tela
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -21,7 +56,7 @@ const StreamScreen: React.FC = () => {
 
       <View style={styles.infoBox}>
         <Text style={styles.info}>SSID: {apSSID}</Text>
-        <Text style={styles.info}>Password: {apPassword}</Text>
+        <Text style={styles.info}>Senha: {apPassword}</Text>
         <Text style={styles.info}>IP: {esp32IP}</Text>
       </View>
 
@@ -32,13 +67,21 @@ const StreamScreen: React.FC = () => {
       />
 
       <Text style={styles.note}>
-        Conecte seu celular ou PC à rede WiFi acima antes de abrir a câmera.
+        Conecte seu celular ou PC à rede Wi-Fi acima antes de abrir a câmera.
       </Text>
 
-      <Button
-        title={connected ? "Conectado" : "Conectar à rede"}
-        onPress={() => setConnected(true)}
-      />
+      <View style={{ marginTop: 15 }}>
+        <Button
+          title={
+            checking
+              ? "Verificando..."
+              : connected
+              ? "Conectado"
+              : "Conectar à rede"
+          }
+          onPress={checkConnection}
+        />
+      </View>
     </View>
   );
 };
