@@ -10,16 +10,25 @@ import {
   View,
 } from "react-native";
 
-const ESP32_IP = "192.168.4.1"; // IP do SoftAP do ESP32
+const ESP32_IP = "192.168.4.1"; // IP do SoftAP do ESP32-CAM
 
 export default function CameraScreen() {
-  const [lastImage, setLastImage] = useState<string>(""); // Última imagem do SD
+  const [lastImage, setLastImage] = useState<string>(""); 
   const [refreshing, setRefreshing] = useState(false);
 
-  // Atualiza a última imagem do SD
-  const fetchLastImage = () => {
-    const url = `http://${ESP32_IP}/saved.jpg?_=${Date.now()}`;
-    setLastImage(url);
+  // Buscar última imagem do SD
+  const fetchLastImage = async () => {
+    try {
+      const url = `http://${ESP32_IP}/saved.jpg?_=${Date.now()}`;
+      const res = await fetch(url, { method: "HEAD" }); // só testa se existe
+      if (res.ok) {
+        setLastImage(url);
+      } else {
+        setLastImage("");
+      }
+    } catch {
+      setLastImage("");
+    }
   };
 
   // Atualiza ao abrir a tela
@@ -27,24 +36,20 @@ export default function CameraScreen() {
     fetchLastImage();
   }, []);
 
-  // Pull-to-refresh
-  const onRefresh = () => {
+  // Atualização com pull-to-refresh
+  const onRefresh = async () => {
     setRefreshing(true);
-    fetchLastImage();
-    setTimeout(() => setRefreshing(false), 500); // evita flicker
+    await fetchLastImage();
+    setRefreshing(false);
   };
 
-  // Função auxiliar para interpretar resposta
+  // Interpreta resposta do ESP32
   const parseResponse = async (res: Response) => {
+    const text = await res.text();
     try {
-      const text = await res.text();
-      try {
-        return JSON.parse(text);
-      } catch {
-        return text;
-      }
+      return JSON.parse(text);
     } catch {
-      return "Erro ao ler resposta";
+      return text;
     }
   };
 
@@ -71,25 +76,22 @@ export default function CameraScreen() {
         res.ok ? "🛑 Gravação parada" : "❌ Erro ao parar gravação",
         typeof data === "string" ? data : JSON.stringify(data)
       );
-      fetchLastImage(); // Atualiza a última imagem ao parar
+      fetchLastImage();
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }
   };
 
-  // Captura manual
+  // Captura manual de foto
   const capturarFoto = async () => {
     try {
       const res = await fetch(`http://${ESP32_IP}/capture`);
       const data = await parseResponse(res);
-
-      if (!res.ok || (typeof data === "string" && data.toLowerCase().includes("erro"))) {
-        Alert.alert("❌ Erro ao capturar foto", typeof data === "string" ? data : JSON.stringify(data));
-        return;
-      }
-
-      Alert.alert("📸 Foto capturada", typeof data === "string" ? data : JSON.stringify(data));
-      fetchLastImage(); // Atualiza última imagem
+      Alert.alert(
+        res.ok ? "📸 Foto capturada" : "❌ Erro ao capturar foto",
+        typeof data === "string" ? data : JSON.stringify(data)
+      );
+      setTimeout(fetchLastImage, 1000); // espera salvar no SD
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }

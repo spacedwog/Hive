@@ -2,33 +2,43 @@
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
 #include <DNSServer.h>
+#include <math.h>
 
-// 📶 Configuração do SoftAP
+// -------------------------
+// 📶 Configurações WiFi
+// -------------------------
 const char* ap_ssid = "HIVE EXPLORER";
 const char* ap_password = "explorer"; // mínimo 8 caracteres
 
-// 🌐 Configuração da conexão STA (internet)
 const char* sta_ssid = "FAMILIA SANTOS";
 const char* sta_password = "6z2h1j3k9f";
 
-// 🌐 Servidor HTTP
+// -------------------------
+// 📡 Servidores
+// -------------------------
 ESP8266WebServer server(80);
-
-// 📡 Servidor DNS para Captive Portal
 DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
-// 🔄 Estado de controle
+// -------------------------
+// ⚙️ Controle
+// -------------------------
 bool activated = false;
 
-// 📟 Variáveis do sensor e status mesh
-int sensorValue = 0;
-bool anomalyDetected = false;
-bool meshConnected = false;
+// -------------------------
+// 🔊 Sensor de Som
+// -------------------------
+const int pinMicrophone = A0;  // Sensor de som analógico
+int rawSoundValue = 0;
+float soundDB = 0.0;
+bool soundAnomaly = false;
+const int soundMinDB = 30;   // dB mínimo esperado
+const int soundMaxDB = 85;   // dB máximo esperado
 
-// Limites para detecção de anomalia
-const int sensorMinThreshold = 100;
-const int sensorMaxThreshold = 900;
+// -------------------------
+// 📟 Status mesh
+// -------------------------
+bool meshConnected = false;
 
 // -------------------------
 // 📜 Página HTML principal
@@ -51,6 +61,7 @@ String htmlPage() {
     <body>
       <h1>HIVE EXPLORER</h1>
       <p>Status: <span id="status">Carregando...</span></p>
+      <p>Nível de som: <span id="sound">0</span> dB</p>
       <button class="on" onclick="sendCmd('on')">Ativar</button>
       <button class="off" onclick="sendCmd('off')">Desativar</button>
       <script>
@@ -66,9 +77,10 @@ String htmlPage() {
         function refreshStatus() {
           fetch('/status').then(res => res.json()).then(data => {
             document.getElementById('status').innerText = data.status;
+            document.getElementById('sound').innerText = data.sensor_db.toFixed(1);
           });
         }
-        setInterval(refreshStatus, 2000);
+        setInterval(refreshStatus, 500);
         refreshStatus();
       </script>
     </body>
@@ -78,34 +90,31 @@ String htmlPage() {
 }
 
 // -------------------------
-// 📡 Rota: Página principal
+// 📡 Rotas
 // -------------------------
 void handleRoot() {
   server.send(200, "text/html", htmlPage());
 }
 
-// -------------------------
-// 📡 Rota: Status em JSON
-// -------------------------
 void handleStatus() {
   StaticJsonDocument<512> doc;
   doc["device"] = "ESP8266";
   doc["server_ip"] = WiFi.softAPIP().toString();
-  doc["sensor"] = sensorValue;
+  doc["sensor_raw"] = rawSoundValue;
+  doc["sensor_db"] = soundDB;
   doc["mesh"] = meshConnected;
   doc["status"] = activated ? "Ligado" : "Desligado";
 
-  if (anomalyDetected) {
-    JsonObject anomalyObj = doc.createNestedObject("anomaly");
+  JsonObject anomalyObj = doc.createNestedObject("anomaly");
+  if (soundAnomaly) {
     anomalyObj["detected"] = true;
-    anomalyObj["message"] = "Valor do sensor fora do intervalo permitido";
-    anomalyObj["expected_range"] = String(sensorMinThreshold) + " - " + String(sensorMaxThreshold);
-    anomalyObj["current_value"] = sensorValue;
+    anomalyObj["message"] = "Nível de som fora do intervalo permitido";
+    anomalyObj["expected_range"] = String(soundMinDB) + " - " + String(soundMaxDB) + " dB";
+    anomalyObj["current_value"] = soundDB;
     anomalyObj["timestamp_ms"] = millis();
   } else {
-    JsonObject anomalyObj = doc.createNestedObject("anomaly");
     anomalyObj["detected"] = false;
-    anomalyObj["message"] = "Nenhuma anomalia detectada";
+    anomalyObj["message"] = "Som dentro do intervalo normal";
   }
 
   String json;
@@ -113,9 +122,6 @@ void handleStatus() {
   server.send(200, "application/json", json);
 }
 
-// -------------------------
-// 📡 Rota: Receber comando JSON
-// -------------------------
 void handleCommand() {
   if (!server.hasArg("plain")) {
     server.send(400, "application/json", "{\"error\":\"No body received\"}");
@@ -131,54 +137,42 @@ void handleCommand() {
 
   String action = doc["action"];
 
+  StaticJsonDocument<200> res;
   if (action == "on") {
     activated = true;
-    digitalWrite(LED_BUILTIN, LOW);  // LED aceso
-    StaticJsonDocument<200> res;
+    digitalWrite(LED_BUILTIN, LOW);
     res["status"] = "Ligado";
-    String resp;
-    serializeJson(res, resp);
-    server.send(200, "application/json", resp);
-
   } else if (action == "off") {
     activated = false;
-    digitalWrite(LED_BUILTIN, HIGH); // LED apagado
-    StaticJsonDocument<200> res;
+    digitalWrite(LED_BUILTIN, HIGH);
     res["status"] = "Desligado";
-    String resp;
-    serializeJson(res, resp);
-    server.send(200, "application/json", resp);
-
   } else if (action == "ping") {
-    StaticJsonDocument<200> res;
     res["response"] = "pong";
     res["timestamp"] = millis();
-    String resp;
-    serializeJson(res, resp);
-    server.send(200, "application/json", resp);
-
   } else {
     server.send(400, "application/json", "{\"error\":\"Comando desconhecido\"}");
+    return;
   }
+
+  String resp;
+  serializeJson(res, resp);
+  server.send(200, "application/json", resp);
 }
 
 // -------------------------
-// ⚙️ Setup inicial
+// ⚙️ Setup
 // -------------------------
 void setup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH); // LED apagado
+  digitalWrite(LED_BUILTIN, HIGH);
 
-  // Modo AP + STA
   WiFi.mode(WIFI_AP_STA);
-
-  // Inicia AP
   WiFi.softAP(ap_ssid, ap_password);
+
   Serial.print("📡 SoftAP iniciado! IP: ");
   Serial.println(WiFi.softAPIP());
 
-  // Conecta na rede com internet
   WiFi.begin(sta_ssid, sta_password);
   Serial.print("Conectando à internet");
   while (WiFi.status() != WL_CONNECTED) {
@@ -189,15 +183,13 @@ void setup() {
   Serial.print("IP STA: ");
   Serial.println(WiFi.localIP());
 
-  // Inicia DNS para Captive Portal
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
 
-  // Configura rotas
   server.on("/", HTTP_GET, handleRoot);
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
-
   server.begin();
+
   Serial.println("Servidor HTTP iniciado");
 }
 
@@ -208,9 +200,13 @@ void loop() {
   dnsServer.processNextRequest();
   server.handleClient();
 
-  sensorValue = analogRead(A0);
-  anomalyDetected = (sensorValue < sensorMinThreshold || sensorValue > sensorMaxThreshold);
+  // 🔊 Leitura do sensor em decibéis
+  rawSoundValue = analogRead(pinMicrophone);
+  if (rawSoundValue <= 0) rawSoundValue = 1; // evita log(0)
+  soundDB = 20.0 * log10((float)rawSoundValue / 1023.0 * 1000.0); // escala aproximada
+
+  soundAnomaly = (soundDB < soundMinDB || soundDB > soundMaxDB);
   meshConnected = WiFi.softAPgetStationNum() > 0;
 
-  delay(10);
+  delay(50);
 }
