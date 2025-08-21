@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Button, Image, StyleSheet, Text, View } from "react-native";
 
-const ESP32_IP = "192.168.4.1"; // IP padrão do Soft-AP
+const ESP32_IP = "192.168.4.1"; // IP padrão do Soft-AP do ESP32
 
 export default function CameraScreen() {
   const [frameUrl, setFrameUrl] = useState<string>("");
 
-  // Atualiza frame a cada 1 segundo (pulling simples)
+  // Atualiza frame a cada 1s (pulling simples)
   useEffect(() => {
     const interval = setInterval(() => {
       setFrameUrl(`http://${ESP32_IP}/capture?_=${Date.now()}`);
@@ -59,14 +59,19 @@ export default function CameraScreen() {
           source={{ uri: frameUrl }}
           style={styles.preview}
           resizeMode="contain"
+          onError={() => setFrameUrl("")} // Reseta caso não consiga carregar
         />
       ) : (
         <Text style={styles.info}>Conectando à câmera...</Text>
       )}
 
       <View style={styles.buttons}>
-        <Button title="▶️ Iniciar Gravação" onPress={iniciarGravacao} />
-        <Button title="⏹ Parar Gravação" onPress={pararGravacao} />
+        <View style={styles.button}>
+          <Button title="▶️ Iniciar Gravação" onPress={iniciarGravacao} />
+        </View>
+        <View style={styles.button}>
+          <Button title="⏹ Parar Gravação" onPress={pararGravacao} />
+        </View>
       </View>
     </View>
   );
@@ -80,8 +85,30 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
     padding: 20
   },
-  title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 20 },
-  preview: { width: "90%", height: 300, borderRadius: 10, backgroundColor: "#000" },
-  info: { color: "#aaa", marginBottom: 20 },
-  buttons: { marginTop: 20, width: "90%", gap: 10, alignItems: "center" }
+  title: { 
+    fontSize: 22, 
+    fontWeight: "bold", 
+    color: "#fff", 
+    marginBottom: 20 
+  },
+  preview: { 
+    width: "90%", 
+    height: 300, 
+    borderRadius: 10, 
+    backgroundColor: "#000" 
+  },
+  info: { 
+    color: "#aaa", 
+    marginBottom: 20 
+  },
+  buttons: { 
+    marginTop: 20, 
+    width: "90%", 
+    flexDirection: "row", 
+    justifyContent: "space-evenly" 
+  },
+  button: { 
+    flex: 1, 
+    marginHorizontal: 5 
+  }
 });
