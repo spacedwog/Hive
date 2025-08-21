@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Button, Image, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 const ESP32_IP = "192.168.4.1"; // IP do Soft-AP
 
@@ -7,7 +7,7 @@ export default function CameraScreen() {
   const [streaming, setStreaming] = useState(false);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [savedImageUrl, setSavedImageUrl] = useState<string | null>(null);
-  const [loadingStream, setLoadingStream] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const parseResponse = async (res: Response) => {
     const text = await res.text();
@@ -35,7 +35,7 @@ export default function CameraScreen() {
       if (res.ok) {
         setStreaming(false);
         setStreamUrl(null);
-        carregarImagemSD(); // atualiza a última foto salva
+        carregarImagemSD();
       }
       Alert.alert(res.ok ? "🛑 Streaming parado" : "❌ Erro", typeof data === "string" ? data : JSON.stringify(data));
     } catch (err) {
@@ -61,12 +61,23 @@ export default function CameraScreen() {
     setSavedImageUrl(`http://${ESP32_IP}/saved.jpg?_=${Date.now()}`);
   };
 
+  // Atualiza imagem SD ao abrir a tela
   useEffect(() => {
     carregarImagemSD();
   }, []);
 
+  // Função para pull-to-refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    carregarImagemSD();
+    setRefreshing(false);
+  };
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <Text style={styles.title}>📷 HIVE STREAM - ESP32-CAM</Text>
 
       {/* Streaming MJPEG */}
@@ -75,11 +86,9 @@ export default function CameraScreen() {
           source={{ uri: streamUrl }}
           style={styles.preview}
           resizeMode="contain"
-          onLoadStart={() => setLoadingStream(true)}
-          onLoadEnd={() => setLoadingStream(false)}
         />
       ) : (
-        <Text style={styles.info}>{loadingStream ? "Carregando streaming..." : "Streaming parado"}</Text>
+        <Text style={styles.info}>{streaming ? "Carregando streaming..." : "Streaming parado"}</Text>
       )}
 
       <View style={styles.buttons}>
@@ -89,7 +98,6 @@ export default function CameraScreen() {
 
       <View style={styles.separator} />
 
-      {/* Captura e SD */}
       <Button title="📸 Capturar Foto" onPress={capturarFoto} />
 
       <Text style={[styles.subtitle, { marginTop: 20 }]}>Última foto salva no SD:</Text>
@@ -110,7 +118,9 @@ export default function CameraScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
     backgroundColor: "#111"
   },
@@ -127,7 +137,7 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   preview: {
-    width: "100%",
+    width: "90%",
     height: 300,
     borderRadius: 10,
     backgroundColor: "#000",
@@ -141,11 +151,13 @@ const styles = StyleSheet.create({
   buttons: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginVertical: 10
+    marginVertical: 10,
+    width: "100%"
   },
   separator: {
     height: 1,
     backgroundColor: "#555",
-    marginVertical: 15
+    marginVertical: 15,
+    width: "100%"
   }
 });
