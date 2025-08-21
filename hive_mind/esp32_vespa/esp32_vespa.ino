@@ -16,7 +16,7 @@ long medirDistancia() {
 
   long duracao = pulseIn(ECHO, HIGH, 30000); // timeout 30ms (~5m)
   long distancia = duracao * 0.034 / 2;      // cm
-  return distancia > 0 ? distancia : -1;     // -1 = sem leitura
+  return distancia > 0 ? distancia : -1;
 }
 
 // ==== Potenciômetro ====
@@ -37,13 +37,12 @@ bool activated = false;
 const char* authUsername = "spacedwog";
 const char* authPassword = "Kimera12@";
 
-// ==== Comunicação UART com ESP32-CAM ====
-HardwareSerial SerialVESPA(1); // UART1
+// ==== UART para ESP32-CAM ====
+HardwareSerial SerialVESPA(1); 
 #define TX_VESPA 16
 #define RX_VESPA 17
 #define BAUD_UART 9600
 
-// ==== Buffer UART ====
 String uartBuffer = "";
 
 // ==== Funções internas ====
@@ -84,7 +83,7 @@ bool checkAuth() {
   return true;
 }
 
-// ==== Endpoints HTTP ====
+// ==== HTTP Handlers ====
 void handleStatus() {
   if (!checkAuth()) return;
 
@@ -99,7 +98,7 @@ void handleStatus() {
   serializeJson(doc, response);
   server.send(200, "application/json", response);
 
-  // Envia status via UART para ESP32-CAM
+  // Envia status via UART
   SerialVESPA.print("STATUS:");
   serializeJson(doc, SerialVESPA);
   SerialVESPA.println();
@@ -107,7 +106,6 @@ void handleStatus() {
 
 void handleCommand() {
   if (!checkAuth()) return;
-
   if (!server.hasArg("plain")) {
     server.send(400, "application/json", "{\"error\":\"Bad Request\"}");
     return;
@@ -124,12 +122,12 @@ void handleCommand() {
   DynamicJsonDocument res(128);
 
   if (command == "activate") {
-    if (!activated) digitalWrite(32, HIGH);
+    digitalWrite(32, HIGH);
     activated = true;
     res["result"] = "success";
     res["status"] = "ativo";
   } else if (command == "deactivate") {
-    if (activated) digitalWrite(32, LOW);
+    digitalWrite(32, LOW);
     activated = false;
     res["result"] = "success";
     res["status"] = "parado";
@@ -145,7 +143,7 @@ void handleCommand() {
   serializeJson(res, jsonResponse);
   server.send(200, "application/json", jsonResponse);
 
-  // Envia comando recebido para ESP32-CAM
+  // Envia comando via UART
   SerialVESPA.print("CMD:");
   SerialVESPA.println(command);
 }
@@ -153,7 +151,6 @@ void handleCommand() {
 // ==== Setup ====
 void setup() {
   Serial.begin(115200);
-
   pinMode(32, OUTPUT);
   digitalWrite(32, LOW);
 
@@ -161,28 +158,22 @@ void setup() {
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
 
-  // Inicia UART com ESP32-CAM
   SerialVESPA.begin(BAUD_UART, SERIAL_8N1, RX_VESPA, TX_VESPA);
   Serial.println("UART para ESP32-CAM iniciada");
 
-  // Inicia Access Point
-  Serial.println("Inicializando Access Point...");
   WiFi.softAP(ap_ssid, ap_password);
   Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
 
-  // Configura endpoints HTTP
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
-
   server.begin();
-  Serial.println("Servidor HTTP iniciado em modo AP");
+  Serial.println("Servidor HTTP iniciado");
 }
 
 // ==== Loop ====
 void loop() {
   server.handleClient();
 
-  // Recebe mensagens da ESP32-CAM sem bloquear
   while (SerialVESPA.available()) {
     char c = SerialVESPA.read();
     if (c == '\n') {
