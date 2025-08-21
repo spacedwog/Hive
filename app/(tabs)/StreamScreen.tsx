@@ -9,11 +9,12 @@ import {
   Text,
   View,
 } from "react-native";
+import EventSource from "react-native-event-source"; // SSE para React Native
 
 const ESP32_IP = "192.168.4.1"; // IP do SoftAP do ESP32-CAM
 const STREAM_URL = `http://${ESP32_IP}/stream`; // MJPEG stream
-const STREAM_DATA_URL = `http://${ESP32_IP}/stream/data`; // Dados JSON do streaming
-const WS_URL = `ws://${ESP32_IP}:81`; // WebSocket do ESP32-CAM
+const WS_URL = `ws://${ESP32_IP}:81`; // WebSocket da Vespa
+const SSE_URL = `http://${ESP32_IP}/vespa/stream`; // SSE do ESP32
 
 export default function CameraScreen() {
   const [lastImage, setLastImage] = useState<string>("");
@@ -23,37 +24,31 @@ export default function CameraScreen() {
   const [streamData, setStreamData] = useState<any>({});
 
   const wsRef = useRef<WebSocket | null>(null);
+  const sseRef = useRef<EventSource | null>(null);
 
   // Buscar última imagem do SD
   const fetchLastImage = async () => {
     try {
       const url = `http://${ESP32_IP}/saved.jpg?_=${Date.now()}`;
       const res = await fetch(url, { method: "HEAD" });
-      if (res.ok) setLastImage(url);
-      else setLastImage("");
+      if (res.ok) {
+        setLastImage(url);
+      } else {
+        setLastImage("");
+      }
     } catch {
       setLastImage("");
     }
   };
 
-  // Buscar dados do streaming
-  const fetchStreamData = async () => {
-    try {
-      const res = await fetch(STREAM_DATA_URL);
-      const data = await res.json();
-      setStreamData(data);
-    } catch (err) {
-      console.warn("Erro ao buscar dados do streaming:", err);
-    }
-  };
-
+  // Pull-to-refresh
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchLastImage();
-    await fetchStreamData();
     setRefreshing(false);
   };
 
+  // Iniciar gravação
   const iniciarGravacao = async () => {
     try {
       const res = await fetch(`http://${ESP32_IP}/start`);
@@ -65,6 +60,7 @@ export default function CameraScreen() {
     }
   };
 
+  // Parar gravação
   const pararGravacao = async () => {
     try {
       const res = await fetch(`http://${ESP32_IP}/stop`);
@@ -77,6 +73,7 @@ export default function CameraScreen() {
     }
   };
 
+  // Captura manual de foto
   const capturarFoto = async () => {
     try {
       const res = await fetch(`http://${ESP32_IP}/capture`);
@@ -88,25 +85,65 @@ export default function CameraScreen() {
     }
   };
 
-  // WebSocket Vespa
+  // Inicializa WebSocket para dados da Vespa
   useEffect(() => {
     wsRef.current = new WebSocket(WS_URL);
-    wsRef.current.onopen = () => console.log("WebSocket conectado ao ESP32-CAM");
+
+    wsRef.current.onopen = () => {
+      console.log("WebSocket conectado ao ESP32-CAM");
+    };
+
     wsRef.current.onmessage = (event: { data: string }) => {
       try {
-        setVespaData(JSON.parse(event.data));
+        const data = JSON.parse(event.data);
+        setVespaData(data);
       } catch (err: any) {
         console.warn("Erro ao parsear dados WS:", err);
       }
     };
-    wsRef.current.onerror = (err: any) => console.warn("WebSocket erro:", err);
-    wsRef.current.onclose = () => {
-      console.log("WebSocket desconectado, reconectando em 5s...");
-      setTimeout(() => { wsRef.current = new WebSocket(WS_URL); }, 5000);
+
+    wsRef.current.onerror = (err: any) => {
+      console.warn("WebSocket erro:", err);
     };
+
+    wsRef.current.onclose = () => {
+      console.log("WebSocket desconectado");
+      // Tenta reconectar em 5s
+      setTimeout(() => {
+        wsRef.current = new WebSocket(WS_URL);
+      }, 5000);
+    };
+
     fetchLastImage();
-    fetchStreamData();
-    return () => wsRef.current?.close();
+
+    return () => {
+      wsRef.current?.close();
+    };
+  }, []);
+
+  // Inicializa SSE para dados do streaming
+  useEffect(() => {
+    sseRef.current = new EventSource(SSE_URL);
+
+    sseRef.current.addEventListener("message", (event: any) => {
+      try {
+        setStreamData(JSON.parse(event.data));
+      } catch (err: any) {
+        console.warn("Erro ao parsear SSE:", err);
+      }
+    });
+
+    sseRef.current.addEventListener("error", (err: any) => {
+      console.warn("SSE erro:", err);
+      sseRef.current?.close();
+      setTimeout(() => {
+        sseRef.current = new EventSource(SSE_URL);
+      }, 5000);
+    });
+
+    return () => {
+      sseRef.current?.close();
+    };
   }, []);
 
   return (
@@ -118,9 +155,19 @@ export default function CameraScreen() {
 
       {/* Streaming ou última imagem */}
       {streaming ? (
-        <Image source={{ uri: STREAM_URL }} style={styles.preview} resizeMode="contain" onError={() => setStreaming(false)} />
+        <Image
+          source={{ uri: STREAM_URL }}
+          style={styles.preview}
+          resizeMode="contain"
+          onError={() => setStreaming(false)}
+        />
       ) : lastImage ? (
-        <Image source={{ uri: lastImage }} style={styles.preview} resizeMode="contain" onError={() => setLastImage("")} />
+        <Image
+          source={{ uri: lastImage }}
+          style={styles.preview}
+          resizeMode="contain"
+          onError={() => setLastImage("")}
+        />
       ) : (
         <Text style={styles.info}>Carregando última imagem do SD...</Text>
       )}
@@ -140,14 +187,14 @@ export default function CameraScreen() {
         )}
       </View>
 
-      {/* Card de dados do Streaming */}
+      {/* Card de dados do streaming */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>🎥 Dados do Streaming</Text>
-        {streamData.width ? (
+        <Text style={styles.cardTitle}>📡 Dados do Streaming</Text>
+        {streamData.frame ? (
           <>
-            <Text style={styles.cardText}>Streaming: {streamData.streaming ? "✅ Ativo" : "❌ Inativo"}</Text>
-            <Text style={styles.cardText}>Resolução: {streamData.width}x{streamData.height}</Text>
-            <Text style={styles.cardText}>Tamanho do frame: {streamData.len} bytes</Text>
+            <Text style={styles.cardText}>Frame: {streamData.frame}</Text>
+            <Text style={styles.cardText}>FPS: {streamData.fps}</Text>
+            <Text style={styles.cardText}>Timestamp: {streamData.timestamp}</Text>
           </>
         ) : (
           <Text style={styles.cardText}>Carregando dados do streaming...</Text>
@@ -156,28 +203,77 @@ export default function CameraScreen() {
 
       {/* Controles de gravação */}
       <View style={styles.buttons}>
-        <View style={styles.button}><Button title="▶️ Iniciar Gravação" onPress={iniciarGravacao} /></View>
-        <View style={styles.button}><Button title="⏹ Parar Gravação" onPress={pararGravacao} /></View>
+        <View style={styles.button}>
+          <Button title="▶️ Iniciar Gravação" onPress={iniciarGravacao} />
+        </View>
+        <View style={styles.button}>
+          <Button title="⏹ Parar Gravação" onPress={pararGravacao} />
+        </View>
       </View>
 
       {/* Controles de foto e atualização */}
       <View style={[styles.buttons, { marginTop: 10 }]}>
-        <View style={styles.button}><Button title="📸 Capturar Foto" onPress={capturarFoto} /></View>
-        <View style={styles.button}><Button title="🔄 Atualizar" onPress={onRefresh} /></View>
+        <View style={styles.button}>
+          <Button title="📸 Capturar Foto" onPress={capturarFoto} />
+        </View>
+        <View style={styles.button}>
+          <Button title="🔄 Atualizar" onPress={fetchLastImage} />
+        </View>
       </View>
     </ScrollView>
   );
 }
 
-// --- Styles mantidos ---
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#111", padding: 20 },
-  title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 20 },
-  preview: { width: "90%", height: 300, borderRadius: 10, backgroundColor: "#000", marginBottom: 20 },
-  info: { color: "#aaa", marginBottom: 20 },
-  card: { width: "90%", backgroundColor: "#222", borderRadius: 10, padding: 15, marginBottom: 20 },
-  cardTitle: { fontSize: 18, fontWeight: "bold", color: "#fff", marginBottom: 10 },
-  cardText: { fontSize: 16, color: "#ccc", marginBottom: 5 },
-  buttons: { width: "100%", flexDirection: "row", justifyContent: "space-evenly" },
-  button: { flex: 1, marginHorizontal: 5 },
+  container: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#111",
+    padding: 20,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 20,
+  },
+  preview: {
+    width: "90%",
+    height: 300,
+    borderRadius: 10,
+    backgroundColor: "#000",
+    marginBottom: 20,
+  },
+  info: {
+    color: "#aaa",
+    marginBottom: 20,
+  },
+  card: {
+    width: "90%",
+    backgroundColor: "#222",
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 20,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 10,
+  },
+  cardText: {
+    fontSize: 16,
+    color: "#ccc",
+    marginBottom: 5,
+  },
+  buttons: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-evenly",
+  },
+  button: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
 });
