@@ -4,12 +4,17 @@ import { Alert, Button, Image, StyleSheet, Text, View } from "react-native";
 const ESP32_IP = "192.168.4.1"; // IP padrão do Soft-AP do ESP32
 
 export default function CameraScreen() {
-  const [savedImageUrl, setSavedImageUrl] = useState<string>("");
+  const [savedImageUrl, setSavedImageUrl] = useState<string | null>(null);
 
-  // Ao abrir a tela, tenta carregar a última imagem salva
+  // Carrega imagem inicial do SD apenas uma vez
   useEffect(() => {
-    setSavedImageUrl(`http://${ESP32_IP}/saved.jpg?_=${Date.now()}`);
+    carregarImagem();
   }, []);
+
+  // Função para carregar imagem do ESP32
+  const carregarImagem = () => {
+    setSavedImageUrl(`http://${ESP32_IP}/saved.jpg?_=${Date.now()}`);
+  };
 
   // Função auxiliar para interpretar resposta
   const parseResponse = async (res: Response) => {
@@ -42,8 +47,8 @@ export default function CameraScreen() {
         res.ok ? "🛑 Gravação parada" : "❌ Erro ao parar gravação",
         typeof data === "string" ? data : JSON.stringify(data)
       );
-      // Após parar, tenta recarregar a última imagem salva no SD
-      setSavedImageUrl(`http://${ESP32_IP}/saved.jpg?_=${Date.now()}`);
+      // Só recarrega quando realmente parar a gravação
+      carregarImagem();
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }
@@ -58,7 +63,7 @@ export default function CameraScreen() {
           source={{ uri: savedImageUrl }}
           style={styles.preview}
           resizeMode="contain"
-          onError={() => setSavedImageUrl("")} // Reseta caso não consiga carregar
+          onError={() => setSavedImageUrl(null)} // Reseta caso não consiga carregar
         />
       ) : (
         <Text style={styles.info}>Carregando imagem do SD...</Text>

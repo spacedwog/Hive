@@ -4,8 +4,7 @@
 #include "FS.h"
 #include "SD_MMC.h"
 
-// ==== Configuração da câmera ====
-// Pinos do modelo AI-Thinker ESP32-CAM
+// ==== Configuração da câmera (AI Thinker) ====
 #define PWDN_GPIO_NUM    -1
 #define RESET_GPIO_NUM   -1
 #define XCLK_GPIO_NUM     0
@@ -30,6 +29,7 @@ const char* password = "hvstream";
 
 WebServer server(80);
 bool streaming = false;
+String lastSavedPath = "";   // <- último arquivo salvo no SD
 
 // ==== Inicializa a câmera ====
 void startCamera() {
@@ -91,37 +91,43 @@ String capturePhoto() {
   if (file) {
     file.write(fb->buf, fb->len);
     file.close();
+    lastSavedPath = path;   // <- guarda última imagem
     Serial.println("Foto salva em: " + path);
   }
   esp_camera_fb_return(fb);
   return path;
 }
 
-// ==== Handler web para captura manual ====
+// ==== Handler para capturar manualmente ====
 void handleCapture() {
   if (!streaming) {
     server.send(200, "text/plain", "Streaming parado. Use /start para ativar.");
     return;
   }
 
-  camera_fb_t *fb = esp_camera_fb_get();
-  if (!fb) {
-    server.send(500, "text/plain", "Erro ao capturar frame.");
+  String path = capturePhoto();
+  if (path != "") {
+    server.send(200, "text/plain", "Foto capturada: " + path);
+  } else {
+    server.send(500, "text/plain", "Erro ao capturar foto.");
+  }
+}
+
+// ==== Rota para exibir última imagem salva ====
+void handleSavedImage() {
+  if (lastSavedPath == "") {
+    server.send(404, "text/plain", "Nenhuma imagem salva ainda.");
     return;
   }
 
-  // Salva no SD
-  String path = "/foto_" + String(millis()) + ".jpg";
-  File file = SD_MMC.open(path, FILE_WRITE);
-  if (file) {
-    file.write(fb->buf, fb->len);
-    file.close();
-    Serial.println("Foto salva em: " + path);
+  File file = SD_MMC.open(lastSavedPath);
+  if (!file) {
+    server.send(500, "text/plain", "Erro ao abrir a imagem.");
+    return;
   }
 
-  server.sendHeader("Content-Type", "image/jpeg");
-  server.send_P(200, "image/jpeg", (const char *)fb->buf, fb->len);
-  esp_camera_fb_return(fb);
+  server.streamFile(file, "image/jpeg");
+  file.close();
 }
 
 // ==== Handlers start/stop ====
@@ -135,7 +141,7 @@ void handleStop() {
   server.send(200, "text/plain", "Streaming parado.");
 }
 
-// ==== Handler para streaming MJPEG ====
+// ==== Streaming MJPEG ====
 void handleStream() {
   WiFiClient client = server.client();
 
@@ -151,12 +157,13 @@ void handleStream() {
     client.write(fb->buf, fb->len);
     client.println();
 
-    // Salva automaticamente no SD
+    // Salva no SD
     String path = "/stream_" + String(millis()) + ".jpg";
     File file = SD_MMC.open(path, FILE_WRITE);
     if (file) {
       file.write(fb->buf, fb->len);
       file.close();
+      lastSavedPath = path;   // <- atualiza última imagem
     }
 
     esp_camera_fb_return(fb);
@@ -167,13 +174,11 @@ void handleStream() {
 void setup() {
   Serial.begin(115200);
 
-  // Inicia SoftAP
   WiFi.softAP(ssid, password);
   IPAddress IP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(IP);
 
-  // Inicializa câmera e SD
   startCamera();
   startSD();
 
@@ -184,12 +189,14 @@ void setup() {
       "<p><a href=\"/start\">Iniciar streaming</a></p>"
       "<p><a href=\"/stop\">Parar streaming</a></p>"
       "<p><a href=\"/capture\">Capturar imagem</a></p>"
-      "<p><a href=\"/stream\">Visualizar streaming</a></p>");
+      "<p><a href=\"/stream\">Visualizar streaming</a></p>"
+      "<p><a href=\"/saved.jpg\">Última imagem salva</a></p>");
   });
   server.on("/start", handleStart);
   server.on("/stop", handleStop);
   server.on("/capture", handleCapture);
   server.on("/stream", handleStream);
+  server.on("/saved.jpg", handleSavedImage);
 
   server.begin();
   Serial.println("Servidor HTTP iniciado");
