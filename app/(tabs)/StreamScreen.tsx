@@ -1,117 +1,130 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Button, Image, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Button,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-const ESP32_IP = "192.168.4.1"; // IP do Soft-AP
+const ESP32_IP = "192.168.4.1"; // IP do SoftAP do ESP32
 
 export default function CameraScreen() {
-  const [streaming, setStreaming] = useState(false);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [savedImageUrl, setSavedImageUrl] = useState<string | null>(null);
+  const [lastImage, setLastImage] = useState<string>(""); // Última imagem do SD
   const [refreshing, setRefreshing] = useState(false);
 
-  const parseResponse = async (res: Response) => {
-    const text = await res.text();
-    try { return JSON.parse(text); } catch { return text; }
+  // Função para atualizar a última imagem salva
+  const fetchLastImage = () => {
+    const url = `http://${ESP32_IP}/saved.jpg?_=${Date.now()}`;
+    setLastImage(url);
   };
 
-  const iniciarStreaming = async () => {
+  // Atualiza ao abrir a tela
+  useEffect(() => {
+    fetchLastImage();
+  }, []);
+
+  // Pull-to-refresh
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchLastImage();
+    setRefreshing(false);
+  };
+
+  // Função auxiliar para interpretar resposta
+  const parseResponse = async (res: Response) => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  };
+
+  // Iniciar gravação
+  const iniciarGravacao = async () => {
     try {
       const res = await fetch(`http://${ESP32_IP}/start`);
       const data = await parseResponse(res);
-      if (res.ok) {
-        setStreaming(true);
-        setStreamUrl(`http://${ESP32_IP}/stream`);
-      }
-      Alert.alert(res.ok ? "✅ Streaming iniciado" : "❌ Erro", typeof data === "string" ? data : JSON.stringify(data));
+      Alert.alert(
+        res.ok ? "✅ Gravação iniciada" : "❌ Erro ao iniciar gravação",
+        typeof data === "string" ? data : JSON.stringify(data)
+      );
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }
   };
 
-  const pararStreaming = async () => {
+  // Parar gravação
+  const pararGravacao = async () => {
     try {
       const res = await fetch(`http://${ESP32_IP}/stop`);
       const data = await parseResponse(res);
-      if (res.ok) {
-        setStreaming(false);
-        setStreamUrl(null);
-        carregarImagemSD();
-      }
-      Alert.alert(res.ok ? "🛑 Streaming parado" : "❌ Erro", typeof data === "string" ? data : JSON.stringify(data));
+      Alert.alert(
+        res.ok ? "🛑 Gravação parada" : "❌ Erro ao parar gravação",
+        typeof data === "string" ? data : JSON.stringify(data)
+      );
+      fetchLastImage(); // Atualiza a última imagem ao parar
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }
   };
 
+  // Captura manual
   const capturarFoto = async () => {
     try {
       const res = await fetch(`http://${ESP32_IP}/capture`);
-      if (res.ok) {
-        Alert.alert("📸 Foto capturada com sucesso!");
-        carregarImagemSD();
-      } else {
-        Alert.alert("❌ Erro ao capturar foto");
-      }
+      const data = await parseResponse(res);
+      Alert.alert(
+        res.ok ? "📸 Foto capturada" : "❌ Erro ao capturar foto",
+        typeof data === "string" ? data : JSON.stringify(data)
+      );
+      fetchLastImage(); // Atualiza última imagem
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }
-  };
-
-  const carregarImagemSD = () => {
-    setSavedImageUrl(`http://${ESP32_IP}/saved.jpg?_=${Date.now()}`);
-  };
-
-  // Atualiza imagem SD ao abrir a tela
-  useEffect(() => {
-    carregarImagemSD();
-  }, []);
-
-  // Função para pull-to-refresh
-  const onRefresh = async () => {
-    setRefreshing(true);
-    carregarImagemSD();
-    setRefreshing(false);
   };
 
   return (
     <ScrollView
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
     >
-      <Text style={styles.title}>📷 HIVE STREAM - ESP32-CAM</Text>
+      <Text style={styles.title}>📷 HIVE STREAM</Text>
 
-      {/* Streaming MJPEG */}
-      {streamUrl && streaming ? (
+      {lastImage ? (
         <Image
-          source={{ uri: streamUrl }}
+          source={{ uri: lastImage }}
           style={styles.preview}
           resizeMode="contain"
+          onError={() => setLastImage("")}
         />
       ) : (
-        <Text style={styles.info}>{streaming ? "Carregando streaming..." : "Streaming parado"}</Text>
+        <Text style={styles.info}>Carregando última imagem do SD...</Text>
       )}
 
       <View style={styles.buttons}>
-        <Button title="▶️ Iniciar Streaming" onPress={iniciarStreaming} disabled={streaming} />
-        <Button title="⏹ Parar Streaming" onPress={pararStreaming} disabled={!streaming} />
+        <View style={styles.button}>
+          <Button title="▶️ Iniciar Gravação" onPress={iniciarGravacao} />
+        </View>
+        <View style={styles.button}>
+          <Button title="⏹ Parar Gravação" onPress={pararGravacao} />
+        </View>
       </View>
 
-      <View style={styles.separator} />
-
-      <Button title="📸 Capturar Foto" onPress={capturarFoto} />
-
-      <Text style={[styles.subtitle, { marginTop: 20 }]}>Última foto salva no SD:</Text>
-      {savedImageUrl ? (
-        <Image
-          source={{ uri: savedImageUrl }}
-          style={styles.preview}
-          resizeMode="contain"
-          onError={() => setSavedImageUrl(null)}
-        />
-      ) : (
-        <Text style={styles.info}>Nenhuma imagem carregada</Text>
-      )}
-      <Button title="🔄 Atualizar Imagem SD" onPress={carregarImagemSD} />
+      <View style={[styles.buttons, { marginTop: 10 }]}>
+        <View style={styles.button}>
+          <Button title="📸 Capturar Foto" onPress={capturarFoto} />
+        </View>
+        <View style={styles.button}>
+          <Button title="🔄 Atualizar" onPress={fetchLastImage} />
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -121,43 +134,33 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#111",
     padding: 20,
-    backgroundColor: "#111"
   },
   title: {
     fontSize: 22,
     fontWeight: "bold",
     color: "#fff",
     marginBottom: 20,
-    textAlign: "center"
-  },
-  subtitle: {
-    fontSize: 18,
-    color: "#fff",
-    fontWeight: "600"
   },
   preview: {
     width: "90%",
     height: 300,
     borderRadius: 10,
     backgroundColor: "#000",
-    marginVertical: 10
+    marginBottom: 20,
   },
   info: {
     color: "#aaa",
-    marginVertical: 10,
-    textAlign: "center"
+    marginBottom: 20,
   },
   buttons: {
+    width: "100%",
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: 10,
-    width: "100%"
+    justifyContent: "space-evenly",
   },
-  separator: {
-    height: 1,
-    backgroundColor: "#555",
-    marginVertical: 15,
-    width: "100%"
-  }
+  button: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
 });
