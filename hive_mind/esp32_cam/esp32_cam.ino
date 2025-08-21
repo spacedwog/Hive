@@ -10,7 +10,6 @@
 #define XCLK_GPIO_NUM     0
 #define SIOD_GPIO_NUM    26
 #define SIOC_GPIO_NUM    27
-
 #define Y9_GPIO_NUM      35
 #define Y8_GPIO_NUM      34
 #define Y7_GPIO_NUM      39
@@ -84,7 +83,10 @@ void startSD() {
 // ==== Captura uma foto e salva no SD ====
 String capturePhoto() {
   camera_fb_t *fb = esp_camera_fb_get();
-  if (!fb) return "";
+  if (!fb) {
+    Serial.println("Erro: fb=nullptr");
+    return "";
+  }
 
   String path = "/foto_" + String(millis()) + ".jpg";
   File file = SD_MMC.open(path, FILE_WRITE);
@@ -93,18 +95,16 @@ String capturePhoto() {
     file.close();
     lastSavedPath = path;   // <- guarda última imagem
     Serial.println("Foto salva em: " + path);
+  } else {
+    Serial.println("Erro ao abrir arquivo no SD");
   }
+
   esp_camera_fb_return(fb);
   return path;
 }
 
 // ==== Handler para capturar manualmente ====
 void handleCapture() {
-  if (!streaming) {
-    server.send(200, "text/plain", "Streaming parado. Use /start para ativar.");
-    return;
-  }
-
   String path = capturePhoto();
   if (path != "") {
     server.send(200, "text/plain", "Foto capturada: " + path);
@@ -163,7 +163,7 @@ void handleStream() {
     if (file) {
       file.write(fb->buf, fb->len);
       file.close();
-      lastSavedPath = path;   // <- atualiza última imagem
+      lastSavedPath = path;
     }
 
     esp_camera_fb_return(fb);

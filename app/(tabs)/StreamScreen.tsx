@@ -16,7 +16,7 @@ export default function CameraScreen() {
   const [lastImage, setLastImage] = useState<string>(""); // Última imagem do SD
   const [refreshing, setRefreshing] = useState(false);
 
-  // Função para atualizar a última imagem salva
+  // Atualiza a última imagem do SD
   const fetchLastImage = () => {
     const url = `http://${ESP32_IP}/saved.jpg?_=${Date.now()}`;
     setLastImage(url);
@@ -31,16 +31,20 @@ export default function CameraScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchLastImage();
-    setRefreshing(false);
+    setTimeout(() => setRefreshing(false), 500); // evita flicker
   };
 
   // Função auxiliar para interpretar resposta
   const parseResponse = async (res: Response) => {
-    const text = await res.text();
     try {
-      return JSON.parse(text);
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text;
+      }
     } catch {
-      return text;
+      return "Erro ao ler resposta";
     }
   };
 
@@ -78,10 +82,13 @@ export default function CameraScreen() {
     try {
       const res = await fetch(`http://${ESP32_IP}/capture`);
       const data = await parseResponse(res);
-      Alert.alert(
-        res.ok ? "📸 Foto capturada" : "❌ Erro ao capturar foto",
-        typeof data === "string" ? data : JSON.stringify(data)
-      );
+
+      if (!res.ok || (typeof data === "string" && data.toLowerCase().includes("erro"))) {
+        Alert.alert("❌ Erro ao capturar foto", typeof data === "string" ? data : JSON.stringify(data));
+        return;
+      }
+
+      Alert.alert("📸 Foto capturada", typeof data === "string" ? data : JSON.stringify(data));
       fetchLastImage(); // Atualiza última imagem
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
