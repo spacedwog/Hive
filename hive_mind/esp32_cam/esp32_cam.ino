@@ -3,6 +3,7 @@
 #include "esp_camera.h"
 #include "FS.h"
 #include "SD_MMC.h"
+#include "esp_timer.h"
 
 // ==== Configuração da câmera (AI Thinker) ====
 #define PWDN_GPIO_NUM    -1
@@ -28,8 +29,8 @@ const char* password = "hvstream";
 
 WebServer server(80);
 bool streaming = false;
-String lastSavedPath = "";   // último arquivo salvo no SD
-String vespaData = "{}";     // dados recebidos da Vespa via UART
+String lastSavedPath = "";
+String vespaData = "{}";
 
 // ==== UART da Vespa ====
 HardwareSerial SerialVESPA(1);
@@ -111,7 +112,34 @@ String capturePhoto() {
   return path;
 }
 
-// ==== Handler para mostrar última foto e dados da Vespa ====
+// ==== Stream MJPEG ====
+void handleStream() {
+  WiFiClient client = server.client();
+  camera_fb_t *fb;
+  String boundary = "HIVESTREAM";
+
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.sendHeader("Content-Type", "multipart/x-mixed-replace; boundary=" + boundary);
+  server.send(200);
+
+  while (true) {
+    fb = esp_camera_fb_get();
+    if (!fb) break;
+
+    client.printf("--%s\r\n", boundary.c_str());
+    client.printf("Content-Type: image/jpeg\r\n");
+    client.printf("Content-Length: %u\r\n\r\n", fb->len);
+    client.write(fb->buf, fb->len);
+    client.printf("\r\n");
+
+    esp_camera_fb_return(fb);
+
+    if (!client.connected()) break;
+    delay(100);
+  }
+}
+
+// ==== Handler para última foto e dados da Vespa ====
 void handleSavedImage() {
   if (lastSavedPath == "") {
     server.send(404, "text/plain", "Nenhuma imagem salva ainda.");
@@ -124,19 +152,68 @@ void handleSavedImage() {
     return;
   }
 
-  // HTML com imagem + dados Vespa
   String html = "<h1>Última Foto</h1>";
   html += "<p><b>Caminho:</b> " + lastSavedPath + "</p>";
   html += "<p><b>Dados Vespa:</b></p><pre>" + vespaData + "</pre>";
-  html += "<img src='/image.jpg' width='320'/>";
+  html += "<img src='/saved.jpg' width='320'/>";
 
   server.send(200, "text/html", html);
   file.close();
 }
 
-// ==== Endpoint para expor dados da Vespa como JSON ====
+// ==== Endpoint JSON da Vespa ====
 void handleVespaData() {
   server.send(200, "application/json", vespaData);
+}
+
+// ==== SSE para refresh automático ====
+void handleSSE() {
+  server.sendHeader("Cache-Control", "no-cache");
+  server.sendHeader("Connection", "keep-alive");
+  server.sendHeader("Content-Type", "text/event-stream");
+  server.send(200);
+
+  while (true) {
+    server.sendContent("data: " + vespaData + "\n\n");
+    server.client().flush();
+    if (!server.client().connected()) break;
+    delay(500);
+  }
+}
+
+// ==== Endpoint de dados do streaming ====
+void handleStreamData() {
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb) {
+    server.send(500, "application/json", "{\"error\":\"Falha ao capturar frame\"}");
+    return;
+  }
+
+  String json = "{";
+  json += "\"streaming\":" + String(streaming ? "true" : "false") + ",";
+  json += "\"width\":" + String(fb->width) + ",";
+  json += "\"height\":" + String(fb->height) + ",";
+  json += "\"len\":" + String(fb->len);
+  json += "}";
+
+  server.send(200, "application/json", json);
+  esp_camera_fb_return(fb);
+}
+
+// ==== Endpoints captura/gravação ====
+void handleCapture() {
+  String path = capturePhoto();
+  server.send(200, "text/plain", path != "" ? "Foto capturada: " + path : "Erro ao capturar foto");
+}
+
+void handleStart() {
+  streaming = true;
+  server.send(200, "text/plain", "Streaming iniciado");
+}
+
+void handleStop() {
+  streaming = false;
+  server.send(200, "text/plain", "Streaming parado");
 }
 
 // ==== Setup ====
@@ -154,10 +231,19 @@ void setup() {
     server.send(200, "text/html",
       "<h1>ESP32-CAM SoftAP</h1>"
       "<p><a href='/saved.jpg'>Última imagem + Vespa</a></p>"
-      "<p><a href='/vespa.json'>Dados Vespa (JSON)</a></p>");
+      "<p><a href='/vespa.json'>Dados Vespa (JSON)</a></p>"
+      "<p><a href='/vespa/stream'>Refresh SSE</a></p>"
+      "<p><a href='/stream'>Streaming MJPEG</a></p>"
+      "<p><a href='/stream/data'>Dados do Streaming (JSON)</a></p>");
   });
   server.on("/saved.jpg", handleSavedImage);
   server.on("/vespa.json", handleVespaData);
+  server.on("/vespa/stream", handleSSE);
+  server.on("/capture", handleCapture);
+  server.on("/start", handleStart);
+  server.on("/stop", handleStop);
+  server.on("/stream", handleStream);
+  server.on("/stream/data", handleStreamData);
 
   server.begin();
   Serial.println("Servidor HTTP iniciado");
@@ -173,7 +259,8 @@ void loop() {
     if (c == '\n') {
       uartBuffer.trim();
       if (uartBuffer.startsWith("STATUS:")) {
-        vespaData = uartBuffer.substring(7); // JSON da Vespa
+        vespaData = uartBuffer.substring(7);
+        Serial.println("Vespa Data Updated: " + vespaData);
       }
       uartBuffer = "";
     } else {

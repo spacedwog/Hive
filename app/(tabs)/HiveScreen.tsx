@@ -3,13 +3,14 @@ import * as base64 from "base-64";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    Button,
-    FlatList,
-    StyleSheet,
-    Text,
-    Vibration,
-    View,
-    useWindowDimensions
+  Button,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  Vibration,
+  View,
+  useWindowDimensions
 } from "react-native";
 
 type NodeStatus = {
@@ -21,46 +22,34 @@ type NodeStatus = {
   error?: string;
 };
 
-// === Constantes do gráfico ===
 const MAX_ANALOG = 2400;
 const MAX_POINTS = 60; // histórico por servidor (60s)
 
-// ==== Componente de Gráfico Nativo (sem bibliotecas externas) ====
-const SparkBar: React.FC<{
-  data: number[];
-  width: number;
-  height?: number;
-}> = ({ data, width, height = 120 }) => {
-  // largura de cada barra
+// ==== Componente de gráfico nativo ====
+const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
+  data,
+  width,
+  height = 120,
+}) => {
   const n = Math.max(data.length, 1);
   const barGap = 2;
   const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
 
   return (
     <View style={[styles.chartBox, { width, height }]}>
-      {/* eixo base */}
       <View style={styles.chartAxis} />
-      {/* barras */}
-      <View style={[styles.chartBarsRow]}>
+      <View style={styles.chartBarsRow}>
         {data.map((v, i) => {
           const clamped = Math.max(0, Math.min(MAX_ANALOG, v));
-          const h = Math.max(2, Math.round((clamped / MAX_ANALOG) * (height - 16))); // padding top
+          const h = Math.max(2, Math.round((clamped / MAX_ANALOG) * (height - 16)));
           return (
             <View
               key={`${i}-${v}`}
-              style={[
-                styles.chartBar,
-                {
-                  width: barWidth,
-                  height: h,
-                  marginRight: i === n - 1 ? 0 : barGap,
-                },
-              ]}
+              style={[styles.chartBar, { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap }]}
             />
           );
         })}
       </View>
-      {/* labels simples */}
       <View style={styles.chartLabels}>
         <Text style={styles.chartLabelText}>0</Text>
         <Text style={styles.chartLabelText}>{MAX_ANALOG}</Text>
@@ -73,9 +62,9 @@ export default function HiveScreen() {
   const [status, setStatus] = useState<NodeStatus[]>([]);
   const [pingValues, setPingValues] = useState<{ [key: string]: number }>({});
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
+  const [refreshing, setRefreshing] = useState(false);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
-
   const authUsername = "spacedwog";
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
@@ -100,14 +89,13 @@ export default function HiveScreen() {
 
       setStatus(responses);
 
-      // Vibra se estiver muito perto
       responses.forEach((s) => {
         if (s.ultrassonico_cm !== undefined && s.ultrassonico_cm < 10) {
           Vibration.vibrate(500);
         }
       });
 
-      // Atualiza histórico por servidor (somente quando há analog)
+      // Atualiza histórico
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
@@ -117,10 +105,7 @@ export default function HiveScreen() {
             const newArr = [...prevArr, s.analog];
             if (newArr.length > MAX_POINTS) newArr.splice(0, newArr.length - MAX_POINTS);
             next[key] = newArr;
-          } else {
-            // Se não veio analog, mantém histórico como está
-            if (!next[key]) next[key] = [];
-          }
+          } else if (!next[key]) next[key] = [];
         });
         return next;
       });
@@ -129,7 +114,7 @@ export default function HiveScreen() {
     }
   };
 
-  // ==== Enviar comandos ====
+  // ==== Enviar comando para servidor ====
   const sendCommand = async (server: string, command: string) => {
     try {
       const res = await axios.post(
@@ -155,7 +140,13 @@ export default function HiveScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // ==== Cor pelo analog ====
+  // ==== Pull-to-refresh ====
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchStatus();
+    setRefreshing(false);
+  };
+
   const getAnalogColor = (analog?: number) => {
     if (analog === undefined) return "#ffffff";
     const norm = Math.min(Math.max(analog, 0), MAX_ANALOG) / MAX_ANALOG;
@@ -172,19 +163,15 @@ export default function HiveScreen() {
 
   const firstAnalog = status.find((s) => s.analog !== undefined)?.analog;
   const containerColorTuple: [string, string] = [getAnalogColor(firstAnalog), "#000000"];
-
-  // largura útil do gráfico (acompanha o card)
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
   return (
-    <LinearGradient
-      colors={containerColorTuple}
-      style={[styles.container, { minHeight: winHeight }]}
-    >
+    <LinearGradient colors={containerColorTuple} style={[styles.container, { minHeight: winHeight }]}>
       <FlatList
         data={status}
         keyExtractor={(item) => item.server || Math.random().toString()}
         contentContainerStyle={styles.flatListContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item: s }) => {
           const serverKey = s.server ?? "unknown";
           const isOffline = s.status === "offline";
@@ -205,28 +192,15 @@ export default function HiveScreen() {
 
           return (
             <>
-              {/* Card de status do dispositivo */}
               <LinearGradient colors={cardGradient} style={styles.nodeCard}>
                 <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                <Text style={styles.statusText}>
-                  📡 {s.server || "-"} - {s.status || "offline"}
-                </Text>
-                <Text style={styles.statusText}>
-                  📏 Distância: {s.ultrassonico_cm ?? "-"} cm
-                </Text>
+                <Text style={styles.statusText}>📡 {s.server || "-"} - {s.status || "offline"}</Text>
+                <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_cm ?? "-"} cm</Text>
 
-                {isNear && (
-                  <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>
-                )}
-
-                {s.analog !== undefined && (
-                  <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>
-                )}
-
+                {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
+                {s.analog !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>}
                 {pingValues[serverKey] !== undefined && (
-                  <Text style={styles.statusText}>
-                    ⚡ Ping Sensor: {pingValues[serverKey]}
-                  </Text>
+                  <Text style={styles.statusText}>⚡ Ping Sensor: {pingValues[serverKey]}</Text>
                 )}
 
                 <View style={styles.buttonRow}>
@@ -248,18 +222,13 @@ export default function HiveScreen() {
                 </View>
               </LinearGradient>
 
-              {/* Card do Gráfico (nativo) */}
               <LinearGradient colors={["#1f1f1f", "#0f0f0f"]} style={styles.chartCard}>
                 <Text style={styles.chartTitle}>
                   📈 Histórico do Analog ({serverKey}) — últimos {MAX_POINTS}s
                 </Text>
-
                 <SparkBar data={hist} width={graphWidth} />
-
                 <View style={styles.chartFooter}>
-                  <Text style={styles.chartFooterText}>
-                    Pontos: {hist.length}/{MAX_POINTS}
-                  </Text>
+                  <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
                   <Text style={styles.chartFooterText}>
                     Atual: {typeof s.analog === "number" ? s.analog : "-"}
                   </Text>
@@ -274,110 +243,21 @@ export default function HiveScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  flatListContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-  },
-  nodeCard: {
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 3,
-    width: "90%",
-    alignSelf: "center",
-  },
-
-  // === Estilos do gráfico nativo ===
-  chartCard: {
-    width: "90%",
-    alignSelf: "center",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 24,
-    elevation: 3,
-  },
-  chartTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#eaeaea",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  chartBox: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 10,
-    overflow: "hidden",
-    alignSelf: "center",
-    paddingTop: 8,
-    paddingHorizontal: 8,
-  },
-  chartAxis: {
-    position: "absolute",
-    bottom: 8,
-    left: 8,
-    right: 8,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  chartBarsRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    height: "100%",
-    paddingBottom: 8,
-  },
-  chartBar: {
-    backgroundColor: "#50fa7b", // cor da barra (pode trocar p/ dinâmica se quiser)
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
-  },
-  chartLabels: {
-    position: "absolute",
-    top: 4,
-    left: 8,
-    right: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  chartLabelText: {
-    fontSize: 10,
-    color: "rgba(255,255,255,0.6)",
-  },
-  chartFooter: {
-    marginTop: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  chartFooterText: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.8)",
-  },
-
-  nodeText: {
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  statusText: {
-    fontSize: 14,
-    marginTop: 4,
-    textAlign: "center",
-  },
-  warningText: {
-    fontSize: 16,
-    marginTop: 6,
-    fontWeight: "bold",
-    color: "#856404",
-    textAlign: "center",
-  },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 10,
-  },
+  container: { flex: 1, padding: 16, justifyContent: "center", alignItems: "center" },
+  flatListContent: { flexGrow: 1, justifyContent: "center" },
+  nodeCard: { padding: 12, borderRadius: 12, marginBottom: 12, elevation: 3, width: "90%", alignSelf: "center" },
+  chartCard: { width: "90%", alignSelf: "center", borderRadius: 12, padding: 12, marginBottom: 24, elevation: 3 },
+  chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
+  chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
+  chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
+  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
+  chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  chartLabels: { position: "absolute", top: 4, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between" },
+  chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
+  chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
+  chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
+  nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
+  statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
+  warningText: { fontSize: 16, marginTop: 6, fontWeight: "bold", color: "#856404", textAlign: "center" },
+  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
 });
