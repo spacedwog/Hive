@@ -43,15 +43,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="StreamScreen"
         options={{
-          title: 'Stream',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="web.camera.fill" color={color} />,
+          title: 'Hive Cam',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="airplayaudio" color={color} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Hive Finder',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="airplane.circle" color={color} />,
         }}
       />
     </Tabs>
