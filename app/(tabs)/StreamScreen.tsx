@@ -1,18 +1,10 @@
-import React, { useEffect, useState } from "react";
-import {
-  Alert,
-  Button,
-  Linking,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { NetworkInfo } from "react-native-network-info";
+import React, { useState } from "react";
+import { Alert, Button, Linking, StyleSheet, Text, View } from "react-native";
 
 const StreamScreen: React.FC = () => {
   const [connected, setConnected] = useState(false);
-  const [checking, setChecking] = useState(false);
 
+  // Dados do Soft-AP
   const apSSID = "HIVE STREAM";
   const apPassword = "hvstream";
   const esp32IP = "192.168.4.1"; // IP padrão do Soft-AP
@@ -24,31 +16,23 @@ const StreamScreen: React.FC = () => {
     });
   };
 
-  const checkConnection = () => {
-    setChecking(true);
-    NetworkInfo.getSSID()
-      .then((ssid) => {
-        if (ssid === apSSID) {
-          setConnected(true);
-        } else {
-          setConnected(false);
-          Alert.alert(
-            "Rede incorreta",
-            `Conecte-se à rede Wi-Fi "${apSSID}" antes de continuar.`
-          );
-        }
-      })
-      .catch((err) => {
-        console.error("Erro ao obter SSID:", err);
-        Alert.alert("Erro", "Não foi possível verificar a rede.");
-        setConnected(false);
-      })
-      .finally(() => setChecking(false));
+  const markConnected = () => {
+    // Como não há biblioteca, pedimos para o usuário confirmar manualmente
+    Alert.alert(
+      "Confirmar conexão",
+      `Certifique-se de que está conectado à rede Wi-Fi "${apSSID}"`,
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+        {
+          text: "Conectado",
+          onPress: () => setConnected(true),
+        },
+      ]
+    );
   };
-
-  useEffect(() => {
-    checkConnection(); // verifica automaticamente ao abrir a tela
-  }, []);
 
   return (
     <View style={styles.container}>
@@ -72,14 +56,8 @@ const StreamScreen: React.FC = () => {
 
       <View style={{ marginTop: 15 }}>
         <Button
-          title={
-            checking
-              ? "Verificando..."
-              : connected
-              ? "Conectado"
-              : "Conectar à rede"
-          }
-          onPress={checkConnection}
+          title={connected ? "Conectado" : "Conectar à rede"}
+          onPress={markConnected}
         />
       </View>
     </View>

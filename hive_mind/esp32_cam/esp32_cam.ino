@@ -1,98 +1,143 @@
 /*
-  WiFiAccessPoint.ino creates a WiFi access point and provides a web server on it.
+  ESP32 Soft-AP com página HTML para controle do LED via HTTP
 
-  Steps:
-  1. Connect to the access point "yourAp"
-  2. Point your web browser to http://192.168.4.1/H to turn the LED on or http://192.168.4.1/L to turn it off
-     OR
-     Run raw TCP "GET /H" and "GET /L" on PuTTY terminal with 192.168.4.1 as IP address and 80 as port
-
-  Created for arduino-esp32 on 04 July, 2018
-  by Elochukwu Ifediora (fedy0)
+  Acesse http://192.168.4.1/
+  - Botão "Ligar"  → GET /H
+  - Botão "Desligar" → GET /L
 */
 
 #include <WiFi.h>
-#include <NetworkClient.h>
 #include <WiFiAP.h>
 
 #ifndef LED_BUILTIN
-#define LED_BUILTIN 2  // Set the GPIO pin where you connected your test LED or comment this line out if your dev board has a built-in LED
+#define LED_BUILTIN 2
 #endif
 
-// Set these to your desired credentials.
-const char *ssid = "HIVE STREAM";
-const char *password = "hvstream";
+// Credenciais do AP
+const char* ssid     = "HIVE STREAM";
+const char* password = "hvstream";
 
-NetworkServer server(80);
+WiFiServer server(80);
+bool ledOn = false; // estado do LED
+
+// Página HTML principal
+String htmlPage() {
+  String state = ledOn ? "Ligado" : "Desligado";
+  String color = ledOn ? "#16a34a" : "#ef4444";
+
+  String html =
+    String(F("HTTP/1.1 200 OK\r\n"
+             "Content-Type: text/html; charset=utf-8\r\n"
+             "Connection: close\r\n"
+             "\r\n")) +
+    F("<!DOCTYPE html><html lang='pt-br'><head><meta charset='utf-8'/>"
+      "<meta name='viewport' content='width=device-width, initial-scale=1'/>"
+      "<title>HIVE STREAM - Controle</title>"
+      "<style>"
+      "body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif;"
+      "margin:0;background:#0b1220;color:#e5e7eb;display:flex;min-height:100vh;align-items:center;justify-content:center}"
+      ".card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:24px;max-width:520px;width:92%;box-shadow:0 10px 30px rgba(0,0,0,.35)}"
+      "h1{font-size:22px;margin:0 0 6px}"
+      "p.sub{margin:0 0 18px;color:#9ca3af}"
+      ".state{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:600;margin:8px 0;background:#0f172a}"
+      ".btns{display:flex;gap:12px;margin-top:18px}"
+      "a.btn{flex:1;text-align:center;text-decoration:none;padding:12px 14px;border-radius:12px;font-weight:700;border:1px solid #374151;transition:.2s}"
+      "a.btn:hover{transform:translateY(-1px)}"
+      ".on{background:#093916}"
+      ".off{background:#3a0b0b}"
+      ".meta{margin-top:18px;font-size:13px;color:#9ca3af}"
+      "code{background:#0f172a;border:1px solid #1f2937;border-radius:8px;padding:2px 6px}"
+      "</style></head><body><div class='card'>")
+    + F("<h1>HIVE STREAM</h1><p class='sub'>Controle do LED via Wi-Fi (Soft-AP)</p>")
+    + String("<div class='state' style='color:") + color + "'>Estado: <strong>" + state + "</strong></div>"
+    + F("<div class='btns'>"
+        "<a class='btn on'  href='/H'>Ligar</a>"
+        "<a class='btn off' href='/L'>Desligar</a>"
+        "</div>"
+        "<div class='meta'>Endereço: <code>http://192.168.4.1</code> • Rotas: <code>/H</code> e <code>/L</code></div>"
+        "</div></body></html>");
+
+  return html;
+}
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  ledOn = false;
 
   Serial.begin(115200);
   Serial.println();
-  Serial.println("Configuring access point...");
+  Serial.println("Configurando Access Point...");
 
-  // You can remove the password parameter if you want the AP to be open.
-  // a valid password must have more than 7 characters
+  // Inicia o AP
   if (!WiFi.softAP(ssid, password)) {
-    log_e("Soft AP creation failed.");
-    while (1);
+    Serial.println("Falha ao iniciar Soft-AP!");
+    while (true) { delay(1000); }
   }
+
   IPAddress myIP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(myIP);
-  server.begin();
 
-  Serial.println("Server started");
+  server.begin();
+  Serial.println("Servidor iniciado");
+  Serial.println("Acesse: http://192.168.4.1/");
 }
 
 void loop() {
-  NetworkClient client = server.accept();  // listen for incoming clients
+  WiFiClient client = server.available(); // aguarda cliente
 
-  if (client) {                     // if you get a client,
-    Serial.println("New Client.");  // print a message out the serial port
-    String currentLine = "";        // make a String to hold incoming data from the client
-    while (client.connected()) {    // loop while the client's connected
-      if (client.available()) {     // if there's bytes to read from the client,
-        char c = client.read();     // read a byte, then
-        Serial.write(c);            // print it out the serial monitor
-        if (c == '\n') {            // if the byte is a newline character
+  if (!client) return;
 
-          // if the current line is blank, you got two newline characters in a row.
-          // that's the end of the client HTTP request, so send a response:
-          if (currentLine.length() == 0) {
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            client.println();
+  Serial.println("Novo cliente conectado.");
+  String reqLine = "";
+  String header = "";
 
-            // the content of the HTTP response follows the header:
-            client.print("Click <a href=\"/H\">here</a> to turn ON the LED.<br>");
-            client.print("Click <a href=\"/L\">here</a> to turn OFF the LED.<br>");
+  // Leitura da requisição HTTP
+  unsigned long timeout = millis() + 2000;
+  while (client.connected() && millis() < timeout) {
+    if (client.available()) {
+      char c = client.read();
+      header += c;
 
-            // The HTTP response ends with another blank line:
-            client.println();
-            // break out of the while loop:
-            break;
-          } else {  // if you got a newline, then clear currentLine:
-            currentLine = "";
-          }
-        } else if (c != '\r') {  // if you got anything else but a carriage return character,
-          currentLine += c;      // add it to the end of the currentLine
-        }
+      // Primeira linha da requisição (método + path + versão)
+      if (c == '\n' && reqLine.length() == 0) {
+        int end = header.indexOf('\r');
+        reqLine = header.substring(0, end >= 0 ? end : header.length());
+        // continua lendo até a linha em branco final
+      }
 
-        // Check to see if the client request was "GET /H" or "GET /L":
-        if (currentLine.endsWith("GET /H")) {
-          digitalWrite(LED_BUILTIN, HIGH);  // GET /H turns the LED on
-        }
-        if (currentLine.endsWith("GET /L")) {
-          digitalWrite(LED_BUILTIN, LOW);  // GET /L turns the LED off
-        }
+      // fim do cabeçalho (linha em branco)
+      if (header.endsWith("\r\n\r\n")) {
+        break;
       }
     }
-    // close the connection:
-    client.stop();
-    Serial.println("Client Disconnected.");
   }
+
+  Serial.println(reqLine);
+
+  // Determina ação por path
+  if (reqLine.startsWith("GET /H")) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    ledOn = true;
+    client.print(htmlPage()); // responde com a página já atualizada
+  } else if (reqLine.startsWith("GET /L")) {
+    digitalWrite(LED_BUILTIN, LOW);
+    ledOn = false;
+    client.print(htmlPage());
+  } else if (reqLine.startsWith("GET /state")) {
+    // Endpoint opcional de status (útil para AJAX, se quiser)
+    String body = String("{\"led\":\"") + (ledOn ? "on" : "off") + "\"}";
+    client.print(
+      String("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ")
+      + body.length() + "\r\n\r\n" + body
+    );
+  } else {
+    // "/" ou qualquer outro → devolve página HTML
+    client.print(htmlPage());
+  }
+
+  delay(1);
+  client.stop();
+  Serial.println("Cliente desconectado.");
 }
