@@ -1,6 +1,6 @@
 /*
   ESP32 Soft-AP com página HTML para controle do LED via HTTP
-
+  Pino 2 e Pino 32 ficam com estados inversos
   Acesse http://192.168.4.1/
   - Botão "Ligar"  → GET /H
   - Botão "Desligar" → GET /L
@@ -13,6 +13,8 @@
 #define LED_BUILTIN 2
 #endif
 
+#define PIN_OPPOSITE 32 // Pino inverso ao LED_BUILTIN
+
 // Credenciais do AP
 const char* ssid     = "HIVE STREAM";
 const char* password = "hvstream";
@@ -22,8 +24,11 @@ bool ledOn = false; // estado do LED
 
 // Página HTML principal
 String htmlPage() {
-  String state = ledOn ? "Ligado" : "Desligado";
-  String color = ledOn ? "#16a34a" : "#ef4444";
+  String stateLED2 = ledOn ? "Ligado" : "Desligado";
+  String colorLED2 = ledOn ? "#16a34a" : "#ef4444";
+
+  String stateLED32 = ledOn ? "Desligado" : "Ligado";
+  String colorLED32 = ledOn ? "#ef4444" : "#16a34a";
 
   String html =
     String(F("HTTP/1.1 200 OK\r\n"
@@ -49,10 +54,11 @@ String htmlPage() {
       "code{background:#0f172a;border:1px solid #1f2937;border-radius:8px;padding:2px 6px}"
       "</style></head><body><div class='card'>")
     + F("<h1>HIVE STREAM</h1><p class='sub'>Controle do LED via Wi-Fi (Soft-AP)</p>")
-    + String("<div class='state' style='color:") + color + "'>Estado: <strong>" + state + "</strong></div>"
+    + String("<div class='state' style='color:") + colorLED2 + "'>LED pino 2: <strong>" + stateLED2 + "</strong></div>"
+    + String("<div class='state' style='color:") + colorLED32 + "'>Pino 32: <strong>" + stateLED32 + "</strong></div>"
     + F("<div class='btns'>"
-        "<a class='btn on'  href='/H'>Ligar</a>"
-        "<a class='btn off' href='/L'>Desligar</a>"
+        "<a class='btn on'  href='/H'>Ligar LED 2</a>"
+        "<a class='btn off' href='/L'>Desligar LED 2</a>"
         "</div>"
         "<div class='meta'>Endereço: <code>http://192.168.4.1</code> • Rotas: <code>/H</code> e <code>/L</code></div>"
         "</div></body></html>");
@@ -62,14 +68,16 @@ String htmlPage() {
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(PIN_OPPOSITE, OUTPUT);
+
   digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(PIN_OPPOSITE, HIGH); // estado inicial inverso
   ledOn = false;
 
   Serial.begin(115200);
   Serial.println();
   Serial.println("Configurando Access Point...");
 
-  // Inicia o AP
   if (!WiFi.softAP(ssid, password)) {
     Serial.println("Falha ao iniciar Soft-AP!");
     while (true) { delay(1000); }
@@ -85,55 +93,45 @@ void setup() {
 }
 
 void loop() {
-  WiFiClient client = server.available(); // aguarda cliente
-
+  WiFiClient client = server.available();
   if (!client) return;
 
   Serial.println("Novo cliente conectado.");
   String reqLine = "";
   String header = "";
 
-  // Leitura da requisição HTTP
   unsigned long timeout = millis() + 2000;
   while (client.connected() && millis() < timeout) {
     if (client.available()) {
       char c = client.read();
       header += c;
-
-      // Primeira linha da requisição (método + path + versão)
       if (c == '\n' && reqLine.length() == 0) {
         int end = header.indexOf('\r');
         reqLine = header.substring(0, end >= 0 ? end : header.length());
-        // continua lendo até a linha em branco final
       }
-
-      // fim do cabeçalho (linha em branco)
-      if (header.endsWith("\r\n\r\n")) {
-        break;
-      }
+      if (header.endsWith("\r\n\r\n")) break;
     }
   }
 
   Serial.println(reqLine);
 
-  // Determina ação por path
   if (reqLine.startsWith("GET /H")) {
     digitalWrite(LED_BUILTIN, HIGH);
+    digitalWrite(PIN_OPPOSITE, LOW); // estado inverso
     ledOn = true;
-    client.print(htmlPage()); // responde com a página já atualizada
+    client.print(htmlPage());
   } else if (reqLine.startsWith("GET /L")) {
     digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(PIN_OPPOSITE, HIGH); // estado inverso
     ledOn = false;
     client.print(htmlPage());
   } else if (reqLine.startsWith("GET /state")) {
-    // Endpoint opcional de status (útil para AJAX, se quiser)
     String body = String("{\"led\":\"") + (ledOn ? "on" : "off") + "\"}";
     client.print(
       String("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ")
       + body.length() + "\r\n\r\n" + body
     );
   } else {
-    // "/" ou qualquer outro → devolve página HTML
     client.print(htmlPage());
   }
 
