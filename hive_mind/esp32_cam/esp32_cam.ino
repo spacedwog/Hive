@@ -30,6 +30,10 @@ WebServer server(80);
 bool streaming = false;
 String lastSavedPath = "";   // <- último arquivo salvo no SD
 
+// ==== Variáveis de exemplo do ESP32 (Vespa) ====
+int sensorValue = 0;    // Aqui você pode ler sensores reais do Vespa
+float batteryVoltage = 0;
+
 // ==== Inicializa a câmera ====
 void startCamera() {
   camera_config_t config;
@@ -103,22 +107,35 @@ String capturePhoto() {
   return path;
 }
 
-// ==== Handler para capturar manualmente ====
+// ==== Handler para capturar manualmente e exibir dados ====
 void handleCapture() {
+  // Simula leitura de dados do ESP32/Vespa
+  sensorValue = analogRead(34);          // Exemplo de leitura de sensor
+  batteryVoltage = 3.3 * sensorValue / 4095.0;
+
   String path = capturePhoto();
   if (path != "") {
-    server.send(200, "text/plain", "Foto capturada: " + path);
+    String html = "<h1>Foto Capturada</h1>";
+    html += "<p><b>Caminho:</b> " + path + "</p>";
+    html += "<p><b>Sensor:</b> " + String(sensorValue) + "</p>";
+    html += "<p><b>Tensão da bateria:</b> " + String(batteryVoltage, 2) + "V</p>";
+    html += "<img src='" + path + "' width='320'/>";
+    server.send(200, "text/html", html);
   } else {
     server.send(500, "text/plain", "Erro ao capturar foto.");
   }
 }
 
-// ==== Rota para exibir última imagem salva ====
+// ==== Rota para exibir última imagem salva e dados ====
 void handleSavedImage() {
   if (lastSavedPath == "") {
     server.send(404, "text/plain", "Nenhuma imagem salva ainda.");
     return;
   }
+
+  // Atualiza dados
+  sensorValue = analogRead(34);
+  batteryVoltage = 3.3 * sensorValue / 4095.0;
 
   File file = SD_MMC.open(lastSavedPath);
   if (!file) {
@@ -126,7 +143,15 @@ void handleSavedImage() {
     return;
   }
 
-  server.streamFile(file, "image/jpeg");
+  // Retorna HTML com imagem + dados
+  String html = "<h1>Última Foto</h1>";
+  html += "<p><b>Caminho:</b> " + lastSavedPath + "</p>";
+  html += "<p><b>Sensor:</b> " + String(sensorValue) + "</p>";
+  html += "<p><b>Tensão da bateria:</b> " + String(batteryVoltage, 2) + "V</p>";
+  html += "<img src='/image.jpg' width='320'/>";
+
+  server.send(200, "text/html", html);
+
   file.close();
 }
 
@@ -188,9 +213,9 @@ void setup() {
       "<h1>ESP32-CAM SoftAP</h1>"
       "<p><a href=\"/start\">Iniciar streaming</a></p>"
       "<p><a href=\"/stop\">Parar streaming</a></p>"
-      "<p><a href=\"/capture\">Capturar imagem</a></p>"
+      "<p><a href=\"/capture\">Capturar imagem + dados</a></p>"
       "<p><a href=\"/stream\">Visualizar streaming</a></p>"
-      "<p><a href=\"/saved.jpg\">Última imagem salva</a></p>");
+      "<p><a href=\"/saved.jpg\">Última imagem + dados</a></p>");
   });
   server.on("/start", handleStart);
   server.on("/stop", handleStop);
