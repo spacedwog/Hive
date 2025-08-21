@@ -4,14 +4,11 @@ import { Alert, Button, Image, StyleSheet, Text, View } from "react-native";
 const ESP32_IP = "192.168.4.1"; // IP padrão do Soft-AP do ESP32
 
 export default function CameraScreen() {
-  const [frameUrl, setFrameUrl] = useState<string>("");
+  const [savedImageUrl, setSavedImageUrl] = useState<string>("");
 
-  // Atualiza frame a cada 1s (pulling simples)
+  // Ao abrir a tela, tenta carregar a última imagem salva
   useEffect(() => {
-    const interval = setInterval(() => {
-      setFrameUrl(`http://${ESP32_IP}/capture?_=${Date.now()}`);
-    }, 1000);
-    return () => clearInterval(interval);
+    setSavedImageUrl(`http://${ESP32_IP}/saved.jpg?_=${Date.now()}`);
   }, []);
 
   // Função auxiliar para interpretar resposta
@@ -45,6 +42,8 @@ export default function CameraScreen() {
         res.ok ? "🛑 Gravação parada" : "❌ Erro ao parar gravação",
         typeof data === "string" ? data : JSON.stringify(data)
       );
+      // Após parar, tenta recarregar a última imagem salva no SD
+      setSavedImageUrl(`http://${ESP32_IP}/saved.jpg?_=${Date.now()}`);
     } catch (err) {
       Alert.alert("Erro de conexão", String(err));
     }
@@ -52,17 +51,17 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📷 HIVE STREAM</Text>
+      <Text style={styles.title}>📷 HIVE STREAM - SD</Text>
 
-      {frameUrl ? (
+      {savedImageUrl ? (
         <Image
-          source={{ uri: frameUrl }}
+          source={{ uri: savedImageUrl }}
           style={styles.preview}
           resizeMode="contain"
-          onError={() => setFrameUrl("")} // Reseta caso não consiga carregar
+          onError={() => setSavedImageUrl("")} // Reseta caso não consiga carregar
         />
       ) : (
-        <Text style={styles.info}>Conectando à câmera...</Text>
+        <Text style={styles.info}>Carregando imagem do SD...</Text>
       )}
 
       <View style={styles.buttons}>

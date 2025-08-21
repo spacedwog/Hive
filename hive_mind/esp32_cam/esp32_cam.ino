@@ -1,15 +1,11 @@
 #include <WiFi.h>
-#include <esp_camera.h>
-#include <FS.h>
-#include <SD_MMC.h>
-#include "esp_timer.h"
-#include "img_converters.h"
-#include "Arduino.h"
-#include "soc/soc.h"
-#include "soc/rtc_cntl_reg.h"
+#include <WebServer.h>
+#include "esp_camera.h"
+#include "FS.h"
+#include "SD_MMC.h"
 
-// ==== CONFIGURAÇÃO DA CÂMERA ====
-// Use a configuração correta para sua ESP32-CAM (AI Thinker é a mais comum)
+// ==== Configuração da câmera ====
+// Pinos do modelo AI-Thinker ESP32-CAM
 #define PWDN_GPIO_NUM    -1
 #define RESET_GPIO_NUM   -1
 #define XCLK_GPIO_NUM     0
@@ -28,64 +24,15 @@
 #define HREF_GPIO_NUM    23
 #define PCLK_GPIO_NUM    22
 
-// ==== CONFIGURAÇÃO WiFi Soft AP ====
-const char* ssid = "HIVE STREAM";
+// ==== WiFi SoftAP ====
+const char* ssid     = "HIVE STREAM";
 const char* password = "hvstream";
 
-// ==== Servidor Web ====
-WiFiServer server(80);
+WebServer server(80);
 bool streaming = false;
 
-// ==== Handler para streaming MJPEG ====
-void handleStream(WiFiClient client) {
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
-  client.println();
-
-  while (client.connected()) {
-    unsigned long startCapture = millis();
-
-    camera_fb_t *fb = esp_camera_fb_get();
-    if (!fb) {
-      Serial.println("❌ Erro: frame não capturado!");
-      continue;
-    }
-
-    unsigned long captureTime = millis() - startCapture;
-
-    // 👉 Exibe informações do frame no Serial Monitor
-    Serial.println("===== Frame Capturado =====");
-    Serial.print("📸 Tamanho: "); Serial.print(fb->len); Serial.println(" bytes");
-    Serial.print("📐 Resolução: "); Serial.print(fb->width); Serial.print("x"); Serial.println(fb->height);
-    Serial.print("⏱️ Tempo de captura: "); Serial.print(captureTime); Serial.println(" ms");
-
-    // Envia frame via HTTP
-    client.printf("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", fb->len);
-    client.write(fb->buf, fb->len);
-    client.println();
-
-    // Salva automaticamente no SD
-    String path = "/stream_" + String(millis()) + ".jpg";
-    File file = SD_MMC.open(path, FILE_WRITE);
-    if (file) {
-      file.write(fb->buf, fb->len);
-      file.close();
-      Serial.println("✅ Foto salva em " + path);
-    } else {
-      Serial.println("❌ Falha ao salvar no SD");
-    }
-
-    esp_camera_fb_return(fb);
-    delay(100); // controla o FPS (~10 fps)
-  }
-}
-
-// ==== Setup ====
-void setup() {
-  Serial.begin(115200);
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // Desativa brownout
-
-  // Configura câmera
+// ==== Inicializa a câmera ====
+void startCamera() {
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer   = LEDC_TIMER_0;
@@ -108,57 +55,146 @@ void setup() {
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
 
-  // Resolução inicial
-  config.frame_size = FRAMESIZE_VGA;
-  config.jpeg_quality = 10;
-  config.fb_count = 2;
+  if (psramFound()) {
+    config.frame_size   = FRAMESIZE_VGA;
+    config.jpeg_quality = 10;
+    config.fb_count     = 2;
+  } else {
+    config.frame_size   = FRAMESIZE_QVGA;
+    config.jpeg_quality = 12;
+    config.fb_count     = 1;
+  }
 
-  // Inicializa câmera
   if (esp_camera_init(&config) != ESP_OK) {
-    Serial.println("❌ Erro ao inicializar câmera!");
+    Serial.println("Erro ao iniciar a câmera!");
+    return;
+  }
+  Serial.println("Câmera iniciada com sucesso.");
+}
+
+// ==== Inicializa o SD ====
+void startSD() {
+  if (!SD_MMC.begin()) {
+    Serial.println("Erro ao inicializar SD");
+  } else {
+    Serial.println("SD inicializado com sucesso");
+  }
+}
+
+// ==== Captura uma foto e salva no SD ====
+String capturePhoto() {
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb) return "";
+
+  String path = "/foto_" + String(millis()) + ".jpg";
+  File file = SD_MMC.open(path, FILE_WRITE);
+  if (file) {
+    file.write(fb->buf, fb->len);
+    file.close();
+    Serial.println("Foto salva em: " + path);
+  }
+  esp_camera_fb_return(fb);
+  return path;
+}
+
+// ==== Handler web para captura manual ====
+void handleCapture() {
+  if (!streaming) {
+    server.send(200, "text/plain", "Streaming parado. Use /start para ativar.");
     return;
   }
 
-  // Inicia SD
-  if (!SD_MMC.begin()) {
-    Serial.println("❌ Falha ao montar SD!");
-  } else {
-    Serial.println("✅ SD inicializado com sucesso");
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb) {
+    server.send(500, "text/plain", "Erro ao capturar frame.");
+    return;
   }
 
-  // Configura WiFi como Access Point
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, password);
-  Serial.println("✅ Soft AP iniciado");
-  Serial.print("📡 SSID: "); Serial.println(ssid);
-  Serial.print("🔑 Senha: "); Serial.println(password);
-  Serial.print("🌐 IP: "); Serial.println(WiFi.softAPIP());
+  // Salva no SD
+  String path = "/foto_" + String(millis()) + ".jpg";
+  File file = SD_MMC.open(path, FILE_WRITE);
+  if (file) {
+    file.write(fb->buf, fb->len);
+    file.close();
+    Serial.println("Foto salva em: " + path);
+  }
 
-  // Inicia servidor
-  server.begin();
-  Serial.println("🚀 Servidor Web iniciado");
+  server.sendHeader("Content-Type", "image/jpeg");
+  server.send_P(200, "image/jpeg", (const char *)fb->buf, fb->len);
+  esp_camera_fb_return(fb);
 }
 
-// ==== Loop principal ====
-void loop() {
-  WiFiClient client = server.available();
-  if (!client) return;
+// ==== Handlers start/stop ====
+void handleStart() {
+  streaming = true;
+  server.send(200, "text/plain", "Streaming iniciado.");
+}
 
-  String request = client.readStringUntil('\r');
-  client.flush();
+void handleStop() {
+  streaming = false;
+  server.send(200, "text/plain", "Streaming parado.");
+}
 
-  if (request.indexOf("/stream") != -1) {
-    Serial.println("📡 Cliente conectado ao stream!");
-    handleStream(client);
-  } else {
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/html");
-    client.println("Connection: close");
+// ==== Handler para streaming MJPEG ====
+void handleStream() {
+  WiFiClient client = server.client();
+
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
+  client.println();
+
+  while (streaming) {
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (!fb) continue;
+
+    client.printf("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", fb->len);
+    client.write(fb->buf, fb->len);
     client.println();
-    client.println("<!DOCTYPE HTML>");
-    client.println("<html>");
-    client.println("<h1>ESP32-CAM Streaming (Soft AP)</h1>");
-    client.println("<p><a href=\"/stream\">Iniciar Streaming</a></p>");
-    client.println("</html>");
+
+    // Salva automaticamente no SD
+    String path = "/stream_" + String(millis()) + ".jpg";
+    File file = SD_MMC.open(path, FILE_WRITE);
+    if (file) {
+      file.write(fb->buf, fb->len);
+      file.close();
+    }
+
+    esp_camera_fb_return(fb);
+    delay(100); // ~10 FPS
   }
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Inicia SoftAP
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+
+  // Inicializa câmera e SD
+  startCamera();
+  startSD();
+
+  // Rotas web
+  server.on("/", []() {
+    server.send(200, "text/html",
+      "<h1>ESP32-CAM SoftAP</h1>"
+      "<p><a href=\"/start\">Iniciar streaming</a></p>"
+      "<p><a href=\"/stop\">Parar streaming</a></p>"
+      "<p><a href=\"/capture\">Capturar imagem</a></p>"
+      "<p><a href=\"/stream\">Visualizar streaming</a></p>");
+  });
+  server.on("/start", handleStart);
+  server.on("/stop", handleStop);
+  server.on("/capture", handleCapture);
+  server.on("/stream", handleStream);
+
+  server.begin();
+  Serial.println("Servidor HTTP iniciado");
+}
+
+void loop() {
+  server.handleClient();
 }
