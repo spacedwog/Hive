@@ -5,8 +5,8 @@ const StreamScreen: React.FC = () => {
   const [connected, setConnected] = useState(false);
 
   // Configuração do Soft-AP
-  const apSSID = "ESP32-CAMERA";
-  const apPassword = "12345678";
+  const apSSID = "HIVE STREAM";
+  const apPassword = "hvstream";
   const esp32IP = "192.168.4.1"; // IP padrão do Soft-AP
 
   const openCamera = () => {
