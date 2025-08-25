@@ -9,20 +9,26 @@ import {
   View,
 } from "react-native";
 
+// Importa o módulo nativo exposto pelo código Swift/Java
 const { CameraModule } = NativeModules;
 
 const CameraScreen: React.FC = () => {
-  const openNativeCamera = () => {
-    if (Platform.OS === "android") {
-      CameraModule.openCamera(
-        () => Alert.alert("Sucesso", "Câmera aberta."),
-        (err: string) => Alert.alert("Erro", err)
-      );
-    } else if (Platform.OS === "ios") {
-      CameraModule.openCamera(
-        () => Alert.alert("Sucesso", "Câmera aberta."),
-        (err: string) => Alert.alert("Erro", err)
-      );
+  const openNativeCamera = async () => {
+    if (Platform.OS === "ios" || Platform.OS === "android") {
+      if (!CameraModule || !CameraModule.openCamera) {
+        Alert.alert(
+          "Erro",
+          "CameraModule não está disponível. Verifique a integração nativa."
+        );
+        return;
+      }
+
+      try {
+        await CameraModule.openCamera();
+        Alert.alert("Sucesso", "Câmera aberta com sucesso.");
+      } catch (err: any) {
+        Alert.alert("Erro", `Falha ao abrir câmera: ${JSON.stringify(err)}`);
+      }
     } else {
       Alert.alert("Aviso", "Plataforma não suportada.");
     }
@@ -32,7 +38,7 @@ const CameraScreen: React.FC = () => {
     <View style={styles.container}>
       <Text style={styles.title}>Câmera Nativa</Text>
       <Text style={styles.note}>
-        Este botão abrirá o aplicativo de câmera padrão do sistema.
+        Este botão abrirá a câmera nativa do dispositivo.
       </Text>
 
       <View style={styles.buttonWrapper}>
