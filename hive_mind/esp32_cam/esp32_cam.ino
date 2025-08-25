@@ -2,20 +2,21 @@
 #include <WiFi.h>
 #include <WiFiAP.h>
 
+// Definições de pinos
 #ifndef LED_BUILTIN
 #define LED_BUILTIN 2
 #endif
-
-#define PIN_OPPOSITE 32 // Pino inverso ao LED_BUILTIN
+#define PIN_OPPOSITE 32 // pino inverso ao LED_BUILTIN
 
 // Credenciais do Soft-AP
 const char* ssid = "HIVE STREAM";
 const char* password = "hvstream";
 
+// Servidor HTTP
 WiFiServer server(80);
-bool ledOn = false; // estado do LED
+bool ledOn = false; // estado atual do LED
 
-// Configuração da câmera AI-Thinker
+// Configuração da câmera (modelo AI-Thinker)
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
 #define XCLK_GPIO_NUM      0
@@ -33,7 +34,7 @@ bool ledOn = false; // estado do LED
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
-// Inicializa câmera
+// Inicializa a câmera
 void initCamera() {
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -58,25 +59,29 @@ void initCamera() {
   config.pixel_format = PIXFORMAT_JPEG;
 
   if(psramFound()){
-    config.frame_size = FRAMESIZE_VGA;
+    config.frame_size = FRAMESIZE_VGA; // 640x480
     config.jpeg_quality = 10;
     config.fb_count = 2;
   } else {
-    config.frame_size = FRAMESIZE_CIF;
+    config.frame_size = FRAMESIZE_CIF; // 352x288
     config.jpeg_quality = 12;
     config.fb_count = 1;
   }
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.printf("Camera init failed with error 0x%x", err);
+    Serial.printf("❌ Falha ao inicializar câmera. Erro 0x%x\n", err);
+  } else {
+    Serial.println("✅ Câmera inicializada com sucesso");
   }
 }
 
-// HTML de controle do LED
+// Página HTML simples de controle
 String htmlPage() {
   String stateLED2 = ledOn ? "Ligado" : "Desligado";
+  String colorLED2 = ledOn ? "#16a34a" : "#ef4444";
   String stateLED32 = ledOn ? "Desligado" : "Ligado";
+  String colorLED32 = ledOn ? "#ef4444" : "#16a34a";
 
   String html =
     String(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")) +
@@ -84,22 +89,20 @@ String htmlPage() {
       "<meta name='viewport' content='width=device-width, initial-scale=1'/>"
       "<title>HIVE STREAM</title></head><body>"
       "<h1>HIVE STREAM</h1>"
-      "<p>LED pino 2: <strong>") + stateLED2 + "</strong></p>"
-    "<p>Pino 32: <strong>" + stateLED32 + "</strong></p>"
+      "<p>LED pino 2: <strong style='color:")) + colorLED2 + "'>" + stateLED2 + "</strong></p>" +
+    "<p>Pino 32: <strong style='color:" + colorLED32 + "'>" + stateLED32 + "</strong></p>" +
     "<p><a href='/H'>Ligar LED 2</a> | <a href='/L'>Desligar LED 2</a></p>"
     "<p><a href='/stream'>Abrir Stream de vídeo</a></p>"
+    "<p><a href='/state'>Ver Estado (JSON)</a></p>"
     "</body></html>";
 
   return html;
 }
 
-// Rota de streaming JPEG
+// Streaming de imagens JPEG
 void handleStream(WiFiClient client) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
-  client.println("Cache-Control: no-cache, no-store, must-revalidate");
-  client.println("Pragma: no-cache");
-  client.println("Expires: 0");
   client.println();
 
   while (client.connected()) {
@@ -117,7 +120,7 @@ void handleStream(WiFiClient client) {
     esp_camera_fb_return(fb);
 
     if(!client.connected()) break;
-    delay(50); // ~20fps
+    delay(100); // ~10fps
   }
 }
 
@@ -129,19 +132,19 @@ void setup() {
   ledOn = false;
 
   Serial.begin(115200);
-  Serial.println("Configurando Soft-AP...");
+  Serial.println("🚀 Iniciando HIVE STREAM...");
 
   if(!WiFi.softAP(ssid, password)) {
-    Serial.println("Falha ao iniciar Soft-AP");
+    Serial.println("❌ Falha ao iniciar Soft-AP");
     while(true) delay(1000);
   }
 
   IPAddress myIP = WiFi.softAPIP();
-  Serial.print("AP IP: "); Serial.println(myIP);
+  Serial.print("📡 AP iniciado. IP: "); Serial.println(myIP);
 
   initCamera();
   server.begin();
-  Serial.println("Servidor HTTP iniciado");
+  Serial.println("✅ Servidor HTTP iniciado");
 }
 
 void loop() {
@@ -149,7 +152,7 @@ void loop() {
   if (!client) return;
 
   String request = client.readStringUntil('\r');
-  Serial.println("Requisição: " + request);
+  Serial.println("➡️ Requisição: " + request);
   client.flush();
 
   if (request.indexOf("GET /H") >= 0) {
@@ -164,15 +167,8 @@ void loop() {
     client.print(htmlPage());
   } else if (request.indexOf("GET /state") >= 0) {
     String body = String("{\"led\":\"") + (ledOn ? "on" : "off") + "\"}";
-    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " + String(body.length()) + "\r\n\r\n" + body);
-  } else if (request.indexOf("GET /info") >= 0) {
-    String body = "{";
-    body += "\"ip\":\"" + WiFi.softAPIP().toString() + "\",";
-    body += "\"led\":\"" + String(ledOn ? "on" : "off") + "\",";
-    body += "\"uptime\":" + String(millis() / 1000) + ",";
-    body += "\"stream_url\":\"http://" + WiFi.softAPIP().toString() + "/stream\"";
-    body += "}";
-    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " + String(body.length()) + "\r\n\r\n" + body);
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " 
+      + String(body.length()) + "\r\n\r\n" + body);
   } else if (request.indexOf("GET /stream") >= 0) {
     handleStream(client);
   } else {
