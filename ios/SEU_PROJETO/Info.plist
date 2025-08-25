@@ -1,0 +1,6 @@
+<key>NSCameraUsageDescription</key>
+<string>Precisamos da câmera para tirar fotos e gravar vídeos.</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>Precisamos do microfone para gravar vídeos com áudio.</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>Precisamos salvar fotos e vídeos na sua galeria.</string>
