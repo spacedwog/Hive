@@ -1,0 +1,4 @@
+<key>NSCameraUsageDescription</key>
+<string>Precisamos da câmera para capturar fotos.</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>Permite salvar a imagem capturada.</string>
