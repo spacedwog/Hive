@@ -1,38 +1,33 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Image, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import Video from 'react-native-video';
 
-const StreamScreen: React.FC = () => {
-  const [ip, setIp] = useState('192.168.4.1'); // IP padrão do Soft-AP do ESP32
-  const [streamUri, setStreamUri] = useState('');
+const { width } = Dimensions.get('window');
 
-  useEffect(() => {
-    // URI do stream
-    setStreamUri(`http://${ip}/stream`);
-  }, [ip]);
+const ESP32CamScreen: React.FC = () => {
+  const [ip] = useState('192.168.4.1'); // IP do Soft-AP do ESP32
+  const streamUrl = `http://${ip}/stream`; // URL do stream MJPEG
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>ESP32-CAM Live Stream</Text>
 
-      {streamUri ? (
-        <Image
-          source={{ uri: streamUri }}
-          style={styles.stream}
-          resizeMode="cover"
-        />
-      ) : (
-        <Text>Conectando ao ESP32...</Text>
-      )}
-
-      <Button
-        title="Atualizar Stream"
-        onPress={() => setStreamUri(`http://${ip}/stream?${Date.now()}`)}
+      <Video
+        source={{ uri: streamUrl }}
+        style={styles.video}
+        resizeMode="cover"
+        repeat
+        paused={false}
+        controls={false}
+        ignoreSilentSwitch="ignore"
       />
+
+      <Text style={styles.info}>Conectado ao ESP32-CAM: {ip}</Text>
     </View>
   );
 };
 
-export default StreamScreen;
+export default ESP32CamScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -45,11 +40,17 @@ const styles = StyleSheet.create({
   title: {
     color: '#fff',
     fontSize: 22,
-    marginBottom: 10,
+    marginBottom: 15,
+    fontWeight: 'bold',
   },
-  stream: {
-    width: '100%',
-    height: 400,
+  video: {
+    width: width - 20,
+    height: (width - 20) * 0.75,
     borderRadius: 10,
+    backgroundColor: '#000',
+  },
+  info: {
+    color: '#fff',
+    marginTop: 10,
   },
 });
