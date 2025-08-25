@@ -76,13 +76,12 @@ void initCamera() {
 // HTML de controle do LED
 String htmlPage() {
   String stateLED2 = ledOn ? "Ligado" : "Desligado";
-  String colorLED2 = ledOn ? "#16a34a" : "#ef4444";
   String stateLED32 = ledOn ? "Desligado" : "Ligado";
-  String colorLED32 = ledOn ? "#ef4444" : "#16a34a";
 
   String html =
     String(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")) +
-    F("<!DOCTYPE html><html lang='pt-br'><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width, initial-scale=1'/>"
+    F("<!DOCTYPE html><html lang='pt-br'><head><meta charset='utf-8'/>"
+      "<meta name='viewport' content='width=device-width, initial-scale=1'/>"
       "<title>HIVE STREAM</title></head><body>"
       "<h1>HIVE STREAM</h1>"
       "<p>LED pino 2: <strong>") + stateLED2 + "</strong></p>"
@@ -98,6 +97,9 @@ String htmlPage() {
 void handleStream(WiFiClient client) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
+  client.println("Cache-Control: no-cache, no-store, must-revalidate");
+  client.println("Pragma: no-cache");
+  client.println("Expires: 0");
   client.println();
 
   while (client.connected()) {
@@ -115,7 +117,7 @@ void handleStream(WiFiClient client) {
     esp_camera_fb_return(fb);
 
     if(!client.connected()) break;
-    delay(100); // ~10fps
+    delay(50); // ~20fps
   }
 }
 
@@ -162,6 +164,14 @@ void loop() {
     client.print(htmlPage());
   } else if (request.indexOf("GET /state") >= 0) {
     String body = String("{\"led\":\"") + (ledOn ? "on" : "off") + "\"}";
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " + String(body.length()) + "\r\n\r\n" + body);
+  } else if (request.indexOf("GET /info") >= 0) {
+    String body = "{";
+    body += "\"ip\":\"" + WiFi.softAPIP().toString() + "\",";
+    body += "\"led\":\"" + String(ledOn ? "on" : "off") + "\",";
+    body += "\"uptime\":" + String(millis() / 1000) + ",";
+    body += "\"stream_url\":\"http://" + WiFi.softAPIP().toString() + "/stream\"";
+    body += "}";
     client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " + String(body.length()) + "\r\n\r\n" + body);
   } else if (request.indexOf("GET /stream") >= 0) {
     handleStream(client);
