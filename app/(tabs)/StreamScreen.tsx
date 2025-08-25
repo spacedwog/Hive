@@ -1,30 +1,35 @@
-import { ResizeMode, Video } from 'expo-av';
-import React, { useRef } from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Dimensions, Image, StyleSheet, Text, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
 const StreamScreen: React.FC = () => {
-  const videoRef = useRef<Video>(null);
+  const [frameUri, setFrameUri] = useState(''); 
+  const ip = '192.168.4.1'; // IP do Soft-AP do ESP32-CAM
 
-  // IP padrão do Soft-AP do ESP32-CAM
-  const ip = '192.168.4.1';
-  const streamUrl = `http://${ip}/stream`;
+  useEffect(() => {
+    // Atualiza o frame a cada 150ms (~6-7fps)
+    const interval = setInterval(() => {
+      setFrameUri(`http://${ip}/stream?time=${Date.now()}`);
+    }, 150);
+
+    return () => clearInterval(interval);
+  }, [ip]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>ESP32-CAM Live Stream</Text>
 
       <View style={styles.videoContainer}>
-        <Video
-          ref={videoRef}
-          source={{ uri: streamUrl }}
-          style={styles.video}
-          resizeMode={ResizeMode.COVER} // <- aqui
-          shouldPlay
-          isLooping
-          useNativeControls={false}
-        />
+        {frameUri ? (
+          <Image
+            source={{ uri: frameUri }}
+            style={styles.video}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text style={styles.loading}>Conectando ao stream...</Text>
+        )}
       </View>
 
       <Text style={styles.info}>Conectado ao ESP32-CAM: {ip}</Text>
@@ -60,10 +65,15 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     backgroundColor: '#000',
     marginBottom: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   video: {
     width: '100%',
     height: '100%',
+  },
+  loading: {
+    color: '#fff',
   },
   info: {
     color: '#fff',
