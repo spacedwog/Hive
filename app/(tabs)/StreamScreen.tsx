@@ -1,18 +1,24 @@
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Button,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
 import { WebView } from "react-native-webview";
 
-const ESP32_IP = "http://192.168.4.1"; // IP do ESP32-CAM
+const ESP32_IP = "http://192.168.4.1"; // IP do ESP32-CAM no SoftAP
 
 export default function App() {
   const [ledState, setLedState] = useState<"on" | "off">("off");
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // 🔄 Atualiza estado inicial + auto-refresh
   useEffect(() => {
     fetchLedState();
-    const interval = setInterval(fetchLedState, 5000); // auto-refresh a cada 5s
-    return () => clearInterval(interval);
   }, []);
 
   const fetchLedState = async () => {
@@ -31,7 +37,7 @@ export default function App() {
   const toggleLed = async () => {
     try {
       setLoading(true);
-      const newState = ledState === "on" ? "L" : "H"; // endpoint do ESP
+      const newState = ledState === "on" ? "L" : "H";
       await fetch(`${ESP32_IP}/${newState}`);
       fetchLedState();
     } catch (error) {
@@ -39,14 +45,23 @@ export default function App() {
     }
   };
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchLedState().finally(() => setRefreshing(false));
+  }, []);
+
   return (
-    <View style={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <Text style={styles.title}>📡 HIVE STREAM - ESP32-CAM</Text>
 
-      {/* Estado do LED */}
       <Text style={styles.text}>
         LED:{" "}
-        <Text style={{ color: ledState === "on" ? "lime" : "red" }}>
+        <Text style={{ color: ledState === "on" ? "green" : "red" }}>
           {ledState.toUpperCase()}
         </Text>
       </Text>
@@ -60,50 +75,49 @@ export default function App() {
         />
       )}
 
-      {/* Vídeo da câmera */}
       <Text style={styles.text}>📷 Câmera ao vivo:</Text>
       <View style={styles.videoContainer}>
         <WebView
-          source={{ uri: `${ESP32_IP}/stream?time=${Date.now()}` }} // força refresh
+          source={{ uri: `${ESP32_IP}/stream` }}
           style={styles.video}
           javaScriptEnabled
           domStorageEnabled
           allowsFullscreenVideo
         />
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
+    padding: 20,
     backgroundColor: "#121212",
     alignItems: "center",
-    justifyContent: "center", // Centraliza vertical e horizontal
-    padding: 20,
+    justifyContent: "center", // centraliza verticalmente
   },
   title: {
     fontSize: 22,
     fontWeight: "bold",
     color: "#fff",
-    marginBottom: 20,
+    marginBottom: 15,
     textAlign: "center",
   },
   text: {
-    fontSize: 18,
+    fontSize: 16,
     color: "#fff",
-    marginVertical: 12,
+    marginVertical: 10,
     textAlign: "center",
   },
   videoContainer: {
-    width: "90%",
-    height: 280,
+    width: "100%",
+    height: 300,
     borderWidth: 2,
     borderColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: "hidden",
-    marginTop: 20,
+    marginTop: 15,
   },
   video: {
     flex: 1,
