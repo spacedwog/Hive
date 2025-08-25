@@ -29,13 +29,6 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "react-native-vision-camera",
-      [
-        "@react-native-camera-roll/camera-roll",
-        {
-          "photosPermission": "Precisamos acessar sua galeria para salvar as fotos e vídeos."
-        }
-      ],
       "expo-router",
       [
         "expo-splash-screen",
