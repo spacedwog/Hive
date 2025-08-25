@@ -1,77 +1,111 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
-export default function StreamScreen() {
-  const [loading, setLoading] = useState(true);
-  const [ledStatus, setLedStatus] = useState<string>("desconhecido");
+const ESP32_IP = "http://192.168.4.1"; // IP do ESP32-CAM
 
-  // Defina o IP do ESP32-CAM (SoftAP ou conectado no seu Wi-Fi)
-  const esp32BaseUrl = "http://192.168.4.1"; // ajuste conforme o seu serial log
-  const streamUrl = `${esp32BaseUrl}/stream`;
+export default function App() {
+  const [ledState, setLedState] = useState<"on" | "off">("off");
+  const [loading, setLoading] = useState(false);
 
-  // Buscar estado do LED periodicamente
+  // 🔄 Atualiza estado inicial + auto-refresh
   useEffect(() => {
-    const fetchState = async () => {
-      try {
-        const res = await fetch(`${esp32BaseUrl}/state`);
-        const json = await res.json();
-        setLedStatus(json.led);
-      } catch (err) {
-        console.log("Erro ao buscar estado:", err);
-      }
-    };
-
-    fetchState();
-    const interval = setInterval(fetchState, 3000);
+    fetchLedState();
+    const interval = setInterval(fetchLedState, 5000); // auto-refresh a cada 5s
     return () => clearInterval(interval);
   }, []);
 
-  // Controle do LED
+  const fetchLedState = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${ESP32_IP}/state`);
+      const data = await response.json();
+      setLedState(data.led === "on" ? "on" : "off");
+    } catch (error) {
+      console.error("Erro ao buscar estado do LED:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const toggleLed = async () => {
     try {
-      const action = ledStatus === "on" ? "L" : "H";
-      await fetch(`${esp32BaseUrl}/${action}`);
-      setLedStatus(action === "H" ? "on" : "off");
-    } catch (err) {
-      console.log("Erro ao alternar LED:", err);
+      setLoading(true);
+      const newState = ledState === "on" ? "L" : "H"; // endpoint do ESP
+      await fetch(`${ESP32_IP}/${newState}`);
+      fetchLedState();
+    } catch (error) {
+      console.error("Erro ao alternar LED:", error);
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📡 HIVE STREAM</Text>
+      <Text style={styles.title}>📡 HIVE STREAM - ESP32-CAM</Text>
 
-      <View style={styles.videoContainer}>
-        {loading && <ActivityIndicator size="large" color="#16a34a" />}
-        <WebView
-          source={{ uri: streamUrl }}
-          style={styles.video}
-          onLoadEnd={() => setLoading(false)}
-          javaScriptEnabled
-          domStorageEnabled
-        />
-      </View>
-
-      <Text style={styles.status}>
-        💡 LED: {ledStatus === "on" ? "Ligado" : ledStatus === "off" ? "Desligado" : "..." }
+      {/* Estado do LED */}
+      <Text style={styles.text}>
+        LED:{" "}
+        <Text style={{ color: ledState === "on" ? "lime" : "red" }}>
+          {ledState.toUpperCase()}
+        </Text>
       </Text>
 
-      <TouchableOpacity style={styles.button} onPress={toggleLed}>
-        <Text style={styles.buttonText}>
-          {ledStatus === "on" ? "Desligar ESP32" : "Ligar ESP32"}
-        </Text>
-      </TouchableOpacity>
+      {loading ? (
+        <ActivityIndicator size="large" color="blue" />
+      ) : (
+        <Button
+          title={ledState === "on" ? "Desligar LED" : "Ligar LED"}
+          onPress={toggleLed}
+        />
+      )}
+
+      {/* Vídeo da câmera */}
+      <Text style={styles.text}>📷 Câmera ao vivo:</Text>
+      <View style={styles.videoContainer}>
+        <WebView
+          source={{ uri: `${ESP32_IP}/stream?time=${Date.now()}` }} // força refresh
+          style={styles.video}
+          javaScriptEnabled
+          domStorageEnabled
+          allowsFullscreenVideo
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#111", alignItems: "center", justifyContent: "center", padding: 16 },
-  title: { fontSize: 22, fontWeight: "bold", color: "#16a34a", marginBottom: 12 },
-  videoContainer: { width: "100%", height: 300, backgroundColor: "#000", borderRadius: 12, overflow: "hidden" },
-  video: { flex: 1 },
-  status: { fontSize: 18, color: "#fff", marginVertical: 10 },
-  button: { backgroundColor: "#16a34a", padding: 12, borderRadius: 8, marginTop: 10 },
-  buttonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: "#121212",
+    alignItems: "center",
+    justifyContent: "center", // Centraliza vertical e horizontal
+    padding: 20,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  text: {
+    fontSize: 18,
+    color: "#fff",
+    marginVertical: 12,
+    textAlign: "center",
+  },
+  videoContainer: {
+    width: "90%",
+    height: 280,
+    borderWidth: 2,
+    borderColor: "#fff",
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 20,
+  },
+  video: {
+    flex: 1,
+  },
 });

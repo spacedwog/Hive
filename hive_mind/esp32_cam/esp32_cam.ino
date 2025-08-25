@@ -78,25 +78,22 @@ void initCamera() {
 
 // Página HTML simples de controle
 String htmlPage() {
-  String stateLED2 = ledOn ? "Ligado" : "Desligado";
-  String colorLED2 = ledOn ? "#16a34a" : "#ef4444";
-  String stateLED32 = ledOn ? "Desligado" : "Ligado";
-  String colorLED32 = ledOn ? "#ef4444" : "#16a34a";
+  String state1 = ledOn ? "Ligado" : "Desligado";
+  String color1 = ledOn ? "green" : "red";
 
-  String html =
-    String(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")) +
-    F("<!DOCTYPE html><html lang='pt-br'><head><meta charset='utf-8'/>"
-      "<meta name='viewport' content='width=device-width, initial-scale=1'/>"
-      "<title>HIVE STREAM</title></head><body>"
-      "<h1>HIVE STREAM</h1>"
-      "<p>LED pino 2: <strong style='color:")) + colorLED2 + "'>" + stateLED2 + "</strong></p>" +
-    "<p>Pino 32: <strong style='color:" + colorLED32 + "'>" + stateLED32 + "</strong></p>" +
-    "<p><a href='/H'>Ligar LED 2</a> | <a href='/L'>Desligar LED 2</a></p>"
-    "<p><a href='/stream'>Abrir Stream de vídeo</a></p>"
-    "<p><a href='/state'>Ver Estado (JSON)</a></p>"
-    "</body></html>";
+  String state2 = ledOn ? "Desligado" : "Ligado";
+  String color2 = ledOn ? "red" : "green";
 
-  return html;
+  String page = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
+  page += "<title>ESP32-CAM</title></head><body>";
+  page += "<h1>Controle do ESP32-CAM</h1>";
+  page += "<p>LED pino 2: <strong style='color:" + color1 + "'>" + state1 + "</strong></p>";
+  page += "<p>LED pino 32: <strong style='color:" + color2 + "'>" + state2 + "</strong></p>";
+  page += "<a href='/H'>Ligar LED</a><br>";
+  page += "<a href='/L'>Desligar LED</a><br>";
+  page += "<a href='/stream'>📷 Ver Câmera</a>";
+  page += "</body></html>";
+  return page;
 }
 
 // Streaming de imagens JPEG
@@ -159,12 +156,12 @@ void loop() {
     digitalWrite(LED_BUILTIN, HIGH);
     digitalWrite(PIN_OPPOSITE, LOW);
     ledOn = true;
-    client.print(htmlPage());
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + htmlPage());
   } else if (request.indexOf("GET /L") >= 0) {
     digitalWrite(LED_BUILTIN, LOW);
     digitalWrite(PIN_OPPOSITE, HIGH);
     ledOn = false;
-    client.print(htmlPage());
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + htmlPage());
   } else if (request.indexOf("GET /state") >= 0) {
     String body = String("{\"led\":\"") + (ledOn ? "on" : "off") + "\"}";
     client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " 
@@ -172,7 +169,7 @@ void loop() {
   } else if (request.indexOf("GET /stream") >= 0) {
     handleStream(client);
   } else {
-    client.print(htmlPage());
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + htmlPage());
   }
 
   delay(1);
