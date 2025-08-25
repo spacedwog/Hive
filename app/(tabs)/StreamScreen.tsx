@@ -1,76 +1,55 @@
-import React from "react";
-import {
-  Alert,
-  Button,
-  NativeModules,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React, { useEffect, useState } from 'react';
+import { Button, Image, StyleSheet, Text, View } from 'react-native';
 
-// Importa o módulo nativo exposto pelo código Swift/Java
-const { CameraModule } = NativeModules;
+const StreamScreen: React.FC = () => {
+  const [ip, setIp] = useState('192.168.4.1'); // IP padrão do Soft-AP do ESP32
+  const [streamUri, setStreamUri] = useState('');
 
-const CameraScreen: React.FC = () => {
-  const openNativeCamera = async () => {
-    if (Platform.OS === "ios" || Platform.OS === "android") {
-      if (!CameraModule || !CameraModule.openCamera) {
-        Alert.alert(
-          "Erro",
-          "CameraModule não está disponível. Verifique a integração nativa."
-        );
-        return;
-      }
-
-      try {
-        await CameraModule.openCamera();
-        Alert.alert("Sucesso", "Câmera aberta com sucesso.");
-      } catch (err: any) {
-        Alert.alert("Erro", `Falha ao abrir câmera: ${JSON.stringify(err)}`);
-      }
-    } else {
-      Alert.alert("Aviso", "Plataforma não suportada.");
-    }
-  };
+  useEffect(() => {
+    // URI do stream
+    setStreamUri(`http://${ip}/stream`);
+  }, [ip]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Câmera Nativa</Text>
-      <Text style={styles.note}>
-        Este botão abrirá a câmera nativa do dispositivo.
-      </Text>
+      <Text style={styles.title}>ESP32-CAM Live Stream</Text>
 
-      <View style={styles.buttonWrapper}>
-        <Button title="Abrir Câmera" onPress={openNativeCamera} />
-      </View>
+      {streamUri ? (
+        <Image
+          source={{ uri: streamUri }}
+          style={styles.stream}
+          resizeMode="cover"
+        />
+      ) : (
+        <Text>Conectando ao ESP32...</Text>
+      )}
+
+      <Button
+        title="Atualizar Stream"
+        onPress={() => setStreamUri(`http://${ip}/stream?${Date.now()}`)}
+      />
     </View>
   );
 };
 
+export default StreamScreen;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f5f5f5",
-    padding: 20,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
   },
   title: {
+    color: '#fff',
     fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 20,
+    marginBottom: 10,
   },
-  note: {
-    fontSize: 14,
-    color: "gray",
-    textAlign: "center",
-    marginBottom: 15,
-  },
-  buttonWrapper: {
-    marginTop: 15,
-    width: "60%",
+  stream: {
+    width: '100%',
+    height: 400,
+    borderRadius: 10,
   },
 });
-
-export default CameraScreen;
