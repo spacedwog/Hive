@@ -41,7 +41,7 @@ export default function App() {
       await fetch(`${ESP32_IP}/${newState}`);
       fetchLedState();
     } catch (error) {
-      console.error("Erro ao alternar LED:", error);
+      console.error("Erro ao acessar ESP32:", error);
     }
   };
 
@@ -60,7 +60,7 @@ export default function App() {
       <Text style={styles.title}>📡 HIVE STREAM - ESP32-CAM</Text>
 
       <Text style={styles.text}>
-        LED:{" "}
+        ESP32-CAM:{" "}
         <Text style={{ color: ledState === "on" ? "green" : "red" }}>
           {ledState.toUpperCase()}
         </Text>
@@ -70,7 +70,7 @@ export default function App() {
         <ActivityIndicator size="large" color="blue" />
       ) : (
         <Button
-          title={ledState === "on" ? "Desligar LED" : "Ligar LED"}
+          title={ledState === "on" ? "Desligar ESP32" : "Ligar ESP32"}
           onPress={toggleLed}
         />
       )}
