@@ -36,9 +36,12 @@ export default function App() {
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${ESP32_IP}/status`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(`${ESP32_IP}/status`, { signal: controller.signal });
       const data: StatusResponse = await response.json();
       setStatus(data);
+      clearTimeout(timeout);
     } catch (error) {
       console.error("Erro ao buscar status do ESP32:", error);
     } finally {
