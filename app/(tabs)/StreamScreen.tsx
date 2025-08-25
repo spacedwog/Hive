@@ -12,23 +12,35 @@ import { WebView } from "react-native-webview";
 
 const ESP32_IP = "http://192.168.4.1"; // IP do ESP32-CAM no SoftAP
 
+type StatusResponse = {
+  led_builtin: "on" | "off";
+  led_opposite: "on" | "off";
+  camera: string;
+  ip: string;
+};
+
 export default function App() {
-  const [ledState, setLedState] = useState<"on" | "off">("off");
+  const [status, setStatus] = useState<StatusResponse>({
+    led_builtin: "off",
+    led_opposite: "on",
+    camera: "Erro",
+    ip: ESP32_IP
+  });
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchLedState();
+    fetchStatus();
   }, []);
 
-  const fetchLedState = async () => {
+  const fetchStatus = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${ESP32_IP}/state`);
-      const data = await response.json();
-      setLedState(data.led === "on" ? "on" : "off");
+      const response = await fetch(`${ESP32_IP}/status`);
+      const data: StatusResponse = await response.json();
+      setStatus(data);
     } catch (error) {
-      console.error("Erro ao buscar estado do LED:", error);
+      console.error("Erro ao buscar status do ESP32:", error);
     } finally {
       setLoading(false);
     }
@@ -37,9 +49,9 @@ export default function App() {
   const toggleLed = async () => {
     try {
       setLoading(true);
-      const newState = ledState === "on" ? "L" : "H";
+      const newState = status.led_builtin === "on" ? "L" : "H";
       await fetch(`${ESP32_IP}/${newState}`);
-      fetchLedState();
+      fetchStatus();
     } catch (error) {
       console.error("Erro ao acessar ESP32:", error);
     }
@@ -47,7 +59,7 @@ export default function App() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchLedState().finally(() => setRefreshing(false));
+    fetchStatus().finally(() => setRefreshing(false));
   }, []);
 
   return (
@@ -60,17 +72,33 @@ export default function App() {
       <Text style={styles.title}>📡 HIVE STREAM - ESP32-CAM</Text>
 
       <Text style={styles.text}>
-        ESP32-CAM:{" "}
-        <Text style={{ color: ledState === "on" ? "green" : "red" }}>
-          {ledState.toUpperCase()}
+        LED pino 2:{" "}
+        <Text style={{ color: status.led_builtin === "on" ? "green" : "red" }}>
+          {status.led_builtin.toUpperCase()}
         </Text>
       </Text>
+
+      <Text style={styles.text}>
+        LED pino 32:{" "}
+        <Text style={{ color: status.led_opposite === "on" ? "green" : "red" }}>
+          {status.led_opposite.toUpperCase()}
+        </Text>
+      </Text>
+
+      <Text style={styles.text}>
+        Câmera:{" "}
+        <Text style={{ color: status.camera === "OK" ? "green" : "red" }}>
+          {status.camera}
+        </Text>
+      </Text>
+
+      <Text style={styles.text}>IP do ESP32: {status.ip}</Text>
 
       {loading ? (
         <ActivityIndicator size="large" color="blue" />
       ) : (
         <Button
-          title={ledState === "on" ? "Desligar ESP32" : "Ligar ESP32"}
+          title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
           onPress={toggleLed}
         />
       )}
@@ -95,7 +123,7 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: "#121212",
     alignItems: "center",
-    justifyContent: "center", // centraliza verticalmente
+    justifyContent: "center",
   },
   title: {
     fontSize: 22,
@@ -107,7 +135,7 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 16,
     color: "#fff",
-    marginVertical: 10,
+    marginVertical: 5,
     textAlign: "center",
   },
   videoContainer: {

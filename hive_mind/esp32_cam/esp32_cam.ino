@@ -121,6 +121,29 @@ void handleStream(WiFiClient client) {
   }
 }
 
+// Função para enviar JSON
+void sendJSON(WiFiClient& client, const String& json) {
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: application/json\r\n");
+  client.print("Connection: close\r\n");
+  client.print("Content-Length: " + String(json.length()) + "\r\n\r\n");
+  client.print(json);
+}
+
+// Função para gerar JSON de status completo
+String getStatusJSON() {
+  String cameraStatus = (esp_camera_fb_get() != NULL) ? "OK" : "Erro";
+  IPAddress ip = WiFi.softAPIP();
+
+  String json = "{";
+  json += "\"led_builtin\":\"" + String(ledOn ? "on" : "off") + "\",";
+  json += "\"led_opposite\":\"" + String(ledOn ? "off" : "on") + "\",";
+  json += "\"camera\":\"" + cameraStatus + "\",";
+  json += "\"ip\":\"" + ip.toString() + "\"";
+  json += "}";
+  return json;
+}
+
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PIN_OPPOSITE, OUTPUT);
@@ -157,18 +180,20 @@ void loop() {
     digitalWrite(PIN_OPPOSITE, LOW);
     ledOn = true;
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + htmlPage());
-  } else if (request.indexOf("GET /L") >= 0) {
+  } 
+  else if (request.indexOf("GET /L") >= 0) {
     digitalWrite(LED_BUILTIN, LOW);
     digitalWrite(PIN_OPPOSITE, HIGH);
     ledOn = false;
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + htmlPage());
-  } else if (request.indexOf("GET /state") >= 0) {
-    String body = String("{\"led\":\"") + (ledOn ? "on" : "off") + "\"}";
-    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " 
-      + String(body.length()) + "\r\n\r\n" + body);
-  } else if (request.indexOf("GET /stream") >= 0) {
+  } 
+  else if (request.indexOf("GET /state") >= 0 || request.indexOf("GET /status") >= 0) {
+    sendJSON(client, getStatusJSON());
+  } 
+  else if (request.indexOf("GET /stream") >= 0) {
     handleStream(client);
-  } else {
+  } 
+  else {
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + htmlPage());
   }
 
