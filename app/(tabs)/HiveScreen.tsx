@@ -10,7 +10,7 @@ import {
   Text,
   Vibration,
   View,
-  useWindowDimensions,
+  useWindowDimensions
 } from "react-native";
 
 type NodeStatus = {
@@ -25,7 +25,7 @@ type NodeStatus = {
 const MAX_ANALOG = 2400;
 const MAX_POINTS = 60; // histórico por servidor (60s)
 
-// ==== Gráfico simples de barras ====
+// ==== Componente de gráfico nativo ====
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
   data,
   width,
@@ -45,10 +45,7 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
           return (
             <View
               key={`${i}-${v}`}
-              style={[
-                styles.chartBar,
-                { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap },
-              ]}
+              style={[styles.chartBar, { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap }]}
             />
           );
         })}
@@ -72,19 +69,15 @@ export default function HiveScreen() {
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // ==== Buscar status dos servidores (AP + STA) ====
+  // ==== Buscar status dos servidores ====
   const fetchStatus = async () => {
     try {
-      const servers = [
-        "192.168.4.1", // AP
-        "192.168.15.166", // STA fixo
-      ];
-
+      const servers = ["192.168.4.1"];
       const responses = await Promise.all(
         servers.map(async (server) => {
           try {
             const res = await axios.get(`http://${server}/status`, {
-              timeout: 2500,
+              timeout: 3000,
               headers: { Authorization: authHeader },
             });
             return { ...res.data, server };
@@ -94,16 +87,15 @@ export default function HiveScreen() {
         })
       );
 
-      const valid = responses.filter((s) => s.status !== "offline");
-      setStatus(valid.length > 0 ? valid : responses);
+      setStatus(responses);
 
-      valid.forEach((s) => {
+      responses.forEach((s) => {
         if (s.ultrassonico_cm !== undefined && s.ultrassonico_cm < 10) {
           Vibration.vibrate(500);
         }
       });
 
-      // histórico
+      // Atualiza histórico
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
@@ -122,33 +114,20 @@ export default function HiveScreen() {
     }
   };
 
-  // ==== Enviar comando (procura servidor válido) ====
+  // ==== Enviar comando para servidor ====
   const sendCommand = async (server: string, command: string) => {
     try {
-      const candidates = [server, "192.168.4.1", "esp32.local", "192.168.0.100", "192.168.1.50"];
-      let sent = false;
+      const res = await axios.post(
+        `http://${server}/command`,
+        { command },
+        { headers: { Authorization: authHeader } }
+      );
 
-      for (const s of candidates) {
-        try {
-          const res = await axios.post(
-            `http://${s}/command`,
-            { command },
-            { headers: { Authorization: authHeader }, timeout: 2500 }
-          );
-
-          if (command === "ping" && res.data.analog !== undefined) {
-            setPingValues((prev) => ({ ...prev, [s]: res.data.analog }));
-          }
-
-          sent = true;
-          fetchStatus();
-          break;
-        } catch {
-          continue;
-        }
+      if (command === "ping" && res.data.analog !== undefined) {
+        setPingValues((prev) => ({ ...prev, [server]: res.data.analog }));
       }
 
-      if (!sent) console.warn("Nenhum servidor respondeu ao comando:", command);
+      fetchStatus();
     } catch (err) {
       console.error("Erro ao enviar comando:", err);
     }
@@ -215,9 +194,7 @@ export default function HiveScreen() {
             <>
               <LinearGradient colors={cardGradient} style={styles.nodeCard}>
                 <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                <Text style={styles.statusText}>
-                  📡 {s.server || "-"} - {s.status || "offline"}
-                </Text>
+                <Text style={styles.statusText}>📡 {s.server || "-"} - {s.status || "offline"}</Text>
                 <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_cm ?? "-"} cm</Text>
 
                 {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
@@ -251,9 +228,7 @@ export default function HiveScreen() {
                 </Text>
                 <SparkBar data={hist} width={graphWidth} />
                 <View style={styles.chartFooter}>
-                  <Text style={styles.chartFooterText}>
-                    Pontos: {hist.length}/{MAX_POINTS}
-                  </Text>
+                  <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
                   <Text style={styles.chartFooterText}>
                     Atual: {typeof s.analog === "number" ? s.analog : "-"}
                   </Text>
@@ -270,66 +245,19 @@ export default function HiveScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, justifyContent: "center", alignItems: "center" },
   flatListContent: { flexGrow: 1, justifyContent: "center" },
-  nodeCard: {
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 3,
-    width: "90%",
-    alignSelf: "center",
-  },
-  chartCard: {
-    width: "90%",
-    alignSelf: "center",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 24,
-    elevation: 3,
-  },
-  chartTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#eaeaea",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  chartBox: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 10,
-    overflow: "hidden",
-    alignSelf: "center",
-    paddingTop: 8,
-    paddingHorizontal: 8,
-  },
-  chartAxis: {
-    position: "absolute",
-    bottom: 8,
-    left: 8,
-    right: 8,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
+  nodeCard: { padding: 12, borderRadius: 12, marginBottom: 12, elevation: 3, width: "90%", alignSelf: "center" },
+  chartCard: { width: "90%", alignSelf: "center", borderRadius: 12, padding: 12, marginBottom: 24, elevation: 3 },
+  chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
+  chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
+  chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
   chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
   chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
-  chartLabels: {
-    position: "absolute",
-    top: 4,
-    left: 8,
-    right: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
+  chartLabels: { position: "absolute", top: 4, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between" },
   chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
   chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
   chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
   nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
   statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
-  warningText: {
-    fontSize: 16,
-    marginTop: 6,
-    fontWeight: "bold",
-    color: "#856404",
-    textAlign: "center",
-  },
+  warningText: { fontSize: 16, marginTop: 6, fontWeight: "bold", color: "#856404", textAlign: "center" },
   buttonRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
 });
