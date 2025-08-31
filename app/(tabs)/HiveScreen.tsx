@@ -1,38 +1,87 @@
 import axios from "axios";
-import React, { useCallback, useEffect, useState } from "react";
+import * as base64 from "base-64";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
+  Button,
+  FlatList,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   Vibration,
   View,
+  useWindowDimensions,
 } from "react-native";
-import { LineChart } from "react-native-chart-kit";
-import { WebView } from "react-native-webview";
 
-const authHeader = "spacedwog Kimera12@"; // ajuste conforme necessário
-const MAX_POINTS = 20;
+type NodeStatus = {
+  device?: string;
+  server?: string;
+  status?: string;
+  ultrassonico_cm?: number;
+  analog?: number;
+  error?: string;
+};
 
-// Lista de servidores candidatos (AP + STA)
-const serverCandidates = [
-  "192.168.4.1",   // AP (modo Access Point)
-  "esp32.local",   // STA (via mDNS)
-  "192.168.15.166", // STA fixo (exemplo)
-  "192.168.1.50",  // outro IP comum
-];
+const MAX_ANALOG = 2400;
+const MAX_POINTS = 60; // histórico por servidor (60s)
 
-const HiveScreen = () => {
-  const [status, setStatus] = useState<any[]>([]);
+// ==== Gráfico simples de barras ====
+const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
+  data,
+  width,
+  height = 120,
+}) => {
+  const n = Math.max(data.length, 1);
+  const barGap = 2;
+  const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
+
+  return (
+    <View style={[styles.chartBox, { width, height }]}>
+      <View style={styles.chartAxis} />
+      <View style={styles.chartBarsRow}>
+        {data.map((v, i) => {
+          const clamped = Math.max(0, Math.min(MAX_ANALOG, v));
+          const h = Math.max(2, Math.round((clamped / MAX_ANALOG) * (height - 16)));
+          return (
+            <View
+              key={`${i}-${v}`}
+              style={[
+                styles.chartBar,
+                { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap },
+              ]}
+            />
+          );
+        })}
+      </View>
+      <View style={styles.chartLabels}>
+        <Text style={styles.chartLabelText}>0</Text>
+        <Text style={styles.chartLabelText}>{MAX_ANALOG}</Text>
+      </View>
+    </View>
+  );
+};
+
+export default function HiveScreen() {
+  const [status, setStatus] = useState<NodeStatus[]>([]);
+  const [pingValues, setPingValues] = useState<{ [key: string]: number }>({});
+  const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [refreshing, setRefreshing] = useState(false);
-  const [history, setHistory] = useState<Record<string, number[]>>({});
 
-  // Buscar status dos servidores
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const authUsername = "spacedwog";
+  const authPassword = "Kimera12@";
+  const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
+
+  // ==== Buscar status dos servidores (AP + STA) ====
   const fetchStatus = async () => {
     try {
+      const servers = [
+        "192.168.4.1", // AP
+        "192.168.15.166", // STA fixo
+      ];
+
       const responses = await Promise.all(
-        serverCandidates.map(async (server) => {
+        servers.map(async (server) => {
           try {
             const res = await axios.get(`http://${server}/status`, {
               timeout: 2500,
@@ -46,17 +95,15 @@ const HiveScreen = () => {
       );
 
       const valid = responses.filter((s) => s.status !== "offline");
-
       setStatus(valid.length > 0 ? valid : responses);
 
-      // Vibração caso objeto próximo (ultrassônico < 10cm)
       valid.forEach((s) => {
         if (s.ultrassonico_cm !== undefined && s.ultrassonico_cm < 10) {
           Vibration.vibrate(500);
         }
       });
 
-      // Atualizar histórico
+      // histórico
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
@@ -64,12 +111,9 @@ const HiveScreen = () => {
           if (typeof s.analog === "number") {
             const prevArr = next[key] ?? [];
             const newArr = [...prevArr, s.analog];
-            if (newArr.length > MAX_POINTS)
-              newArr.splice(0, newArr.length - MAX_POINTS);
+            if (newArr.length > MAX_POINTS) newArr.splice(0, newArr.length - MAX_POINTS);
             next[key] = newArr;
-          } else if (!next[key]) {
-            next[key] = [];
-          }
+          } else if (!next[key]) next[key] = [];
         });
         return next;
       });
@@ -78,118 +122,214 @@ const HiveScreen = () => {
     }
   };
 
+  // ==== Enviar comando (procura servidor válido) ====
+  const sendCommand = async (server: string, command: string) => {
+    try {
+      const candidates = [server, "192.168.4.1", "esp32.local", "192.168.0.100", "192.168.1.50"];
+      let sent = false;
+
+      for (const s of candidates) {
+        try {
+          const res = await axios.post(
+            `http://${s}/command`,
+            { command },
+            { headers: { Authorization: authHeader }, timeout: 2500 }
+          );
+
+          if (command === "ping" && res.data.analog !== undefined) {
+            setPingValues((prev) => ({ ...prev, [s]: res.data.analog }));
+          }
+
+          sent = true;
+          fetchStatus();
+          break;
+        } catch {
+          continue;
+        }
+      }
+
+      if (!sent) console.warn("Nenhum servidor respondeu ao comando:", command);
+    } catch (err) {
+      console.error("Erro ao enviar comando:", err);
+    }
+  };
+
+  // ==== Atualização contínua ====
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000); // atualiza a cada 5s
+    const interval = setInterval(fetchStatus, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const onRefresh = useCallback(async () => {
+  // ==== Pull-to-refresh ====
+  const onRefresh = async () => {
     setRefreshing(true);
     await fetchStatus();
     setRefreshing(false);
-  }, []);
+  };
+
+  const getAnalogColor = (analog?: number) => {
+    if (analog === undefined) return "#ffffff";
+    const norm = Math.min(Math.max(analog, 0), MAX_ANALOG) / MAX_ANALOG;
+    if (norm < 0.5) {
+      const r = 255;
+      const g = Math.round(510 * norm);
+      return `rgb(${r},${g},0)`;
+    } else {
+      const r = Math.round(510 * (1 - norm));
+      const g = 255;
+      return `rgb(${r},${g},0)`;
+    }
+  };
+
+  const firstAnalog = status.find((s) => s.analog !== undefined)?.analog;
+  const containerColorTuple: [string, string] = [getAnalogColor(firstAnalog), "#000000"];
+  const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <Text style={styles.title}>🐝 Hive Status</Text>
+    <LinearGradient colors={containerColorTuple} style={[styles.container, { minHeight: winHeight }]}>
+      <FlatList
+        data={status}
+        keyExtractor={(item) => item.server || Math.random().toString()}
+        contentContainerStyle={styles.flatListContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        renderItem={({ item: s }) => {
+          const serverKey = s.server ?? "unknown";
+          const isOffline = s.status === "offline";
+          const isActive = s.status === "ativo";
+          const isNear = s.ultrassonico_cm !== undefined && s.ultrassonico_cm < 10;
 
-      {status.length === 0 ? (
-        <ActivityIndicator size="large" color="#0000ff" />
-      ) : (
-        status.map((s, idx) => (
-          <View key={idx} style={styles.card}>
-            <Text style={styles.server}>{s.server}</Text>
-            <Text>Status: {s.status ?? "??"}</Text>
-            {s.ultrassonico_cm !== undefined && (
-              <Text>Ultrassônico: {s.ultrassonico_cm} cm</Text>
-            )}
-            {s.analog !== undefined && (
-              <Text>Sensor Analógico: {s.analog}</Text>
-            )}
+          const cardGradient: [string, string] = isNear
+            ? ["#fff3cd", "#ffeeba"]
+            : isOffline
+            ? ["#f8d7da", "#f5c6cb"]
+            : s.analog !== undefined
+            ? [getAnalogColor(s.analog), "#000000"]
+            : isActive
+            ? ["#d4edda", "#c3e6cb"]
+            : ["#ffffff", "#f8f9fa"];
 
-            {history[s.server] && history[s.server].length > 0 && (
-              <LineChart
-                data={{
-                  labels: history[s.server].map((_, i) => i.toString()),
-                  datasets: [{ data: history[s.server] }],
-                }}
-                width={300}
-                height={150}
-                chartConfig={{
-                  backgroundColor: "#fff",
-                  backgroundGradientFrom: "#fff",
-                  backgroundGradientTo: "#fff",
-                  color: (opacity = 1) => `rgba(0,0,0,${opacity})`,
-                }}
-                bezier
-                style={styles.chart}
-              />
-            )}
-          </View>
-        ))
-      )}
+          const hist = history[serverKey] ?? [];
 
-      <View style={styles.webviewContainer}>
-        <Text style={styles.subtitle}>🌐 Web Interface</Text>
-        <WebView
-          source={{ uri: `http://${status[0]?.server ?? "192.168.4.1"}` }}
-          style={{ height: 300, width: "100%" }}
-        />
-      </View>
-    </ScrollView>
+          return (
+            <>
+              <LinearGradient colors={cardGradient} style={styles.nodeCard}>
+                <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+                <Text style={styles.statusText}>
+                  📡 {s.server || "-"} - {s.status || "offline"}
+                </Text>
+                <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_cm ?? "-"} cm</Text>
+
+                {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
+                {s.analog !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>}
+                {pingValues[serverKey] !== undefined && (
+                  <Text style={styles.statusText}>⚡ Ping Sensor: {pingValues[serverKey]}</Text>
+                )}
+
+                <View style={styles.buttonRow}>
+                  <Button
+                    title="Ativar"
+                    disabled={isOffline || !s.server || isNear}
+                    onPress={() => s.server && sendCommand(s.server, "activate")}
+                  />
+                  <Button
+                    title="Desativar"
+                    disabled={isOffline || !s.server || isNear}
+                    onPress={() => s.server && sendCommand(s.server, "deactivate")}
+                  />
+                  <Button
+                    title="Ping"
+                    disabled={isOffline || !s.server || isNear}
+                    onPress={() => s.server && sendCommand(s.server, "ping")}
+                  />
+                </View>
+              </LinearGradient>
+
+              <LinearGradient colors={["#1f1f1f", "#0f0f0f"]} style={styles.chartCard}>
+                <Text style={styles.chartTitle}>
+                  📈 Histórico do Analog ({serverKey}) — últimos {MAX_POINTS}s
+                </Text>
+                <SparkBar data={hist} width={graphWidth} />
+                <View style={styles.chartFooter}>
+                  <Text style={styles.chartFooterText}>
+                    Pontos: {hist.length}/{MAX_POINTS}
+                  </Text>
+                  <Text style={styles.chartFooterText}>
+                    Atual: {typeof s.analog === "number" ? s.analog : "-"}
+                  </Text>
+                </View>
+              </LinearGradient>
+            </>
+          );
+        }}
+      />
+    </LinearGradient>
   );
-};
-
-export default HiveScreen;
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1, padding: 16, justifyContent: "center", alignItems: "center" },
+  flatListContent: { flexGrow: 1, justifyContent: "center" },
+  nodeCard: {
     padding: 12,
-    backgroundColor: "#f4f4f4",
+    borderRadius: 12,
+    marginBottom: 12,
+    elevation: 3,
+    width: "90%",
+    alignSelf: "center",
   },
-  title: {
-    fontSize: 22,
+  chartCard: {
+    width: "90%",
+    alignSelf: "center",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 24,
+    elevation: 3,
+  },
+  chartTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#eaeaea",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  chartBox: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 10,
+    overflow: "hidden",
+    alignSelf: "center",
+    paddingTop: 8,
+    paddingHorizontal: 8,
+  },
+  chartAxis: {
+    position: "absolute",
+    bottom: 8,
+    left: 8,
+    right: 8,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
+  chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  chartLabels: {
+    position: "absolute",
+    top: 4,
+    left: 8,
+    right: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
+  chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
+  chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
+  nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
+  statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
+  warningText: {
+    fontSize: 16,
+    marginTop: 6,
     fontWeight: "bold",
-    marginVertical: 12,
+    color: "#856404",
     textAlign: "center",
   },
-  subtitle: {
-    fontSize: 18,
-    marginVertical: 8,
-    fontWeight: "600",
-  },
-  card: {
-    backgroundColor: "#fff",
-    padding: 12,
-    marginVertical: 8,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  server: {
-    fontWeight: "bold",
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  chart: {
-    marginTop: 8,
-    borderRadius: 8,
-  },
-  webviewContainer: {
-    marginTop: 20,
-    height: 320,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
+  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
 });
