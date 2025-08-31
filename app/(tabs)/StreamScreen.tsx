@@ -10,12 +10,11 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 
-const ESP32_IP = "http://192.168.4.1"; // IP do ESP32-CAM no SoftAP
+const ESP32_IP = "http://192.168.4.1"; // IP do ESP32 no SoftAP
 
 type StatusResponse = {
   led_builtin: "on" | "off";
   led_opposite: "on" | "off";
-  camera: string;
   ip: string;
 };
 
@@ -23,11 +22,11 @@ export default function App() {
   const [status, setStatus] = useState<StatusResponse>({
     led_builtin: "off",
     led_opposite: "on",
-    camera: "Erro",
     ip: ESP32_IP
   });
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastCapture, setLastCapture] = useState<string>("");
 
   useEffect(() => {
     fetchStatus();
@@ -60,6 +59,24 @@ export default function App() {
     }
   };
 
+  const capturePhoto = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${ESP32_IP}/capture`);
+      const data = await response.json();
+      if (data.capture) {
+        setLastCapture(data.capture);
+      } else {
+        setLastCapture("Erro ao capturar");
+      }
+    } catch (error) {
+      console.error("Erro ao capturar foto:", error);
+      setLastCapture("Erro ao capturar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchStatus().finally(() => setRefreshing(false));
@@ -72,7 +89,7 @@ export default function App() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      <Text style={styles.title}>📡 HIVE STREAM - ESP32-CAM</Text>
+      <Text style={styles.title}>📡 HIVE STREAM - ESP32</Text>
 
       <Text style={styles.text}>
         LED pino 2:{" "}
@@ -88,22 +105,23 @@ export default function App() {
         </Text>
       </Text>
 
-      <Text style={styles.text}>
-        Câmera:{" "}
-        <Text style={{ color: status.camera === "OK" ? "green" : "red" }}>
-          {status.camera}
-        </Text>
-      </Text>
-
       <Text style={styles.text}>IP do ESP32: {status.ip}</Text>
 
       {loading ? (
         <ActivityIndicator size="large" color="blue" />
       ) : (
-        <Button
-          title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
-          onPress={toggleLed}
-        />
+        <>
+          <Button
+            title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
+            onPress={toggleLed}
+          />
+          <View style={{ height: 10 }} />
+          <Button title="📷 Capturar Foto" onPress={capturePhoto} />
+        </>
+      )}
+
+      {lastCapture !== "" && (
+        <Text style={styles.text}>Última foto: {lastCapture}</Text>
       )}
 
       <Text style={styles.text}>📷 Câmera ao vivo:</Text>
