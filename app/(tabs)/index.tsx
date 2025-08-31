@@ -30,8 +30,9 @@ export default function HiveHomeScreen() {
   const scaleCard = useSharedValue(0.9);
   const rotateHex = useSharedValue(-10);
 
-  // IP padrão do Soft-AP do NodeMCU
-  const softAP_IP = '192.168.4.1';
+  // IPs: primeiro tenta STA, depois Soft-AP
+  const STA_IP = '192.168.15.138';
+  const SOFTAP_IP = '192.168.4.1';
 
   useEffect(() => {
     opacityTitle.value = withTiming(1, { duration: 800 });
@@ -41,11 +42,22 @@ export default function HiveHomeScreen() {
 
     const fetchData = async () => {
       try {
-        const response = await fetch(`http://${softAP_IP}/status`);
+        // Tenta STA primeiro
+        let response = await fetch(`http://${STA_IP}/status`);
+        if (!response.ok) throw new Error('STA offline');
         const data: SensorData = await response.json();
         setNode(data);
-      } catch (error) {
-        console.log('Erro ao obter dados do Soft-AP:', error);
+      } catch {
+        // Se STA falhar, tenta Soft-AP
+        try {
+          let response = await fetch(`http://${SOFTAP_IP}/status`);
+          if (!response.ok) throw new Error('Soft-AP offline');
+          const data: SensorData = await response.json();
+          setNode(data);
+        } catch (error) {
+          console.log('Erro ao obter dados do nó:', error);
+          setNode(null);
+        }
       }
     };
 
@@ -88,7 +100,9 @@ export default function HiveHomeScreen() {
           <Text style={styles.description}>👥 Mesh conectado: {node.mesh ? 'Sim' : 'Não'}</Text>
         </Animated.View>
       ) : (
-        <Text style={{ color: '#facc15', marginTop: 20 }}>Conecte-se ao AP do NodeMCU...</Text>
+        <Text style={{ color: '#facc15', marginTop: 20 }}>
+          Conecte-se ao nó via WiFi (STA ou Soft-AP)...
+        </Text>
       )}
 
       <Animated.View style={[styles.hexagonWrapper, hexStyle]}>
@@ -101,7 +115,6 @@ export default function HiveHomeScreen() {
   );
 }
 
-// (Estilos permanecem os mesmos)
 const HEX_SIZE = 80;
 
 const styles = StyleSheet.create({

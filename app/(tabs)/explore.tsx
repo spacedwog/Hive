@@ -16,7 +16,7 @@ import {
 // 📡 Mapa de IPs dos dispositivos conectados
 // -------------------------
 const nodes = [
-  { name: 'NODEMCU', ip: '192.168.4.1', secondary_ip: '192.168.15.138' }, // IP do SoftAP do NodeMCU
+  { name: 'NODEMCU', ip: '192.168.4.1', sta_ip: '192.168.15.138' }, // SoftAP + STA
 ];
 
 type NodeStatus = {
@@ -48,11 +48,9 @@ export default function ExploreScreen() {
   // -------------------------
   const getBarColor = (value: number, anomaly: boolean) => {
     if (anomaly) return '#ef4444'; // vermelho para anomalia
-
     if (value <= 30) return '#22c55e'; // verde
     if (value >= 55) return '#ef4444'; // vermelho
 
-    // gradiente verde -> amarelo -> vermelho
     const ratio = (value - 30) / (55 - 30);
     if (ratio < 0.5) {
       const r = Math.round(34 + (250 - 34) * (ratio * 2));
@@ -68,27 +66,41 @@ export default function ExploreScreen() {
   };
 
   // -------------------------
-  // 🔄 Buscar status do NodeMCU
+  // 🔄 Buscar status do NodeMCU (STA -> SoftAP)
   // -------------------------
   const fetchStatus = useCallback(async (showLoader = false) => {
     if (showLoader) setLoading(true);
     const newStatus: Record<string, NodeStatus> = {};
 
     for (let node of nodes) {
-      try {
-        const res = await axios.get(`http://${node.ip}/status`, { timeout: 3000 });
-        newStatus[node.name] = res.data;
+      let fetched = false;
 
-        // Atualiza histórico de sensor de som (sensor_db)
-        if (res.data?.sensor_db !== undefined) {
-          setHistory((prev) => {
-            const prevData = prev[node.name] || [];
-            const newData = [...prevData, res.data.sensor_db].slice(-30);
-            return { ...prev, [node.name]: newData };
-          });
+      // Tenta STA primeiro
+      try {
+        const res = await axios.get(`http://${node.sta_ip}/status`, { timeout: 3000 });
+        newStatus[node.name] = res.data;
+        fetched = true;
+      } catch {}
+
+      // Se STA falhar, tenta SoftAP
+      if (!fetched) {
+        try {
+          const res = await axios.get(`http://${node.ip}/status`, { timeout: 3000 });
+          newStatus[node.name] = res.data;
+        } catch {
+          newStatus[node.name] = { error: 'Offline ou inacessível' };
         }
-      } catch {
-        newStatus[node.name] = { error: 'Offline ou inacessível' };
+      }
+
+      // Atualiza histórico de sensor de som
+      if (newStatus[node.name]?.sensor_db !== undefined) {
+        setHistory((prev) => {
+          const prevData = prev[node.name] || [];
+          const newData = [...prevData, newStatus[node.name].sensor_db].filter(
+            (v): v is number => v !== undefined
+          ).slice(-30);
+          return { ...prev, [node.name]: newData };
+        });
       }
     }
 
@@ -101,7 +113,7 @@ export default function ExploreScreen() {
   // ⚡ Enviar comando para NodeMCU
   // -------------------------
   const sendCommand = async (node: string, action: string) => {
-    const ip = nodes.find(n => n.name === node)?.ip;
+    const ip = nodes.find(n => n.name === node)?.sta_ip || nodes.find(n => n.name === node)?.ip;
     if (!ip) return;
 
     try {
@@ -197,18 +209,10 @@ export default function ExploreScreen() {
                       >
                         ⚠️ Anomalia: {s.anomaly?.detected ? 'Detectada' : 'Normal'}
                       </Text>
-                      {s.anomaly?.message && (
-                        <Text style={styles.statusText}>📝 {s.anomaly.message}</Text>
-                      )}
-                      {s.anomaly?.current_value !== undefined && (
-                        <Text style={styles.statusText}>🔢 Valor Atual: {s.anomaly.current_value}</Text>
-                      )}
-                      {s.anomaly?.expected_range && (
-                        <Text style={styles.statusText}>📊 Faixa Esperada: {s.anomaly.expected_range}</Text>
-                      )}
-                      {s.timestamp !== undefined && (
-                        <Text style={styles.statusText}>📡 Ping Timestamp: {s.timestamp} ms</Text>
-                      )}
+                      {s.anomaly?.message && <Text style={styles.statusText}>📝 {s.anomaly.message}</Text>}
+                      {s.anomaly?.current_value !== undefined && <Text style={styles.statusText}>🔢 Valor Atual: {s.anomaly.current_value}</Text>}
+                      {s.anomaly?.expected_range && <Text style={styles.statusText}>📊 Faixa Esperada: {s.anomaly.expected_range}</Text>}
+                      {s.timestamp !== undefined && <Text style={styles.statusText}>📡 Ping Timestamp: {s.timestamp} ms</Text>}
                     </View>
 
                     {/* HISTÓRICO SENSOR */}
@@ -219,15 +223,11 @@ export default function ExploreScreen() {
                           <Text style={styles.statusText}>Nenhum dado coletado ainda...</Text>
                         ) : (
                           sensorHistory.map((val, idx) => {
-                            // Apenas a barra do valor que disparou a anomalia fica preta
                             const isAnomalyBar = !!(s?.anomaly?.detected && val === s.anomaly?.current_value);
                             const barColor = isAnomalyBar ? '#000000' : getBarColor(val, false);
                             const height = (val / maxValue) * 100;
                             return (
-                              <View
-                                key={idx}
-                                style={[styles.bar, { height: `${height}%`, backgroundColor: barColor }]}
-                              />
+                              <View key={idx} style={[styles.bar, { height: `${height}%`, backgroundColor: barColor }]} />
                             );
                           })
                         )}
