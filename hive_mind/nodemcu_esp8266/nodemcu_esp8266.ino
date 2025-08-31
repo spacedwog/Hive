@@ -41,6 +41,17 @@ const int soundMaxDB = 85;   // dB máximo esperado
 bool meshConnected = false;
 
 // -------------------------
+// 🔹 Variáveis para Serial display
+// -------------------------
+String lastLedStatus = "";
+String lastAPIP = "";
+String lastSTAIP = "";
+bool lastSTAConnected = false;
+int lastClientsAP = -1;
+float lastSoundDB = -1;
+bool lastSoundAnomaly = false;
+
+// -------------------------
 // 📜 Página HTML principal
 // -------------------------
 String htmlPage() {
@@ -62,6 +73,8 @@ String htmlPage() {
       <h1>HIVE EXPLORER</h1>
       <p>Status: <span id="status">Carregando...</span></p>
       <p>Nível de som: <span id="sound">0</span> dB</p>
+      <p>IP AP: <span id="ap_ip">...</span></p>
+      <p>IP STA: <span id="sta_ip">...</span></p>
       <button class="on" onclick="sendCmd('on')">Ativar</button>
       <button class="off" onclick="sendCmd('off')">Desativar</button>
       <script>
@@ -74,12 +87,16 @@ String htmlPage() {
             document.getElementById('status').innerText = data.status;
           });
         }
+
         function refreshStatus() {
           fetch('/status').then(res => res.json()).then(data => {
             document.getElementById('status').innerText = data.status;
             document.getElementById('sound').innerText = data.sensor_db.toFixed(1);
+            document.getElementById('ap_ip').innerText = data.server_ip;
+            document.getElementById('sta_ip').innerText = data.sta_ip;
           });
         }
+
         setInterval(refreshStatus, 500);
         refreshStatus();
       </script>
@@ -100,6 +117,7 @@ void handleStatus() {
   StaticJsonDocument<512> doc;
   doc["device"] = "ESP8266";
   doc["server_ip"] = WiFi.softAPIP().toString();
+  doc["sta_ip"] = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "desconectado";
   doc["sensor_raw"] = rawSoundValue;
   doc["sensor_db"] = soundDB;
   doc["mesh"] = meshConnected;
@@ -136,8 +154,8 @@ void handleCommand() {
   }
 
   String action = doc["action"];
-
   StaticJsonDocument<200> res;
+
   if (action == "on") {
     activated = true;
     digitalWrite(LED_BUILTIN, LOW);
@@ -167,29 +185,34 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
 
+  // Inicializa modo AP + STA
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ap_ssid, ap_password);
+  Serial.print("📡 SoftAP iniciado! IP: "); Serial.println(WiFi.softAPIP());
 
-  Serial.print("📡 SoftAP iniciado! IP: ");
-  Serial.println(WiFi.softAPIP());
-
+  // Conecta à rede STA com timeout de 10s
   WiFi.begin(sta_ssid, sta_password);
-  Serial.print("Conectando à internet");
-  while (WiFi.status() != WL_CONNECTED) {
+  Serial.print("Conectando à rede STA");
+  unsigned long startAttempt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\n✅ Conectado à internet");
-  Serial.print("IP STA: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n✅ Conectado à internet");
+    Serial.print("IP STA: "); Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\n⚠️ STA não conectada, operando apenas com AP");
+  }
 
+  // DNS server para captive portal
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
 
+  // Rotas do servidor HTTP
   server.on("/", HTTP_GET, handleRoot);
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
   server.begin();
-
   Serial.println("Servidor HTTP iniciado");
 }
 
@@ -204,9 +227,46 @@ void loop() {
   rawSoundValue = analogRead(pinMicrophone);
   if (rawSoundValue <= 0) rawSoundValue = 1; // evita log(0)
   soundDB = 20.0 * log10((float)rawSoundValue / 1023.0 * 1000.0); // escala aproximada
-
   soundAnomaly = (soundDB < soundMinDB || soundDB > soundMaxDB);
+
+  // Verifica se há clientes conectados ao AP
   meshConnected = WiFi.softAPgetStationNum() > 0;
 
-  delay(50);
+  // Exibição no Serial apenas se houver mudança
+  String ledStatus = activated ? "Ligado" : "Desligado";
+  String apIP = WiFi.softAPIP().toString();
+  String staIP = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "desconectado";
+  int clientsAP = WiFi.softAPgetStationNum();
+  bool staConnected = (WiFi.status() == WL_CONNECTED);
+
+  if (ledStatus != lastLedStatus ||
+      apIP != lastAPIP ||
+      staIP != lastSTAIP ||
+      staConnected != lastSTAConnected ||
+      clientsAP != lastClientsAP ||
+      fabs(soundDB - lastSoundDB) > 0.1 ||
+      soundAnomaly != lastSoundAnomaly) {
+
+    Serial.println("\n\033[1;34m====================================\033[0m");
+    Serial.print("🔹 \033[1;32mStatus do LED:\033[0m "); Serial.println(ledStatus);
+    Serial.print("📡 \033[1;36mIP SoftAP:\033[0m "); Serial.println(apIP);
+    Serial.print("🌐 \033[1;36mIP STA:\033[0m "); Serial.println(staIP);
+    Serial.print("🔌 \033[1;33mSTA Conectada:\033[0m "); Serial.println(staConnected ? "✅ Sim" : "❌ Não");
+    Serial.print("👥 \033[1;35mClientes AP:\033[0m "); Serial.println(clientsAP);
+    Serial.print("🔊 \033[1;33mSom (raw):\033[0m "); Serial.println(rawSoundValue);
+    Serial.print("📈 \033[1;33mSom (dB):\033[0m "); Serial.println(soundDB);
+    Serial.print("⚠️ \033[1;31mAnomalia de som:\033[0m "); Serial.println(soundAnomaly ? "❌ Fora do intervalo" : "✅ Normal");
+    Serial.println("\033[1;34m====================================\033[0m");
+
+    // Atualiza últimos valores
+    lastLedStatus = ledStatus;
+    lastAPIP = apIP;
+    lastSTAIP = staIP;
+    lastSTAConnected = staConnected;
+    lastClientsAP = clientsAP;
+    lastSoundDB = soundDB;
+    lastSoundAnomaly = soundAnomaly;
+  }
+
+  delay(500);
 }

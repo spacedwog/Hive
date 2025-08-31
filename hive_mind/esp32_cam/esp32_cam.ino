@@ -9,19 +9,26 @@
 bool ledOn = false;
 
 // --- Credenciais do Soft-AP ---
-const char* ssid = "HIVE STREAM";
-const char* password = "hvstream";
+const char* ap_ssid = "HIVE STREAM";
+const char* ap_password = "hvstream";
+
+// --- Credenciais de STA (conexão com roteador) ---
+const char* sta_ssid = "FAMILIA SANTOS";
+const char* sta_password = "6z2h1j3k9f";
 
 // --- Servidor HTTP ---
 WiFiServer server(80);
 
 // --- Status JSON ---
 String getStatusJSON() {
-  IPAddress ip = WiFi.softAPIP();
+  IPAddress ipAP = WiFi.softAPIP();
+  IPAddress ipSTA = WiFi.localIP();
+
   String json = "{";
   json += "\"led_builtin\":\"" + String(ledOn ? "on" : "off") + "\",";
   json += "\"led_opposite\":\"" + String(ledOn ? "off" : "on") + "\",";
-  json += "\"ip\":\"" + ip.toString() + "\"";
+  json += "\"ip_ap\":\"" + ipAP.toString() + "\",";
+  json += "\"ip_sta\":\"" + (ipSTA.toString() == "0.0.0.0" ? "desconectado" : ipSTA.toString()) + "\"";
   json += "}";
   return json;
 }
@@ -40,7 +47,10 @@ void handleStream(WiFiClient &client) {
   client.println("  const res = await fetch('/status');");
   client.println("  const data = await res.json();");
   client.println("  document.getElementById('status').innerHTML = ");
-  client.println("    `<p>ESP32: ${data.led_builtin}</p><p>LED 32: ${data.led_opposite}</p><p>IP: ${data.ip}</p>`;");
+  client.println("    `<p>ESP32 LED: ${data.led_builtin}</p>` +");
+  client.println("    `<p>LED 32: ${data.led_opposite}</p>` +");
+  client.println("    `<p>IP AP: ${data.ip_ap}</p>` +");
+  client.println("    `<p>IP STA: ${data.ip_sta}</p>`;");
   client.println("}");
   client.println("setInterval(fetchStatus, 1000);");
   client.println("fetchStatus();");
@@ -59,14 +69,35 @@ void setup() {
   Serial.begin(115200);
   Serial.println("🚀 Iniciando HIVE STREAM (ESP32-WROVER-DEV)...");
 
-  if(!WiFi.softAP(ssid, password)) {
+  // --- Inicializa Soft-AP ---
+  if (!WiFi.softAP(ap_ssid, ap_password)) {
     Serial.println("❌ Falha ao iniciar Soft-AP");
-    while(true) delay(1000);
+    while (true) delay(1000);
   }
-
   Serial.print("📡 AP iniciado. IP: ");
   Serial.println(WiFi.softAPIP());
 
+  // --- Tenta conectar como STA ---
+  WiFi.begin(sta_ssid, sta_password);
+  Serial.print("🔄 Conectando a STA (");
+  Serial.print(sta_ssid);
+  Serial.println(")...");
+
+  unsigned long startAttemptTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("✅ Conectado à STA. IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("⚠️ STA não conectada. Continuando apenas com AP...");
+  }
+
+  // --- Inicia servidor HTTP ---
   server.begin();
   Serial.println("✅ Servidor HTTP iniciado");
 }
