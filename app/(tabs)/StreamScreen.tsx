@@ -1,13 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Button,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View
-} from "react-native";
+import React, { useState } from "react";
+import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 const ESP32_IP = "http://192.168.4.1"; // IP do ESP32 no SoftAP
@@ -22,77 +14,30 @@ export default function App() {
   const [status, setStatus] = useState<StatusResponse>({
     led_builtin: "off",
     led_opposite: "on",
-    ip: ESP32_IP
+    ip: ESP32_IP,
   });
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastCapture, setLastCapture] = useState<string>("");
-
-  useEffect(() => {
-    fetchStatus();
-  }, []);
-
-  const fetchStatus = async () => {
-    try {
-      setLoading(true);
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(`${ESP32_IP}/status`, { signal: controller.signal });
-      const data: StatusResponse = await response.json();
-      setStatus(data);
-      clearTimeout(timeout);
-    } catch (error) {
-      console.error("Erro ao buscar status do ESP32:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const toggleLed = async () => {
     try {
-      setLoading(true);
       const newState = status.led_builtin === "on" ? "L" : "H";
       await fetch(`${ESP32_IP}/${newState}`);
-      fetchStatus();
+      // Atualiza localmente para feedback imediato
+      setStatus({
+        ...status,
+        led_builtin: status.led_builtin === "on" ? "off" : "on",
+        led_opposite: status.led_opposite === "on" ? "off" : "on",
+      });
     } catch (error) {
       console.error("Erro ao acessar ESP32:", error);
     }
   };
 
-  const capturePhoto = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${ESP32_IP}/capture`);
-      const data = await response.json();
-      if (data.capture) {
-        setLastCapture(data.capture);
-      } else {
-        setLastCapture("Erro ao capturar");
-      }
-    } catch (error) {
-      console.error("Erro ao capturar foto:", error);
-      setLastCapture("Erro ao capturar");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchStatus().finally(() => setRefreshing(false));
-  }, []);
-
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
+    <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM - ESP32</Text>
 
       <Text style={styles.text}>
-        LED pino 2:{" "}
+        ESP32:{" "}
         <Text style={{ color: status.led_builtin === "on" ? "green" : "red" }}>
           {status.led_builtin.toUpperCase()}
         </Text>
@@ -107,22 +52,10 @@ export default function App() {
 
       <Text style={styles.text}>IP do ESP32: {status.ip}</Text>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="blue" />
-      ) : (
-        <>
-          <Button
-            title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
-            onPress={toggleLed}
-          />
-          <View style={{ height: 10 }} />
-          <Button title="📷 Capturar Foto" onPress={capturePhoto} />
-        </>
-      )}
-
-      {lastCapture !== "" && (
-        <Text style={styles.text}>Última foto: {lastCapture}</Text>
-      )}
+      <Button
+        title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
+        onPress={toggleLed}
+      />
 
       <Text style={styles.text}>📷 Câmera ao vivo:</Text>
       <View style={styles.videoContainer}>
@@ -132,6 +65,12 @@ export default function App() {
           javaScriptEnabled
           domStorageEnabled
           allowsFullscreenVideo
+          onHttpError={({ nativeEvent }) => console.log("HTTP Error:", nativeEvent)}
+          onLoadProgress={({ nativeEvent }) => {
+            // Extrai o status do header X-ESP32-Status
+            const header = nativeEvent.title; // WebView não dá acesso direto aos headers
+            // Caso queira realmente ler status em tempo real, seria necessário um websocket ou fetch separado
+          }}
         />
       </View>
     </ScrollView>
