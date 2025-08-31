@@ -72,7 +72,7 @@ export default function HiveScreen() {
   // ==== Buscar status dos servidores ====
   const fetchStatus = async () => {
     try {
-      const servers = ["192.168.4.1"];
+      const servers = ["192.168.4.1", "192.168.15.166"];
       const responses = await Promise.all(
         servers.map(async (server) => {
           try {

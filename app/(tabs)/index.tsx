@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -7,17 +7,51 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+interface SensorData {
+  device: string;
+  server_ip: string;
+  sta_ip: string;
+  sensor_raw: number;
+  sensor_db: number;
+  mesh: boolean;
+  status: string;
+  anomaly: {
+    detected: boolean;
+    message: string;
+    current_value: number;
+  };
+}
+
 export default function HiveHomeScreen() {
+  const [node, setNode] = useState<SensorData | null>(null);
+
   const opacityTitle = useSharedValue(0);
   const translateYTitle = useSharedValue(-20);
   const scaleCard = useSharedValue(0.9);
   const rotateHex = useSharedValue(-10);
+
+  // IP padrão do Soft-AP do NodeMCU
+  const softAP_IP = '192.168.4.1';
 
   useEffect(() => {
     opacityTitle.value = withTiming(1, { duration: 800 });
     translateYTitle.value = withTiming(0, { duration: 800 });
     scaleCard.value = withDelay(400, withTiming(1, { duration: 800 }));
     rotateHex.value = withDelay(800, withTiming(0, { duration: 1000 }));
+
+    const fetchData = async () => {
+      try {
+        const response = await fetch(`http://${softAP_IP}/status`);
+        const data: SensorData = await response.json();
+        setNode(data);
+      } catch (error) {
+        console.log('Erro ao obter dados do Soft-AP:', error);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const titleStyle = useAnimatedStyle(() => ({
@@ -40,24 +74,34 @@ export default function HiveHomeScreen() {
         <Text style={styles.subtitle}>Hyper-Intelligent Virtual Entity</Text>
       </Animated.View>
 
-      <Animated.View style={[styles.card, cardStyle]}>
-        <Text style={styles.description}>
-          H.I.V.E. é uma IA descentralizada inspirada em colmeias, composta por múltiplos nós físicos e digitais que colaboram
-          para tomar decisões inteligentes. Cada nó (ESP32, NodeMCU) envia dados sensoriais para um núcleo de controle
-          que aprende, interpreta e reage em tempo real. Sua missão: coordenar, vigiar e otimizar sistemas embarcados.
-        </Text>
-      </Animated.View>
+      {node ? (
+        <Animated.View style={[styles.card, cardStyle]}>
+          <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
+          <Text style={styles.description}>📡 IP AP: {node.server_ip}</Text>
+          <Text style={styles.description}>🌐 IP STA: {node.sta_ip}</Text>
+          <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw}</Text>
+          <Text style={styles.description}>📈 Som (dB): {node.sensor_db.toFixed(1)}</Text>
+          <Text style={styles.description}>
+            ⚠️ Anomalia: {node.anomaly.detected ? node.anomaly.message : 'Normal'}
+          </Text>
+          <Text style={styles.description}>🔌 Status: {node.status}</Text>
+          <Text style={styles.description}>👥 Mesh conectado: {node.mesh ? 'Sim' : 'Não'}</Text>
+        </Animated.View>
+      ) : (
+        <Text style={{ color: '#facc15', marginTop: 20 }}>Conecte-se ao AP do NodeMCU...</Text>
+      )}
 
       <Animated.View style={[styles.hexagonWrapper, hexStyle]}>
         <View style={styles.hexagon}>
           <View style={styles.hexagonInner} />
         </View>
-        <Text style={styles.hexagonLabel}>Nó Ativo</Text>
+        <Text style={styles.hexagonLabel}>{node ? 'Nó Ativo' : 'Nenhum nó'}</Text>
       </Animated.View>
     </ScrollView>
   );
 }
 
+// (Estilos permanecem os mesmos)
 const HEX_SIZE = 80;
 
 const styles = StyleSheet.create({
@@ -101,7 +145,7 @@ const styles = StyleSheet.create({
   },
   hexagon: {
     width: HEX_SIZE,
-    height: HEX_SIZE * 0.866, // altura do hexágono (sin(60°))
+    height: HEX_SIZE * 0.866,
     backgroundColor: '#facc15',
     marginVertical: HEX_SIZE * 0.133,
     justifyContent: 'center',

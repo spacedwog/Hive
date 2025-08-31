@@ -16,7 +16,7 @@ import {
 // 📡 Mapa de IPs dos dispositivos conectados
 // -------------------------
 const nodes = [
-  { name: 'NODEMCU', ip: '192.168.4.1' }, // IP do SoftAP do NodeMCU
+  { name: 'NODEMCU', ip: '192.168.4.1', secondary_ip: '192.168.15.138' }, // IP do SoftAP do NodeMCU
 ];
 
 type NodeStatus = {

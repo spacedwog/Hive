@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
-const ESP32_IP = "http://192.168.4.1"; // IP do ESP32 no SoftAP
+const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
+const STA_IP = "http://192.168.15.188";  // ESP32 conectado à rede WiFi (STA)
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -14,14 +15,15 @@ export default function App() {
   const [status, setStatus] = useState<StatusResponse>({
     led_builtin: "off",
     led_opposite: "on",
-    ip: ESP32_IP,
+    ip: SOFTAP_IP,
   });
+
+  const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
 
   const toggleLed = async () => {
     try {
       const newState = status.led_builtin === "on" ? "L" : "H";
-      await fetch(`${ESP32_IP}/${newState}`);
-      // Atualiza localmente para feedback imediato
+      await fetch(`${status.ip}/${newState}`);
       setStatus({
         ...status,
         led_builtin: status.led_builtin === "on" ? "off" : "on",
@@ -32,9 +34,16 @@ export default function App() {
     }
   };
 
+  const switchMode = () => {
+    const newMode = mode === "Soft-AP" ? "STA" : "Soft-AP";
+    const newIP = newMode === "Soft-AP" ? SOFTAP_IP : STA_IP;
+    setMode(newMode);
+    setStatus((prev) => ({ ...prev, ip: newIP }));
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>📡 HIVE STREAM - ESP32</Text>
+      <Text style={styles.title}>📡 HIVE STREAM - ESP32 ({mode})</Text>
 
       <Text style={styles.text}>
         ESP32:{" "}
@@ -56,21 +65,22 @@ export default function App() {
         title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
         onPress={toggleLed}
       />
+      <View style={{ marginVertical: 10 }} />
+      <Button
+        title={`Mudar para ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
+        onPress={switchMode}
+        color="#facc15"
+      />
 
-      <Text style={styles.text}>📷 Câmera ao vivo:</Text>
+      <Text style={[styles.text, { marginTop: 20 }]}>📷 Câmera ao vivo:</Text>
       <View style={styles.videoContainer}>
         <WebView
-          source={{ uri: `${ESP32_IP}/stream` }}
+          source={{ uri: `${status.ip}/stream` }}
           style={styles.video}
           javaScriptEnabled
           domStorageEnabled
           allowsFullscreenVideo
           onHttpError={({ nativeEvent }) => console.log("HTTP Error:", nativeEvent)}
-          onLoadProgress={({ nativeEvent }) => {
-            // Extrai o status do header X-ESP32-Status
-            const header = nativeEvent.title; // WebView não dá acesso direto aos headers
-            // Caso queira realmente ler status em tempo real, seria necessário um websocket ou fetch separado
-          }}
         />
       </View>
     </ScrollView>
