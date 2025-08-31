@@ -29,9 +29,14 @@ long lerSensor() {
 const char* ap_ssid = "HIVE VESPA";
 const char* ap_password = "hivemind";
 
+// ==== Credenciais do STA ====
+const char* sta_ssid = "FAMILIA SANTOS";    // 🔹 Coloque seu SSID aqui
+const char* sta_password = "6z2h1j3k9f";    // 🔹 Coloque sua senha aqui
+
 // ==== Servidor Web ====
 WebServer server(80);
 bool activated = false;
+bool staConnected = false;
 
 // ==== Autenticação ====
 const char* authUsername = "spacedwog";
@@ -92,7 +97,8 @@ void handleStatus() {
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_cm"] = medirDistancia();
   doc["analog"] = lerSensor();
-  doc["server"] = WiFi.softAPIP().toString();
+  doc["wifi_mode"] = staConnected ? "STA" : "AP";
+  doc["ip"] = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
 
   String response;
   serializeJson(doc, response);
@@ -161,8 +167,29 @@ void setup() {
   SerialVESPA.begin(BAUD_UART, SERIAL_8N1, RX_VESPA, TX_VESPA);
   Serial.println("UART para ESP32-CAM iniciada");
 
+  // Inicia AP
   WiFi.softAP(ap_ssid, ap_password);
-  Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
+  Serial.print("AP ativo. IP: "); Serial.println(WiFi.softAPIP());
+
+  // Tenta conectar como STA
+  WiFi.begin(sta_ssid, sta_password);
+  Serial.print("Conectando ao STA ");
+  Serial.print(sta_ssid);
+
+  unsigned long startAttempt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    staConnected = true;
+    Serial.print("Conectado ao STA. IP: "); Serial.println(WiFi.localIP());
+  } else {
+    staConnected = false;
+    Serial.println("Falha ao conectar no STA. Usando apenas AP.");
+  }
 
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
