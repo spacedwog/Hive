@@ -9,6 +9,7 @@
       "@/*": ["./*"]
     }
   },
+  "exclude": ["node_modules/expo-sqlite"],
   "include": [
     "src",
     "victory-native.d.ts",
