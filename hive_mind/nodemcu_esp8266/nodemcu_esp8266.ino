@@ -3,12 +3,15 @@
 #include <ArduinoJson.h>
 #include <DNSServer.h>
 #include <math.h>
+#include <painlessMesh.h>
+#include <Espalexa.h>
+#include <EspalexaDevice.h>
 
 // -------------------------
 // 📶 Configurações WiFi
 // -------------------------
 const char* ap_ssid = "HIVE EXPLORER";
-const char* ap_password = "explorer"; // mínimo 8 caracteres
+const char* ap_password = "explorer";
 
 const char* sta_ssid = "FAMILIA SANTOS";
 const char* sta_password = "6z2h1j3k9f";
@@ -21,28 +24,38 @@ DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
 // -------------------------
-// ⚙️ Controle
+// 🔹 Mesh
 // -------------------------
+#define MESH_PREFIX     "HIVE MESH"
+#define MESH_PASSWORD   "hivemesh"
+#define MESH_PORT       5555
+
+painlessMesh mesh;
+
+// -------------------------
+// 🔹 Espalexa (Alexa)
+#define MAX_DEVICES 5
+Espalexa espalexa;
+
+// -------------------------
+// ⚙️ Controle
 bool activated = false;
 
 // -------------------------
 // 🔊 Sensor de Som
-// -------------------------
-const int pinMicrophone = A0;  // Sensor de som analógico
+const int pinMicrophone = A0;
 int rawSoundValue = 0;
 float soundDB = 0.0;
 bool soundAnomaly = false;
-const int soundMinDB = 30;   // dB mínimo esperado
-const int soundMaxDB = 85;   // dB máximo esperado
+const int soundMinDB = 30;
+const int soundMaxDB = 85;
 
 // -------------------------
 // 📟 Status mesh
-// -------------------------
 bool meshConnected = false;
 
 // -------------------------
 // 🔹 Variáveis para Serial display
-// -------------------------
 String lastLedStatus = "";
 String lastAPIP = "";
 String lastSTAIP = "";
@@ -53,7 +66,6 @@ bool lastSoundAnomaly = false;
 
 // -------------------------
 // 📜 Página HTML principal
-// -------------------------
 String htmlPage() {
   String page = R"rawliteral(
     <!DOCTYPE html>
@@ -108,10 +120,7 @@ String htmlPage() {
 
 // -------------------------
 // 📡 Rotas
-// -------------------------
-void handleRoot() {
-  server.send(200, "text/html", htmlPage());
-}
+void handleRoot() { server.send(200, "text/html", htmlPage()); }
 
 void handleStatus() {
   StaticJsonDocument<512> doc;
@@ -124,16 +133,18 @@ void handleStatus() {
   doc["status"] = activated ? "Ligado" : "Desligado";
 
   JsonObject anomalyObj = doc.createNestedObject("anomaly");
-  if (soundAnomaly) {
-    anomalyObj["detected"] = true;
-    anomalyObj["message"] = "Nível de som fora do intervalo permitido";
-    anomalyObj["expected_range"] = String(soundMinDB) + " - " + String(soundMaxDB) + " dB";
-    anomalyObj["current_value"] = soundDB;
-    anomalyObj["timestamp_ms"] = millis();
-  } else {
-    anomalyObj["detected"] = false;
-    anomalyObj["message"] = "Som dentro do intervalo normal";
+  anomalyObj["detected"] = soundAnomaly;
+  anomalyObj["message"] = soundAnomaly ? "Nível de som fora do intervalo" : "Normal";
+  anomalyObj["current_value"] = soundDB;
+  anomalyObj["expected_range"] = String(soundMinDB) + " - " + String(soundMaxDB);
+  anomalyObj["timestamp_ms"] = millis();
+
+  // Informações Mesh
+  JsonArray meshNodes = doc.createNestedArray("mesh_nodes");
+  for (auto nodeId : mesh.getNodeList()) {
+    meshNodes.add(nodeId);
   }
+  doc["mesh_local_id"] = mesh.getNodeId();
 
   String json;
   serializeJson(doc, json);
@@ -160,10 +171,12 @@ void handleCommand() {
     activated = true;
     digitalWrite(LED_BUILTIN, LOW);
     res["status"] = "Ligado";
+    mesh.sendBroadcast("on");
   } else if (action == "off") {
     activated = false;
     digitalWrite(LED_BUILTIN, HIGH);
     res["status"] = "Desligado";
+    mesh.sendBroadcast("off");
   } else if (action == "ping") {
     res["response"] = "pong";
     res["timestamp"] = millis();
@@ -178,8 +191,73 @@ void handleCommand() {
 }
 
 // -------------------------
-// ⚙️ Setup
+// 🔄 Funções auxiliares
+void readSoundSensor() {
+  rawSoundValue = analogRead(pinMicrophone);
+  if (rawSoundValue <= 0) rawSoundValue = 1;
+  soundDB = 20.0 * log10((float)rawSoundValue / 1023.0 * 1000.0);
+  soundAnomaly = (soundDB < soundMinDB || soundDB > soundMaxDB);
+}
+
+void displayStatusSerial() {
+  String ledStatus = activated ? "Ligado" : "Desligado";
+  String apIP = WiFi.softAPIP().toString();
+  String staIP = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "desconectado";
+  int clientsAP = WiFi.softAPgetStationNum();
+  bool staConnected = (WiFi.status() == WL_CONNECTED);
+
+  meshConnected = mesh.getNodeList().size() > 0;
+
+  if (ledStatus != lastLedStatus || apIP != lastAPIP || staIP != lastSTAIP || staConnected != lastSTAConnected ||
+      clientsAP != lastClientsAP || fabs(soundDB - lastSoundDB) > 0.1 || soundAnomaly != lastSoundAnomaly) {
+
+    Serial.println("\n====================================");
+    Serial.print("Status do LED: "); Serial.println(ledStatus);
+    Serial.print("IP SoftAP: "); Serial.println(apIP);
+    Serial.print("IP STA: "); Serial.println(staIP);
+    Serial.print("STA Conectada: "); Serial.println(staConnected ? "Sim" : "Não");
+    Serial.print("Clientes AP: "); Serial.println(clientsAP);
+    Serial.print("Som (raw): "); Serial.println(rawSoundValue);
+    Serial.print("Som (dB): "); Serial.println(soundDB);
+    Serial.print("Anomalia de som: "); Serial.println(soundAnomaly ? "Fora do intervalo" : "Normal");
+
+    // Informações Mesh
+    Serial.println("\n--------- Mesh ---------");
+    Serial.print("Mesh ativo: "); Serial.println(meshConnected ? "Sim" : "Não");
+    Serial.print("ID do nó local (Mesh): "); Serial.println(mesh.getNodeId());
+    Serial.print("IP de conexão do nó (STA/AP): "); 
+    Serial.println(staConnected ? WiFi.localIP() : WiFi.softAPIP());
+    Serial.print("Número de nós conectados: "); Serial.println(mesh.getNodeList().size());
+    if (meshConnected) {
+      Serial.print("IDs dos nós conectados: ");
+      for (auto nodeId : mesh.getNodeList()) {
+        Serial.print(nodeId);
+        Serial.print(" ");
+      }
+      Serial.println();
+    }
+    Serial.println("====================================");
+
+    lastLedStatus = ledStatus;
+    lastAPIP = apIP;
+    lastSTAIP = staIP;
+    lastSTAConnected = staConnected;
+    lastClientsAP = clientsAP;
+    lastSoundDB = soundDB;
+    lastSoundAnomaly = soundAnomaly;
+  }
+}
+
 // -------------------------
+// Callback do Espalexa
+void devicePowerChanged(uint8_t deviceId, bool power) {
+  activated = power;
+  digitalWrite(LED_BUILTIN, power ? LOW : HIGH);
+  mesh.sendBroadcast(power ? "on" : "off");
+}
+
+// -------------------------
+// ⚙️ Setup
 void setup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -188,9 +266,9 @@ void setup() {
   // Inicializa modo AP + STA
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ap_ssid, ap_password);
-  Serial.print("📡 SoftAP iniciado! IP: "); Serial.println(WiFi.softAPIP());
+  Serial.print("SoftAP iniciado! IP: "); Serial.println(WiFi.softAPIP());
 
-  // Conecta à rede STA com timeout de 10s
+  // Conecta à rede STA
   WiFi.begin(sta_ssid, sta_password);
   Serial.print("Conectando à rede STA");
   unsigned long startAttempt = millis();
@@ -199,10 +277,10 @@ void setup() {
     Serial.print(".");
   }
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ Conectado à internet");
+    Serial.println("\nConectado à internet");
     Serial.print("IP STA: "); Serial.println(WiFi.localIP());
   } else {
-    Serial.println("\n⚠️ STA não conectada, operando apenas com AP");
+    Serial.println("\nSTA não conectada, operando apenas com AP");
   }
 
   // DNS server para captive portal
@@ -214,59 +292,36 @@ void setup() {
   server.on("/command", HTTP_POST, handleCommand);
   server.begin();
   Serial.println("Servidor HTTP iniciado");
+
+  // Inicializa Mesh
+  mesh.setDebugMsgTypes(ERROR | STARTUP | CONNECTION);
+  mesh.init(MESH_PREFIX, MESH_PASSWORD, MESH_PORT);
+  mesh.onReceive([](uint32_t from, String &msg){
+    Serial.printf("Mensagem recebida de %u: %s\n", from, msg.c_str());
+    if(msg == "on") {
+      activated = true;
+      digitalWrite(LED_BUILTIN, LOW);
+    } else if(msg == "off") {
+      activated = false;
+      digitalWrite(LED_BUILTIN, HIGH);
+    }
+  });
+
+  // Inicializa Espalexa
+  espalexa.addDevice("HIVE EXPLORER", devicePowerChanged);
+  espalexa.begin(&server); // <- ponteiro do servidor
 }
 
 // -------------------------
 // 🔄 Loop principal
-// -------------------------
 void loop() {
   dnsServer.processNextRequest();
   server.handleClient();
+  mesh.update();
+  espalexa.loop();
 
-  // 🔊 Leitura do sensor em decibéis
-  rawSoundValue = analogRead(pinMicrophone);
-  if (rawSoundValue <= 0) rawSoundValue = 1; // evita log(0)
-  soundDB = 20.0 * log10((float)rawSoundValue / 1023.0 * 1000.0); // escala aproximada
-  soundAnomaly = (soundDB < soundMinDB || soundDB > soundMaxDB);
-
-  // Verifica se há clientes conectados ao AP
-  meshConnected = WiFi.softAPgetStationNum() > 0;
-
-  // Exibição no Serial apenas se houver mudança
-  String ledStatus = activated ? "Ligado" : "Desligado";
-  String apIP = WiFi.softAPIP().toString();
-  String staIP = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "desconectado";
-  int clientsAP = WiFi.softAPgetStationNum();
-  bool staConnected = (WiFi.status() == WL_CONNECTED);
-
-  if (ledStatus != lastLedStatus ||
-      apIP != lastAPIP ||
-      staIP != lastSTAIP ||
-      staConnected != lastSTAConnected ||
-      clientsAP != lastClientsAP ||
-      fabs(soundDB - lastSoundDB) > 0.1 ||
-      soundAnomaly != lastSoundAnomaly) {
-
-    Serial.println("\n\033[1;34m====================================\033[0m");
-    Serial.print("🔹 \033[1;32mStatus do LED:\033[0m "); Serial.println(ledStatus);
-    Serial.print("📡 \033[1;36mIP SoftAP:\033[0m "); Serial.println(apIP);
-    Serial.print("🌐 \033[1;36mIP STA:\033[0m "); Serial.println(staIP);
-    Serial.print("🔌 \033[1;33mSTA Conectada:\033[0m "); Serial.println(staConnected ? "✅ Sim" : "❌ Não");
-    Serial.print("👥 \033[1;35mClientes AP:\033[0m "); Serial.println(clientsAP);
-    Serial.print("🔊 \033[1;33mSom (raw):\033[0m "); Serial.println(rawSoundValue);
-    Serial.print("📈 \033[1;33mSom (dB):\033[0m "); Serial.println(soundDB);
-    Serial.print("⚠️ \033[1;31mAnomalia de som:\033[0m "); Serial.println(soundAnomaly ? "❌ Fora do intervalo" : "✅ Normal");
-    Serial.println("\033[1;34m====================================\033[0m");
-
-    // Atualiza últimos valores
-    lastLedStatus = ledStatus;
-    lastAPIP = apIP;
-    lastSTAIP = staIP;
-    lastSTAConnected = staConnected;
-    lastClientsAP = clientsAP;
-    lastSoundDB = soundDB;
-    lastSoundAnomaly = soundAnomaly;
-  }
+  readSoundSensor();
+  displayStatusSerial();
 
   delay(500);
 }
