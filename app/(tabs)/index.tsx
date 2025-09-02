@@ -9,15 +9,12 @@ interface NodeData {
   sta_ip: string;
   sensor_raw: number;
   sensor_db: number;
-  mesh: boolean;
   status: string;
   anomaly: {
     detected: boolean;
     message: string;
     current_value: number;
   };
-  mesh_local_id?: number;
-  mesh_nodes?: number[];
 }
 
 export default function HiveHomeScreen() {
@@ -31,7 +28,6 @@ export default function HiveHomeScreen() {
   const STA_IP = '192.168.15.138';
   const SOFTAP_IP = '192.168.4.1';
 
-  // Função para ativar/desativar LED via servidor
   const sendCommand = async (ip: string, cmd: 'on' | 'off') => {
     try {
       await fetch(`http://${ip}/command`, {
@@ -59,7 +55,17 @@ export default function HiveHomeScreen() {
           const response = await fetch(`http://${ip}/status`);
           if (!response.ok) throw new Error('Offline');
           const data = await response.json();
-          fetchedNodes.push({ ...data, id: ip });
+
+          fetchedNodes.push({
+            id: ip,
+            device: data.device,
+            server_ip: data.server_ip,
+            sta_ip: data.sta_ip,
+            sensor_raw: data.sensor_raw,
+            sensor_db: data.sensor_db,
+            status: data.status,
+            anomaly: data.anomaly,
+          });
         } catch {}
       }
 
@@ -103,15 +109,6 @@ export default function HiveHomeScreen() {
               ⚠️ Anomalia: {node.anomaly.detected ? node.anomaly.message : 'Normal'}
             </Text>
             <Text style={styles.description}>🔌 Status: {node.status}</Text>
-            <Text style={styles.description}>👥 Mesh conectado: {node.mesh ? 'Sim' : 'Não'}</Text>
-            {node.mesh && (
-              <>
-                <Text style={styles.description}>🆔 ID do nó local: {node.mesh_local_id}</Text>
-                <Text style={styles.description}>
-                  🔗 Nós conectados: {node.mesh_nodes?.length ?? 0} {node.mesh_nodes?.join(', ')}
-                </Text>
-              </>
-            )}
 
             <View style={{ flexDirection: 'row', marginTop: 10 }}>
               <TouchableOpacity
@@ -175,7 +172,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     transform: [{ rotate: '30deg' }],
   },
-  hexagonInner: { width: HEX_SIZE, height: HEX_SIZE * 0.866, backgroundColor: '#facc15', transform: [{ rotate: '-30deg' }] },
+  hexagonInner: {
+    width: HEX_SIZE,
+    height: HEX_SIZE * 0.866,
+    backgroundColor: '#facc15',
+    transform: [{ rotate: '-30deg' }],
+  },
   hexagonLabel: { marginTop: 10, fontSize: 16, color: '#facc15', fontWeight: '600' },
   btn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
   btnText: { color: '#fff', fontWeight: '600' },
