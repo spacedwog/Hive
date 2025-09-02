@@ -20,7 +20,9 @@
     "@shopify/react-native-skia": "^2.2.3",
     "axios": "^1.11.0",
     "base-64": "^1.0.0",
+    "crypto-js": "^4.2.0",
     "expo": "^53.0.20",
+    "expo-av": "~15.1.7",
     "expo-blur": "~14.1.5",
     "expo-camera": "~16.1.11",
     "expo-constants": "~17.1.7",
@@ -58,13 +60,13 @@
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
     "three": "^0.166.1",
-    "victory-native": "^41.19.3",
-    "expo-av": "~15.1.7"
+    "victory-native": "^41.19.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@react-native-community/cli": "^10.1.0",
     "@types/base-64": "^1.0.2",
+    "@types/crypto-js": "^4.2.2",
     "@types/react": "~19.0.10",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
