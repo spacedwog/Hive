@@ -1,5 +1,5 @@
 import axios from "axios";
-import * as Crypto from "crypto-js"; // 🔹 Instale: npm install crypto-js
+import * as base64 from "base-64";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -13,9 +13,6 @@ import {
   useWindowDimensions
 } from "react-native";
 
-// 🔑 Mesma chave do ESP32
-const HMAC_SECRET = "DONT-USE-THIS-IN-PROD-CHANGE-ME-32BYTES-MIN";
-
 type NodeStatus = {
   device?: string;
   server?: string;
@@ -26,24 +23,9 @@ type NodeStatus = {
 };
 
 const MAX_ANALOG = 2400;
-const MAX_POINTS = 60;
+const MAX_POINTS = 60; // histórico por servidor (60s)
 
-function generateNonce() {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
-}
-
-function signRequest(method: string, path: string, body: string) {
-  const ts = Math.floor(Date.now() / 1000).toString();
-  const nonce = generateNonce();
-  const canonical = `${ts}\n${method}\n${path}\n${nonce}\n${body}`;
-
-  const hash = Crypto.HmacSHA256(canonical, HMAC_SECRET);
-  const signature = Crypto.enc.Base64.stringify(hash);
-
-  return { ts, nonce, signature };
-}
-
-// ==== Gráfico de barras ====
+// ==== Componente de gráfico nativo ====
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
   data,
   width,
@@ -63,10 +45,7 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
           return (
             <View
               key={`${i}-${v}`}
-              style={[
-                styles.chartBar,
-                { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap },
-              ]}
+              style={[styles.chartBar, { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap }]}
             />
           );
         })}
@@ -86,23 +65,20 @@ export default function HiveScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const authUsername = "spacedwog";
+  const authPassword = "Kimera12@";
+  const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // ==== Buscar status ====
+  // ==== Buscar status dos servidores ====
   const fetchStatus = async () => {
     try {
       const servers = ["192.168.4.1", "192.168.15.166"];
       const responses = await Promise.all(
         servers.map(async (server) => {
           try {
-            const path = "/status";
-            const { ts, nonce, signature } = signRequest("GET", path, "");
-            const res = await axios.get(`http://${server}${path}`, {
+            const res = await axios.get(`http://${server}/status`, {
               timeout: 3000,
-              headers: {
-                "X-Timestamp": ts,
-                "X-Nonce": nonce,
-                "X-Signature": signature,
-              },
+              headers: { Authorization: authHeader },
             });
             return { ...res.data, server };
           } catch (err) {
@@ -119,6 +95,7 @@ export default function HiveScreen() {
         }
       });
 
+      // Atualiza histórico
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
@@ -137,24 +114,13 @@ export default function HiveScreen() {
     }
   };
 
-  // ==== Enviar comando ====
+  // ==== Enviar comando para servidor ====
   const sendCommand = async (server: string, command: string) => {
     try {
-      const path = "/command";
-      const body = JSON.stringify({ command });
-      const { ts, nonce, signature } = signRequest("POST", path, body);
-
       const res = await axios.post(
-        `http://${server}${path}`,
+        `http://${server}/command`,
         { command },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "X-Timestamp": ts,
-            "X-Nonce": nonce,
-            "X-Signature": signature,
-          },
-        }
+        { headers: { Authorization: authHeader } }
       );
 
       if (command === "ping" && res.data.analog !== undefined) {
