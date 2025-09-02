@@ -1,7 +1,7 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as base64 from "base-64";
 import { LinearGradient } from "expo-linear-gradient";
-import * as SQLite from "expo-sqlite";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Button,
@@ -14,8 +14,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 
-// ------------------- TYPES -------------------
-
 type NodeStatus = {
   id?: number;
   device?: string;
@@ -27,25 +25,8 @@ type NodeStatus = {
   error?: string;
 };
 
-type Tx = {
-  executeSql: (
-    sql: string,
-    params?: (string | number | null)[],
-    success?: (tx: Tx, result: any) => void,
-    error?: (tx: Tx, error: any) => boolean
-  ) => void;
-};
-
-type DB = {
-  transaction: (cb: (tx: Tx) => void) => void;
-};
-
-// ------------------- CONSTANTES -------------------
-
 const MAX_POINTS = 60;
-const db: DB = SQLite.openDatabaseSync("hive.db") as unknown as DB;
-
-// ------------------- COMPONENTES -------------------
+const STORAGE_KEY = "@hive_status";
 
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
   data,
@@ -82,8 +63,6 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
   );
 };
 
-// ------------------- MAIN -------------------
-
 export default function HiveScreen() {
   const [status, setStatus] = useState<NodeStatus[]>([]);
   const [pingValues, setPingValues] = useState<{ [key: string]: number }>({});
@@ -95,49 +74,38 @@ export default function HiveScreen() {
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // ------------------- DB -------------------
-
-  const initDB = () => {
-    db.transaction((tx) => {
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS status (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          server TEXT,
-          device TEXT,
-          status TEXT,
-          ultrassonico_m REAL,
-          analog_percent REAL,
-          timestamp TEXT,
-          error TEXT
-        );`
-      );
-    });
+  // Salva histórico no AsyncStorage
+  const saveToStorage = async (data: NodeStatus[]) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (err) {
+      console.error("Erro ao salvar histórico:", err);
+    }
   };
 
-  const loadFromDB = () => {
-    db.transaction((tx) => {
-      tx.executeSql(
-        "SELECT * FROM status ORDER BY id DESC LIMIT 200;",
-        [],
-        (_tx, result) => {
-          const data = result.rows._array as NodeStatus[];
-          setStatus(data);
+  // Carrega histórico do AsyncStorage
+  const loadFromStorage = async () => {
+    try {
+      const json = await AsyncStorage.getItem(STORAGE_KEY);
+      if (json) {
+        const data = JSON.parse(json) as NodeStatus[];
+        setStatus(data);
 
-          const hist: { [key: string]: number[] } = {};
-          data.forEach((s) => {
-            if (s.server && s.analog_percent != null) {
-              if (!hist[s.server]) hist[s.server] = [];
-              hist[s.server].push(s.analog_percent);
-            }
-          });
-          setHistory(hist);
-        }
-      );
-    });
+        const hist: { [key: string]: number[] } = {};
+        data.forEach((s) => {
+          if (s.server && s.analog_percent != null) {
+            if (!hist[s.server]) hist[s.server] = [];
+            hist[s.server].push(s.analog_percent);
+          }
+        });
+        setHistory(hist);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar histórico:", err);
+    }
   };
 
-  // ------------------- FETCH STATUS -------------------
-
+  // Busca status dos servidores
   const fetchStatus = async () => {
     try {
       const servers = ["192.168.4.1", "192.168.15.166"];
@@ -156,31 +124,13 @@ export default function HiveScreen() {
       );
 
       setStatus(responses);
+      saveToStorage(responses);
 
       // Vibração
       responses.forEach((s) => {
         if (s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1) {
           Vibration.vibrate(500);
         }
-      });
-
-      // Salva no DB
-      db.transaction((tx) => {
-        responses.forEach((s) => {
-          tx.executeSql(
-            `INSERT INTO status (server, device, status, ultrassonico_m, analog_percent, timestamp, error)
-             VALUES (?, ?, ?, ?, ?, ?, ?);`,
-            [
-              s.server || "",
-              s.device || "",
-              s.status || "",
-              s.ultrassonico_m ?? null,
-              s.analog_percent ?? null,
-              s.timestamp || new Date().toISOString(),
-              s.error || null,
-            ]
-          );
-        });
       });
 
       // Atualiza histórico em memória
@@ -202,8 +152,7 @@ export default function HiveScreen() {
     }
   };
 
-  // ------------------- COMANDO -------------------
-
+  // Envia comando
   const sendCommand = async (server: string, command: string, payload?: any) => {
     try {
       const res = await axios.post(
@@ -222,11 +171,8 @@ export default function HiveScreen() {
     }
   };
 
-  // ------------------- EFFECTS -------------------
-
   useEffect(() => {
-    initDB();
-    loadFromDB();
+    loadFromStorage();
     fetchStatus();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
@@ -237,8 +183,6 @@ export default function HiveScreen() {
     await fetchStatus();
     setRefreshing(false);
   };
-
-  // ------------------- HELPER -------------------
 
   const getAnalogColor = (analogPercent?: number) => {
     if (analogPercent === undefined) return "#ffffff";
@@ -253,8 +197,6 @@ export default function HiveScreen() {
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
   const onlineStatus = status.filter((s) => s.status !== "offline");
-
-  // ------------------- RENDER -------------------
 
   return (
     <LinearGradient colors={containerColorTuple} style={[styles.container, { minHeight: winHeight }]}>
@@ -331,8 +273,6 @@ export default function HiveScreen() {
     </LinearGradient>
   );
 }
-
-// ------------------- STYLES -------------------
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, justifyContent: "center", alignItems: "center" },
