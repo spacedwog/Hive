@@ -3,8 +3,7 @@
 #include <ArduinoJson.h>
 #include <DNSServer.h>
 #include <math.h>
-#include <Espalexa.h>
-#include <EspalexaDevice.h>
+#include <ESP8266HTTPClient.h>
 
 // -------------------------
 // 📶 Configurações WiFi
@@ -23,11 +22,6 @@ DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
 // -------------------------
-// 🔹 Espalexa (Alexa)
-#define MAX_DEVICES 5
-Espalexa espalexa;
-
-// -------------------------
 // ⚙️ Controle
 bool activated = false;
 
@@ -39,6 +33,11 @@ float soundDB = 0.0;
 bool soundAnomaly = false;
 const int soundMinDB = 30;
 const int soundMaxDB = 85;
+
+// -------------------------
+// 🔹 Lista de peers (IPs conhecidos)
+String peerIPs[] = {"192.168.4.2", "192.168.4.3"}; // Atualize conforme sua rede
+const int peerCount = sizeof(peerIPs) / sizeof(peerIPs[0]);
 
 // -------------------------
 // 🔹 Variáveis para Serial display
@@ -115,7 +114,6 @@ void handleStatus() {
   doc["sta_ip"] = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "desconectado";
   doc["sensor_raw"] = rawSoundValue;
   doc["sensor_db"] = soundDB;
-  doc["mesh"] = false; // Mesh removido
   doc["status"] = activated ? "Ligado" : "Desligado";
 
   JsonObject anomalyObj = doc.createNestedObject("anomaly");
@@ -128,6 +126,27 @@ void handleStatus() {
   String json;
   serializeJson(doc, json);
   server.send(200, "application/json", json);
+}
+
+void sendCommandToPeers(const String& cmd) {
+  for(int i = 0; i < peerCount; i++){
+    String peerIP = peerIPs[i];
+    if(WiFi.status() == WL_CONNECTED){
+      HTTPClient http;
+      WiFiClient client;
+      String url = "http://" + peerIP + "/command";
+      http.begin(client, url);
+      http.addHeader("Content-Type", "application/json");
+      String body = "{\"action\":\"" + cmd + "\"}";
+      int httpResponseCode = http.POST(body);
+      if(httpResponseCode > 0){
+        Serial.println("Enviado para " + peerIP + ": " + cmd);
+      } else {
+        Serial.println("Erro ao enviar comando para " + peerIP);
+      }
+      http.end();
+    }
+  }
 }
 
 void handleCommand() {
@@ -150,10 +169,12 @@ void handleCommand() {
     activated = true;
     digitalWrite(LED_BUILTIN, LOW);
     res["status"] = "Ligado";
+    sendCommandToPeers("on");
   } else if (action == "off") {
     activated = false;
     digitalWrite(LED_BUILTIN, HIGH);
     res["status"] = "Desligado";
+    sendCommandToPeers("off");
   } else if (action == "ping") {
     res["response"] = "pong";
     res["timestamp"] = millis();
@@ -195,7 +216,6 @@ void displayStatusSerial() {
     Serial.print("Som (raw): "); Serial.println(rawSoundValue);
     Serial.print("Som (dB): "); Serial.println(soundDB);
     Serial.print("Anomalia de som: "); Serial.println(soundAnomaly ? "Fora do intervalo" : "Normal");
-    Serial.println("====================================");
 
     lastLedStatus = ledStatus;
     lastAPIP = apIP;
@@ -205,13 +225,6 @@ void displayStatusSerial() {
     lastSoundDB = soundDB;
     lastSoundAnomaly = soundAnomaly;
   }
-}
-
-// -------------------------
-// Callback do Espalexa
-void devicePowerChanged(uint8_t deviceId, bool power) {
-  activated = power;
-  digitalWrite(LED_BUILTIN, power ? LOW : HIGH);
 }
 
 // -------------------------
@@ -250,10 +263,6 @@ void setup() {
   server.on("/command", HTTP_POST, handleCommand);
   server.begin();
   Serial.println("Servidor HTTP iniciado");
-
-  // Inicializa Espalexa
-  espalexa.addDevice("HIVE EXPLORER", devicePowerChanged);
-  espalexa.begin(&server);
 }
 
 // -------------------------
@@ -261,7 +270,6 @@ void setup() {
 void loop() {
   dnsServer.processNextRequest();
   server.handleClient();
-  espalexa.loop();
 
   readSoundSensor();
   displayStatusSerial();

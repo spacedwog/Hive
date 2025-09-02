@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 
-interface NodeData {
-  id: string;
+interface SensorData {
   device: string;
   server_ip: string;
   sta_ip: string;
@@ -17,27 +21,51 @@ interface NodeData {
   };
 }
 
+// Lista de peers (IPs conhecidos)
+const PEERS = ['192.168.4.2', '192.168.4.3']; // ajuste conforme sua rede
+
 export default function HiveHomeScreen() {
-  const [nodes, setNodes] = useState<NodeData[]>([]);
+  const [nodes, setNodes] = useState<SensorData[]>([]);
 
   const opacityTitle = useSharedValue(0);
   const translateYTitle = useSharedValue(-20);
   const scaleCard = useSharedValue(0.9);
   const rotateHex = useSharedValue(-10);
 
-  const STA_IP = '192.168.15.138';
   const SOFTAP_IP = '192.168.4.1';
+  const STA_IP = '192.168.15.138';
 
-  const sendCommand = async (ip: string, cmd: 'on' | 'off') => {
+  // Envia comando para um nó
+  const sendCommand = async (node: SensorData, cmd: 'on' | 'off') => {
+    const ip = node.sta_ip !== 'desconectado' ? node.sta_ip : node.server_ip;
     try {
       await fetch(`http://${ip}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: cmd }),
       });
-    } catch (err) {
-      console.log(`Erro enviando comando para ${ip}:`, err);
+    } catch (error) {
+      console.log(`Erro enviando comando para ${ip}:`, error);
     }
+  };
+
+  // Busca status de todos os peers
+  const fetchStatus = async () => {
+    const updatedNodes: SensorData[] = [];
+    const ipsToCheck = [STA_IP, SOFTAP_IP, ...PEERS];
+
+    for (const ip of ipsToCheck) {
+      try {
+        const response = await fetch(`http://${ip}/status`);
+        if (!response.ok) continue;
+        const data: SensorData = await response.json();
+        updatedNodes.push(data);
+      } catch {
+        continue;
+      }
+    }
+
+    setNodes(updatedNodes);
   };
 
   useEffect(() => {
@@ -46,34 +74,8 @@ export default function HiveHomeScreen() {
     scaleCard.value = withDelay(400, withTiming(1, { duration: 800 }));
     rotateHex.value = withDelay(800, withTiming(0, { duration: 1000 }));
 
-    const fetchNodes = async () => {
-      const ips = [STA_IP, SOFTAP_IP];
-      const fetchedNodes: NodeData[] = [];
-
-      for (const ip of ips) {
-        try {
-          const response = await fetch(`http://${ip}/status`);
-          if (!response.ok) throw new Error('Offline');
-          const data = await response.json();
-
-          fetchedNodes.push({
-            id: ip,
-            device: data.device,
-            server_ip: data.server_ip,
-            sta_ip: data.sta_ip,
-            sensor_raw: data.sensor_raw,
-            sensor_db: data.sensor_db,
-            status: data.status,
-            anomaly: data.anomaly,
-          });
-        } catch {}
-      }
-
-      setNodes(fetchedNodes);
-    };
-
-    fetchNodes();
-    const interval = setInterval(fetchNodes, 1000);
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -98,8 +100,8 @@ export default function HiveHomeScreen() {
       </Animated.View>
 
       {nodes.length > 0 ? (
-        nodes.map((node) => (
-          <Animated.View key={node.id} style={[styles.card, cardStyle]}>
+        nodes.map((node, index) => (
+          <Animated.View key={index} style={[styles.card, cardStyle]}>
             <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
             <Text style={styles.description}>📡 IP AP: {node.server_ip}</Text>
             <Text style={styles.description}>🌐 IP STA: {node.sta_ip}</Text>
@@ -110,16 +112,16 @@ export default function HiveHomeScreen() {
             </Text>
             <Text style={styles.description}>🔌 Status: {node.status}</Text>
 
-            <View style={{ flexDirection: 'row', marginTop: 10 }}>
+            <View style={{ flexDirection: 'row', marginTop: 12 }}>
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#4CAF50' }]}
-                onPress={() => sendCommand(node.sta_ip, 'on')}
+                onPress={() => sendCommand(node, 'on')}
               >
                 <Text style={styles.btnText}>Ativar</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#f44336', marginLeft: 10 }]}
-                onPress={() => sendCommand(node.sta_ip, 'off')}
+                onPress={() => sendCommand(node, 'off')}
               >
                 <Text style={styles.btnText}>Desativar</Text>
               </TouchableOpacity>
@@ -128,7 +130,7 @@ export default function HiveHomeScreen() {
         ))
       ) : (
         <Text style={{ color: '#facc15', marginTop: 20 }}>
-          Conecte-se ao nó via WiFi (STA ou Soft-AP)...
+          Conecte-se aos nós via WiFi (STA ou Soft-AP)...
         </Text>
       )}
 
@@ -136,9 +138,7 @@ export default function HiveHomeScreen() {
         <View style={styles.hexagon}>
           <View style={styles.hexagonInner} />
         </View>
-        <Text style={styles.hexagonLabel}>
-          {nodes.length > 0 ? `${nodes.length} Nó(s) Ativo(s)` : 'Nenhum nó'}
-        </Text>
+        <Text style={styles.hexagonLabel}>{nodes.length > 0 ? 'Nó Ativo' : 'Nenhum nó'}</Text>
       </Animated.View>
     </ScrollView>
   );
@@ -147,10 +147,25 @@ export default function HiveHomeScreen() {
 const HEX_SIZE = 80;
 
 const styles = StyleSheet.create({
-  container: { padding: 24, backgroundColor: '#0f172a', alignItems: 'center' },
-  header: { marginBottom: 20, alignItems: 'center' },
-  title: { fontSize: 32, color: '#facc15', fontWeight: 'bold' },
-  subtitle: { fontSize: 16, color: '#cbd5e1', marginTop: 4 },
+  container: {
+    padding: 24,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+  },
+  header: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 32,
+    color: '#facc15',
+    fontWeight: 'bold',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#cbd5e1',
+    marginTop: 4,
+  },
   card: {
     backgroundColor: '#1e293b',
     borderRadius: 16,
@@ -161,8 +176,15 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     width: '100%',
   },
-  description: { fontSize: 16, color: '#e2e8f0', lineHeight: 24 },
-  hexagonWrapper: { marginTop: 20, alignItems: 'center' },
+  description: {
+    fontSize: 16,
+    color: '#e2e8f0',
+    lineHeight: 24,
+  },
+  hexagonWrapper: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
   hexagon: {
     width: HEX_SIZE,
     height: HEX_SIZE * 0.866,
@@ -178,7 +200,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#facc15',
     transform: [{ rotate: '-30deg' }],
   },
-  hexagonLabel: { marginTop: 10, fontSize: 16, color: '#facc15', fontWeight: '600' },
-  btn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
-  btnText: { color: '#fff', fontWeight: '600' },
+  hexagonLabel: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#facc15',
+    fontWeight: '600',
+  },
+  btn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  btnText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
 });
