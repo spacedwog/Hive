@@ -50,7 +50,7 @@ float lastSoundDB = -1;
 bool lastSoundAnomaly = false;
 
 // -------------------------
-// 📜 Página HTML principal
+// 📜 Página HTML principal com TOAST
 String htmlPage() {
   String page = R"rawliteral(
     <!DOCTYPE html>
@@ -64,6 +64,30 @@ String htmlPage() {
         button { padding: 15px; margin: 10px; font-size: 18px; border-radius: 8px; border: none; }
         .on { background-color: #4CAF50; color: white; }
         .off { background-color: #f44336; color: white; }
+
+        /* Toast */
+        #toast {
+          visibility: hidden;
+          min-width: 200px;
+          margin-left: -100px;
+          background-color: #333;
+          color: #fff;
+          text-align: center;
+          border-radius: 8px;
+          padding: 12px;
+          position: fixed;
+          z-index: 1;
+          left: 50%;
+          bottom: 30px;
+          font-size: 16px;
+          opacity: 0;
+          transition: opacity 0.5s, bottom 0.5s;
+        }
+        #toast.show {
+          visibility: visible;
+          opacity: 1;
+          bottom: 50px;
+        }
       </style>
     </head>
     <body>
@@ -74,7 +98,17 @@ String htmlPage() {
       <p>IP STA: <span id="sta_ip">...</span></p>
       <button class="on" onclick="sendCmd('on')">Ativar</button>
       <button class="off" onclick="sendCmd('off')">Desativar</button>
+
+      <div id="toast"></div>
+
       <script>
+        function showToast(message) {
+          var x = document.getElementById("toast");
+          x.innerText = message;
+          x.className = "show";
+          setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+        }
+
         function sendCmd(cmd) {
           fetch('/command', {
             method: 'POST',
@@ -82,6 +116,7 @@ String htmlPage() {
             body: JSON.stringify({ action: cmd })
           }).then(res => res.json()).then(data => {
             document.getElementById('status').innerText = data.status;
+            showToast("Comando enviado: " + cmd);
           });
         }
 
@@ -91,10 +126,14 @@ String htmlPage() {
             document.getElementById('sound').innerText = data.sensor_db.toFixed(1);
             document.getElementById('ap_ip').innerText = data.server_ip;
             document.getElementById('sta_ip').innerText = data.sta_ip;
+
+            if (data.anomaly && data.anomaly.detected) {
+              showToast("⚠️ " + data.anomaly.message);
+            }
           });
         }
 
-        setInterval(refreshStatus, 500);
+        setInterval(refreshStatus, 2000);
         refreshStatus();
       </script>
     </body>

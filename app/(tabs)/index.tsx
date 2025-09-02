@@ -21,22 +21,20 @@ interface SensorData {
   };
 }
 
-// Lista de peers (IPs conhecidos)
-const PEERS = ['192.168.4.2', '192.168.4.3']; // ajuste conforme sua rede
-
 export default function HiveHomeScreen() {
-  const [nodes, setNodes] = useState<SensorData[]>([]);
+  const [node, setNode] = useState<SensorData | null>(null);
 
   const opacityTitle = useSharedValue(0);
   const translateYTitle = useSharedValue(-20);
   const scaleCard = useSharedValue(0.9);
   const rotateHex = useSharedValue(-10);
 
-  const SOFTAP_IP = '192.168.4.1';
   const STA_IP = '192.168.15.138';
+  const SOFTAP_IP = '192.168.4.1';
 
-  // Envia comando para um nó
-  const sendCommand = async (node: SensorData, cmd: 'on' | 'off') => {
+  // Função para enviar comando
+  const sendCommand = async (cmd: 'on' | 'off') => {
+    if (!node) return;
     const ip = node.sta_ip !== 'desconectado' ? node.sta_ip : node.server_ip;
     try {
       await fetch(`http://${ip}/command`, {
@@ -49,33 +47,33 @@ export default function HiveHomeScreen() {
     }
   };
 
-  // Busca status de todos os peers
-  const fetchStatus = async () => {
-    const updatedNodes: SensorData[] = [];
-    const ipsToCheck = [STA_IP, SOFTAP_IP, ...PEERS];
-
-    for (const ip of ipsToCheck) {
-      try {
-        const response = await fetch(`http://${ip}/status`);
-        if (!response.ok) continue;
-        const data: SensorData = await response.json();
-        updatedNodes.push(data);
-      } catch {
-        continue;
-      }
-    }
-
-    setNodes(updatedNodes);
-  };
-
   useEffect(() => {
     opacityTitle.value = withTiming(1, { duration: 800 });
     translateYTitle.value = withTiming(0, { duration: 800 });
     scaleCard.value = withDelay(400, withTiming(1, { duration: 800 }));
     rotateHex.value = withDelay(800, withTiming(0, { duration: 1000 }));
 
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 1000);
+    const fetchData = async () => {
+      try {
+        let response = await fetch(`http://${STA_IP}/status`);
+        if (!response.ok) throw new Error('STA offline');
+        const data: SensorData = await response.json();
+        setNode(data);
+      } catch {
+        try {
+          let response = await fetch(`http://${SOFTAP_IP}/status`);
+          if (!response.ok) throw new Error('Soft-AP offline');
+          const data: SensorData = await response.json();
+          setNode(data);
+        } catch (error) {
+          console.log('Erro ao obter dados do nó:', error);
+          setNode(null);
+        }
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -99,38 +97,37 @@ export default function HiveHomeScreen() {
         <Text style={styles.subtitle}>Hyper-Intelligent Virtual Entity</Text>
       </Animated.View>
 
-      {nodes.length > 0 ? (
-        nodes.map((node, index) => (
-          <Animated.View key={index} style={[styles.card, cardStyle]}>
-            <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
-            <Text style={styles.description}>📡 IP AP: {node.server_ip}</Text>
-            <Text style={styles.description}>🌐 IP STA: {node.sta_ip}</Text>
-            <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw}</Text>
-            <Text style={styles.description}>📈 Som (dB): {node.sensor_db.toFixed(1)}</Text>
-            <Text style={styles.description}>
-              ⚠️ Anomalia: {node.anomaly.detected ? node.anomaly.message : 'Normal'}
-            </Text>
-            <Text style={styles.description}>🔌 Status: {node.status}</Text>
+      {node ? (
+        <Animated.View style={[styles.card, cardStyle]}>
+          <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
+          <Text style={styles.description}>📡 IP AP: {node.server_ip}</Text>
+          <Text style={styles.description}>🌐 IP STA: {node.sta_ip}</Text>
+          <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw}</Text>
+          <Text style={styles.description}>📈 Som (dB): {node.sensor_db.toFixed(1)}</Text>
+          <Text style={styles.description}>
+            ⚠️ Anomalia: {node.anomaly.detected ? node.anomaly.message : 'Normal'}
+          </Text>
+          <Text style={styles.description}>🔌 Status: {node.status}</Text>
 
-            <View style={{ flexDirection: 'row', marginTop: 12 }}>
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: '#4CAF50' }]}
-                onPress={() => sendCommand(node, 'on')}
-              >
-                <Text style={styles.btnText}>Ativar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: '#f44336', marginLeft: 10 }]}
-                onPress={() => sendCommand(node, 'off')}
-              >
-                <Text style={styles.btnText}>Desativar</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        ))
+          {/* Botões de comando manual */}
+          <View style={{ flexDirection: 'row', marginTop: 12 }}>
+            <TouchableOpacity
+              style={[styles.btn, { backgroundColor: '#4CAF50' }]}
+              onPress={() => sendCommand('on')}
+            >
+              <Text style={styles.btnText}>Ativar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btn, { backgroundColor: '#f44336', marginLeft: 10 }]}
+              onPress={() => sendCommand('off')}
+            >
+              <Text style={styles.btnText}>Desativar</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       ) : (
         <Text style={{ color: '#facc15', marginTop: 20 }}>
-          Conecte-se aos nós via WiFi (STA ou Soft-AP)...
+          Conecte-se ao nó via WiFi (STA ou Soft-AP)...
         </Text>
       )}
 
@@ -138,7 +135,7 @@ export default function HiveHomeScreen() {
         <View style={styles.hexagon}>
           <View style={styles.hexagonInner} />
         </View>
-        <Text style={styles.hexagonLabel}>{nodes.length > 0 ? 'Nó Ativo' : 'Nenhum nó'}</Text>
+        <Text style={styles.hexagonLabel}>{node ? 'Nó Ativo' : 'Nenhum nó'}</Text>
       </Animated.View>
     </ScrollView>
   );
