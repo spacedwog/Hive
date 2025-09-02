@@ -16,16 +16,15 @@ import {
 type NodeStatus = {
   device?: string;
   server?: string;
-  status?: string;
-  ultrassonico_cm?: number;
-  analog?: number;
+  status?: "ativo" | "parado" | "offline";
+  ultrassonico_m?: number;
+  analog_percent?: number;
+  timestamp?: string;
   error?: string;
 };
 
-const MAX_ANALOG = 2400;
-const MAX_POINTS = 60; // histórico por servidor (60s)
+const MAX_POINTS = 60;
 
-// ==== Componente de gráfico nativo ====
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
   data,
   width,
@@ -40,8 +39,8 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
       <View style={styles.chartAxis} />
       <View style={styles.chartBarsRow}>
         {data.map((v, i) => {
-          const clamped = Math.max(0, Math.min(MAX_ANALOG, v));
-          const h = Math.max(2, Math.round((clamped / MAX_ANALOG) * (height - 16)));
+          const clamped = Math.max(0, Math.min(100, v));
+          const h = Math.max(2, Math.round((clamped / 100) * (height - 16)));
           return (
             <View
               key={`${i}-${v}`}
@@ -51,8 +50,8 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
         })}
       </View>
       <View style={styles.chartLabels}>
-        <Text style={styles.chartLabelText}>0</Text>
-        <Text style={styles.chartLabelText}>{MAX_ANALOG}</Text>
+        <Text style={styles.chartLabelText}>0%</Text>
+        <Text style={styles.chartLabelText}>100%</Text>
       </View>
     </View>
   );
@@ -69,7 +68,6 @@ export default function HiveScreen() {
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // ==== Buscar status dos servidores ====
   const fetchStatus = async () => {
     try {
       const servers = ["192.168.4.1", "192.168.15.166"];
@@ -90,19 +88,18 @@ export default function HiveScreen() {
       setStatus(responses);
 
       responses.forEach((s) => {
-        if (s.ultrassonico_cm !== undefined && s.ultrassonico_cm < 10) {
+        if (s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1) {
           Vibration.vibrate(500);
         }
       });
 
-      // Atualiza histórico
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
           const key = s.server ?? "unknown";
-          if (typeof s.analog === "number") {
+          if (typeof s.analog_percent === "number") {
             const prevArr = next[key] ?? [];
-            const newArr = [...prevArr, s.analog];
+            const newArr = [...prevArr, s.analog_percent];
             if (newArr.length > MAX_POINTS) newArr.splice(0, newArr.length - MAX_POINTS);
             next[key] = newArr;
           } else if (!next[key]) next[key] = [];
@@ -114,17 +111,16 @@ export default function HiveScreen() {
     }
   };
 
-  // ==== Enviar comando para servidor ====
-  const sendCommand = async (server: string, command: string) => {
+  const sendCommand = async (server: string, command: string, payload?: any) => {
     try {
       const res = await axios.post(
         `http://${server}/command`,
-        { command },
+        { command, ...payload },
         { headers: { Authorization: authHeader } }
       );
 
-      if (command === "ping" && res.data.analog !== undefined) {
-        setPingValues((prev) => ({ ...prev, [server]: res.data.analog }));
+      if (command === "ping" && res.data.analog_percent !== undefined) {
+        setPingValues((prev) => ({ ...prev, [server]: res.data.analog_percent }));
       }
 
       fetchStatus();
@@ -133,60 +129,49 @@ export default function HiveScreen() {
     }
   };
 
-  // ==== Atualização contínua ====
   useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // ==== Pull-to-refresh ====
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchStatus();
     setRefreshing(false);
   };
 
-  const getAnalogColor = (analog?: number) => {
-    if (analog === undefined) return "#ffffff";
-    const norm = Math.min(Math.max(analog, 0), MAX_ANALOG) / MAX_ANALOG;
-    if (norm < 0.5) {
-      const r = 255;
-      const g = Math.round(510 * norm);
-      return `rgb(${r},${g},0)`;
-    } else {
-      const r = Math.round(510 * (1 - norm));
-      const g = 255;
-      return `rgb(${r},${g},0)`;
-    }
+  const getAnalogColor = (analogPercent?: number) => {
+    if (analogPercent === undefined) return "#ffffff";
+    const norm = Math.min(Math.max(analogPercent, 0), 100) / 100;
+    return norm < 0.5
+      ? `rgb(255,${Math.round(510 * norm)},0)`
+      : `rgb(${Math.round(510 * (1 - norm))},255,0)`;
   };
 
-  const firstAnalog = status.find((s) => s.analog !== undefined)?.analog;
+  const firstAnalog = status.find((s) => s.analog_percent !== undefined)?.analog_percent;
   const containerColorTuple: [string, string] = [getAnalogColor(firstAnalog), "#000000"];
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
+
+  // Filtra apenas dispositivos que não estão offline
+  const onlineStatus = status.filter((s) => s.status !== "offline");
 
   return (
     <LinearGradient colors={containerColorTuple} style={[styles.container, { minHeight: winHeight }]}>
       <FlatList
-        data={status}
+        data={onlineStatus}
         keyExtractor={(item) => item.server || Math.random().toString()}
         contentContainerStyle={styles.flatListContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item: s }) => {
           const serverKey = s.server ?? "unknown";
-          const isOffline = s.status === "offline";
-          const isActive = s.status === "ativo";
-          const isNear = s.ultrassonico_cm !== undefined && s.ultrassonico_cm < 10;
+          const isNear = s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1;
 
-          const cardGradient: [string, string] = isNear
+          const cardGradient: [string, string] = s.status === "parado"
             ? ["#fff3cd", "#ffeeba"]
-            : isOffline
-            ? ["#f8d7da", "#f5c6cb"]
-            : s.analog !== undefined
-            ? [getAnalogColor(s.analog), "#000000"]
-            : isActive
-            ? ["#d4edda", "#c3e6cb"]
-            : ["#ffffff", "#f8f9fa"];
+            : s.analog_percent !== undefined
+            ? [getAnalogColor(s.analog_percent), "#000000"]
+            : ["#d4edda", "#c3e6cb"];
 
           const hist = history[serverKey] ?? [];
 
@@ -194,29 +179,33 @@ export default function HiveScreen() {
             <>
               <LinearGradient colors={cardGradient} style={styles.nodeCard}>
                 <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                <Text style={styles.statusText}>📡 {s.server || "-"} - {s.status || "offline"}</Text>
-                <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_cm ?? "-"} cm</Text>
-
+                <Text style={styles.statusText}>📡 {s.server || "-"} - {s.status || "-"}</Text>
+                <Text style={styles.statusText}>
+                  📏 Distância: {s.ultrassonico_m !== undefined ? s.ultrassonico_m.toFixed(2) + " m" : "-"}
+                </Text>
                 {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
-                {s.analog !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog}</Text>}
+                {s.analog_percent !== undefined && (
+                  <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)} %</Text>
+                )}
+                {s.timestamp && <Text style={styles.statusText}>⏱️ {s.timestamp}</Text>}
                 {pingValues[serverKey] !== undefined && (
-                  <Text style={styles.statusText}>⚡ Ping Sensor: {pingValues[serverKey]}</Text>
+                  <Text style={styles.statusText}>⚡ Ping Sensor: {pingValues[serverKey].toFixed(1)} %</Text>
                 )}
 
                 <View style={styles.buttonRow}>
                   <Button
                     title="Ativar"
-                    disabled={isOffline || !s.server || isNear}
+                    disabled={!s.server || isNear}
                     onPress={() => s.server && sendCommand(s.server, "activate")}
                   />
                   <Button
                     title="Desativar"
-                    disabled={isOffline || !s.server || isNear}
+                    disabled={!s.server || isNear}
                     onPress={() => s.server && sendCommand(s.server, "deactivate")}
                   />
                   <Button
                     title="Ping"
-                    disabled={isOffline || !s.server || isNear}
+                    disabled={!s.server || isNear}
                     onPress={() => s.server && sendCommand(s.server, "ping")}
                   />
                 </View>
@@ -224,13 +213,13 @@ export default function HiveScreen() {
 
               <LinearGradient colors={["#1f1f1f", "#0f0f0f"]} style={styles.chartCard}>
                 <Text style={styles.chartTitle}>
-                  📈 Histórico do Analog ({serverKey}) — últimos {MAX_POINTS}s
+                  📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s
                 </Text>
                 <SparkBar data={hist} width={graphWidth} />
                 <View style={styles.chartFooter}>
                   <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
                   <Text style={styles.chartFooterText}>
-                    Atual: {typeof s.analog === "number" ? s.analog : "-"}
+                    Atual: {typeof s.analog_percent === "number" ? s.analog_percent.toFixed(1) + "%" : "-"}
                   </Text>
                 </View>
               </LinearGradient>

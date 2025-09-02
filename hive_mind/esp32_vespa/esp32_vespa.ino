@@ -2,10 +2,15 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
+#include <time.h>  // Para timestamp ISO 8601
 
 // ==== Sensor Ultrassônico ====
 #define TRIG 21
 #define ECHO 22
+#define ULTRASONIC_BUFFER 5  // Média móvel
+
+long ultraBuffer[ULTRASONIC_BUFFER] = {0};
+int ultraIndex = 0;
 
 long medirDistancia() {
   digitalWrite(TRIG, LOW);
@@ -16,7 +21,19 @@ long medirDistancia() {
 
   long duracao = pulseIn(ECHO, HIGH, 30000); // timeout 30ms (~5m)
   long distancia = duracao * 0.034 / 2;      // cm
-  return distancia > 0 ? distancia : -1;
+  distancia = distancia > 0 ? distancia : -1;
+
+  // Média móvel
+  ultraBuffer[ultraIndex] = distancia > 0 ? distancia : ultraBuffer[ultraIndex];
+  ultraIndex = (ultraIndex + 1) % ULTRASONIC_BUFFER;
+  long sum = 0, count = 0;
+  for(int i=0; i<ULTRASONIC_BUFFER; i++) {
+    if(ultraBuffer[i] > 0) {
+      sum += ultraBuffer[i];
+      count++;
+    }
+  }
+  return count > 0 ? sum / count : -1;
 }
 
 // ==== Potenciômetro ====
@@ -30,8 +47,8 @@ const char* ap_ssid = "HIVE VESPA";
 const char* ap_password = "hivemind";
 
 // ==== Credenciais do STA ====
-const char* sta_ssid = "FAMILIA SANTOS";    // 🔹 Coloque seu SSID aqui
-const char* sta_password = "6z2h1j3k9f";    // 🔹 Coloque sua senha aqui
+const char* sta_ssid = "FAMILIA SANTOS";
+const char* sta_password = "6z2h1j3k9f";
 
 // ==== Servidor Web ====
 WebServer server(80);
@@ -43,11 +60,10 @@ const char* authUsername = "spacedwog";
 const char* authPassword = "Kimera12@";
 
 // ==== UART para ESP32-CAM ====
-HardwareSerial SerialVESPA(1); 
+HardwareSerial SerialVESPA(1);
 #define TX_VESPA 16
 #define RX_VESPA 17
 #define BAUD_UART 9600
-
 String uartBuffer = "";
 
 // ==== Funções internas ====
@@ -55,7 +71,7 @@ String base64Decode(const String &input) {
   size_t input_len = input.length();
   size_t out_len = 3 * ((input_len + 3) / 4);
   unsigned char output[out_len];
-  int ret = mbedtls_base64_decode(output, out_len, &out_len, 
+  int ret = mbedtls_base64_decode(output, out_len, &out_len,
                                   (const unsigned char*)input.c_str(), input_len);
   if (ret == 0) {
     return String((char*)output).substring(0, out_len);
@@ -69,14 +85,12 @@ bool checkAuth() {
     server.send(401, "text/plain", "Unauthorized");
     return false;
   }
-
   String authHeader = server.header("Authorization");
   if (!authHeader.startsWith("Basic ")) {
     server.sendHeader("WWW-Authenticate", "Basic realm=\"ESP32\"");
     server.send(401, "text/plain", "Unauthorized");
     return false;
   }
-
   String encoded = authHeader.substring(6);
   String decoded = base64Decode(encoded);
   String expected = String(authUsername) + ":" + authPassword;
@@ -88,17 +102,33 @@ bool checkAuth() {
   return true;
 }
 
+// ==== Timestamp ISO 8601 ====
+String getISOTime() {
+  time_t now;
+  time(&now);
+  struct tm *tm_info = gmtime(&now);
+  char buffer[25];
+  strftime(buffer, 25, "%Y-%m-%dT%H:%M:%SZ", tm_info);
+  return String(buffer);
+}
+
 // ==== HTTP Handlers ====
 void handleStatus() {
   if (!checkAuth()) return;
 
+  long distancia_cm = medirDistancia();
+  long analog_val = lerSensor();
+  float distancia_m = distancia_cm / 100.0;
+  float analog_percent = (analog_val / 4095.0) * 100;
+
   DynamicJsonDocument doc(512);
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
-  doc["ultrassonico_cm"] = medirDistancia();
-  doc["analog"] = lerSensor();
+  doc["ultrassonico_m"] = distancia_m;
+  doc["analog_percent"] = analog_percent;
   doc["wifi_mode"] = staConnected ? "STA" : "AP";
   doc["ip"] = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+  doc["timestamp"] = getISOTime();
 
   String response;
   serializeJson(doc, response);
@@ -139,7 +169,7 @@ void handleCommand() {
     res["status"] = "parado";
   } else if (command == "ping") {
     res["result"] = "success";
-    res["analog"] = lerSensor();
+    res["analog_percent"] = (lerSensor() / 4095.0) * 100;
   } else {
     res["result"] = "error";
     res["status"] = "comando inválido";
@@ -159,7 +189,6 @@ void setup() {
   Serial.begin(115200);
   pinMode(32, OUTPUT);
   digitalWrite(32, LOW);
-
   pinMode(POT_PIN, INPUT);
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
@@ -190,6 +219,9 @@ void setup() {
     staConnected = false;
     Serial.println("Falha ao conectar no STA. Usando apenas AP.");
   }
+
+  // Sincroniza horário (opcional para timestamp correto)
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
