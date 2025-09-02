@@ -60,7 +60,8 @@
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
     "three": "^0.166.1",
-    "victory-native": "^41.19.3"
+    "victory-native": "^41.19.3",
+    "expo-sqlite": "~15.2.14"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
