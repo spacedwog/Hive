@@ -15,7 +15,6 @@ import {
 } from "react-native";
 
 type NodeStatus = {
-  id?: number;
   device?: string;
   server?: string;
   status?: "ativo" | "parado" | "offline";
@@ -26,7 +25,7 @@ type NodeStatus = {
 };
 
 const MAX_POINTS = 60;
-const STORAGE_KEY = "@hive_status";
+const STORAGE_KEY = "@HiveStatusHistory";
 
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
   data,
@@ -70,38 +69,29 @@ export default function HiveScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
+
   const authUsername = "spacedwog";
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // Salva histórico no AsyncStorage
-  const saveToStorage = async (data: NodeStatus[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (err) {
-      console.error("Erro ao salvar histórico:", err);
-    }
-  };
-
   // Carrega histórico do AsyncStorage
-  const loadFromStorage = async () => {
+  const loadHistory = async () => {
     try {
       const json = await AsyncStorage.getItem(STORAGE_KEY);
       if (json) {
-        const data = JSON.parse(json) as NodeStatus[];
-        setStatus(data);
-
-        const hist: { [key: string]: number[] } = {};
-        data.forEach((s) => {
-          if (s.server && s.analog_percent != null) {
-            if (!hist[s.server]) hist[s.server] = [];
-            hist[s.server].push(s.analog_percent);
-          }
-        });
-        setHistory(hist);
+        setHistory(JSON.parse(json));
       }
     } catch (err) {
       console.error("Erro ao carregar histórico:", err);
+    }
+  };
+
+  // Salva histórico no AsyncStorage
+  const saveHistory = async (hist: { [key: string]: number[] }) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(hist));
+    } catch (err) {
+      console.error("Erro ao salvar histórico:", err);
     }
   };
 
@@ -124,16 +114,15 @@ export default function HiveScreen() {
       );
 
       setStatus(responses);
-      saveToStorage(responses);
 
-      // Vibração
+      // Vibração se ultrassônico próximo
       responses.forEach((s) => {
         if (s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1) {
           Vibration.vibrate(500);
         }
       });
 
-      // Atualiza histórico em memória
+      // Atualiza histórico
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
@@ -145,6 +134,7 @@ export default function HiveScreen() {
             next[key] = newArr;
           } else if (!next[key]) next[key] = [];
         });
+        saveHistory(next);
         return next;
       });
     } catch (err) {
@@ -172,7 +162,7 @@ export default function HiveScreen() {
   };
 
   useEffect(() => {
-    loadFromStorage();
+    loadHistory();
     fetchStatus();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
@@ -236,21 +226,9 @@ export default function HiveScreen() {
                 )}
 
                 <View style={styles.buttonRow}>
-                  <Button
-                    title="Ativar"
-                    disabled={!s.server || isNear}
-                    onPress={() => s.server && sendCommand(s.server, "activate")}
-                  />
-                  <Button
-                    title="Desativar"
-                    disabled={!s.server || isNear}
-                    onPress={() => s.server && sendCommand(s.server, "deactivate")}
-                  />
-                  <Button
-                    title="Ping"
-                    disabled={!s.server || isNear}
-                    onPress={() => s.server && sendCommand(s.server, "ping")}
-                  />
+                  <Button title="Ativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "activate")} />
+                  <Button title="Desativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
+                  <Button title="Ping" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "ping")} />
                 </View>
               </LinearGradient>
 
