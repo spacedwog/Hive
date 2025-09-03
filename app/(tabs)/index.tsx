@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import {
+  Animated,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 interface SensorData {
   device: string;
@@ -15,10 +24,23 @@ interface SensorData {
   };
 }
 
-const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({ data, width, height = 120 }) => {
+interface SparkBarProps {
+  data: number[];
+  width: number;
+  height?: number;
+  highlightThreshold?: number;
+}
+
+const SparkBar: React.FC<SparkBarProps> = ({
+  data,
+  width,
+  height = 120,
+  highlightThreshold = 80,
+}) => {
   const n = Math.max(data.length, 1);
   const barGap = 2;
   const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
+  const [tooltipIndex, setTooltipIndex] = useState<number | null>(null);
 
   return (
     <View style={[styles.chartBox, { width, height }]}>
@@ -27,11 +49,27 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
         {data.map((v, i) => {
           const clamped = Math.max(0, Math.min(100, v));
           const h = Math.max(2, Math.round((clamped / 100) * (height - 16)));
+          const isAnomaly = clamped >= highlightThreshold;
+
           return (
-            <View
+            <Pressable
               key={`${i}-${v}`}
-              style={[styles.chartBar, { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap }]}
-            />
+              onPressIn={() => setTooltipIndex(i)}
+              onPressOut={() => setTooltipIndex(null)}
+              style={{ marginRight: i === n - 1 ? 0 : barGap }}
+            >
+              <View
+                style={[
+                  styles.chartBar,
+                  { width: barWidth, height: h, backgroundColor: isAnomaly ? '#ff5555' : '#50fa7b' },
+                ]}
+              />
+              {tooltipIndex === i && (
+                <View style={styles.tooltip}>
+                  <Text style={styles.tooltipText}>{clamped.toFixed(1)}%</Text>
+                </View>
+              )}
+            </Pressable>
           );
         })}
       </View>
@@ -47,15 +85,14 @@ export default function DataScienceCardScreen() {
   const { width: winWidth } = useWindowDimensions();
   const [node, setNode] = useState<SensorData | null>(null);
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
-  const [page, setPage] = useState<number>(0); // página atual do card
+  const [page, setPage] = useState<number>(0);
+  const [alert, setAlert] = useState<string | null>(null);
+  const alertAnim = useMemo(() => new Animated.Value(0), []);
 
-  // IPs
-  const STA_IP = '192.168.15.138'; // STA - conectado ao seu roteador
-  const SOFTAP_IP = '192.168.4.1'; // SoftAP - fallback
-
+  const STA_IP = '192.168.15.138';
+  const SOFTAP_IP = '192.168.4.1';
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
-  // Envia comando para o nó
   const sendCommand = async (cmd: 'on' | 'off') => {
     if (!node) return;
     const ip = node.sta_ip !== 'desconectado' ? node.sta_ip : node.server_ip;
@@ -70,42 +107,47 @@ export default function DataScienceCardScreen() {
     }
   };
 
-  // Loop de coleta de dados
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Tenta no IP STA
-        let response = await fetch(`http://${STA_IP}/status`);
-        if (!response.ok) throw new Error('STA offline');
-        const data: SensorData = await response.json();
-        setNode(data);
+    let isMounted = true;
 
+    const fetchData = async () => {
+      if (!isMounted) return;
+
+      const updateHistory = (data: SensorData) => {
         setHistory(prev => {
           const next = { ...prev };
-          const key = data.sta_ip;
+          const key = data.sta_ip !== 'desconectado' ? data.sta_ip : data.server_ip;
           const values = next[key] ?? [];
           const newArr = [...values, data.sensor_db];
           if (newArr.length > 60) newArr.splice(0, newArr.length - 60);
           next[key] = newArr;
           return next;
         });
+
+        if (data.anomaly.detected) {
+          setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value})`);
+          Animated.sequence([
+            Animated.timing(alertAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+            Animated.timing(alertAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+          ]).start();
+        } else {
+          setAlert(null);
+        }
+      };
+
+      try {
+        let response = await fetch(`http://${STA_IP}/status`);
+        if (!response.ok) throw new Error('STA offline');
+        const data: SensorData = await response.json();
+        setNode(data);
+        updateHistory(data);
       } catch {
         try {
-          // Fallback no SoftAP
           let response = await fetch(`http://${SOFTAP_IP}/status`);
           if (!response.ok) throw new Error('Soft-AP offline');
           const data: SensorData = await response.json();
           setNode(data);
-
-          setHistory(prev => {
-            const next = { ...prev };
-            const key = data.server_ip;
-            const values = next[key] ?? [];
-            const newArr = [...values, data.sensor_db];
-            if (newArr.length > 60) newArr.splice(0, newArr.length - 60);
-            next[key] = newArr;
-            return next;
-          });
+          updateHistory(data);
         } catch (error) {
           console.log('Erro ao obter dados do nó:', error);
           setNode(null);
@@ -115,11 +157,15 @@ export default function DataScienceCardScreen() {
 
     fetchData();
     const interval = setInterval(fetchData, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
-  const nextPage = () => setPage((prev) => (prev + 1) % 3);
-  const prevPage = () => setPage((prev) => (prev - 1 + 3) % 3);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [alertAnim]); // Lint-safe
+
+  const nextPage = () => setPage(prev => (prev + 1) % 3);
+  const prevPage = () => setPage(prev => (prev - 1 + 3) % 3);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -139,6 +185,19 @@ export default function DataScienceCardScreen() {
                 <Text style={styles.description}>
                   ⚠️ Anomalia: {node.anomaly.detected ? node.anomaly.message : 'Normal'}
                 </Text>
+                {alert && (
+                  <Animated.Text
+                    style={{
+                      color: '#ff5555',
+                      fontWeight: 'bold',
+                      marginTop: 8,
+                      fontSize: 16,
+                      opacity: alertAnim,
+                    }}
+                  >
+                    {alert}
+                  </Animated.Text>
+                )}
                 <Text style={styles.description}>🔌 Status: {node.status}</Text>
               </View>
             )}
@@ -146,7 +205,7 @@ export default function DataScienceCardScreen() {
             {page === 1 && history[node.sta_ip] && history[node.sta_ip].length > 0 && (
               <View>
                 <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
-                <SparkBar data={history[node.sta_ip]} width={graphWidth} height={120} />
+                <SparkBar data={history[node.sta_ip]} width={graphWidth} height={120} highlightThreshold={80} />
 
                 <View style={{ flexDirection: 'row', marginTop: 16 }}>
                   <TouchableOpacity
@@ -175,7 +234,7 @@ export default function DataScienceCardScreen() {
                     <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>
                       🌐 {serverIp} — Últimos {values.length} pontos
                     </Text>
-                    <SparkBar data={values} width={graphWidth} height={80} />
+                    <SparkBar data={values} width={graphWidth} height={80} highlightThreshold={80} />
                   </View>
                 ))}
               </View>
@@ -198,14 +257,13 @@ export default function DataScienceCardScreen() {
         )}
       </View>
 
-      {/* Segundo Card - Energia */}
+      {/* Card de Energia */}
       <View style={[styles.card, { backgroundColor: '#111827', marginTop: 20 }]}>
         {node ? (
           <>
             <Text style={{ color: '#facc15', fontSize: 18, fontWeight: '600', marginBottom: 10 }}>
               ⚡ Energia & Bateria
             </Text>
-
             <Text style={styles.description}>
               🔋 Nível da Bateria: {Math.max(0, Math.min(100, (node.sensor_raw / 4095) * 100)).toFixed(0)}%
             </Text>
@@ -221,6 +279,7 @@ export default function DataScienceCardScreen() {
                   data={history[node.sta_ip].map(v => Math.max(0, Math.min(100, (v / 4095) * 100)))}
                   width={graphWidth}
                   height={80}
+                  highlightThreshold={90}
                 />
               </View>
             )}
@@ -296,42 +355,54 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chartBox: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 10,
-    overflow: "hidden",
-    alignSelf: "center",
+    overflow: 'hidden',
+    alignSelf: 'center',
     paddingTop: 8,
-    paddingHorizontal: 8
+    paddingHorizontal: 8,
   },
   chartAxis: {
-    position: "absolute",
+    position: 'absolute',
     bottom: 8,
     left: 8,
     right: 8,
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.2)"
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   chartBarsRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    height: "100%",
-    paddingBottom: 8
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: '100%',
+    paddingBottom: 8,
   },
   chartBar: {
-    backgroundColor: "#50fa7b",
     borderTopLeftRadius: 3,
-    borderTopRightRadius: 3
+    borderTopRightRadius: 3,
   },
   chartLabels: {
-    position: "absolute",
+    position: 'absolute',
     top: 4,
     left: 8,
     right: 8,
-    flexDirection: "row",
-    justifyContent: "space-between"
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   chartLabelText: {
     fontSize: 10,
-    color: "rgba(255,255,255,0.6)"
+    color: 'rgba(255,255,255,0.6)',
+  },
+  tooltip: {
+    position: 'absolute',
+    top: -24,
+    left: -12,
+    backgroundColor: '#222',
+    padding: 4,
+    borderRadius: 4,
+    zIndex: 10,
+  },
+  tooltipText: {
+    color: '#fff',
+    fontSize: 12,
   },
 });
