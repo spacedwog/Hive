@@ -1,7 +1,6 @@
-import { Camera, CameraType } from "expo-camera";
+import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
-import { WebView } from "react-native-webview";
 
 const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
 const STA_IP = "http://192.168.15.188"; // ESP32 conectado à rede WiFi (STA)
@@ -23,7 +22,7 @@ export default function StreamScreen() {
 
   // ======= CONFIG DA CÂMERA NATIVA (expo-camera) =======
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [type, setType] = useState<CameraType>(Camera.Constants.Type.back);
+  const [type, setType] = useState<"front" | "back">("back");
 
   useEffect(() => {
     (async () => {
@@ -56,55 +55,62 @@ export default function StreamScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>📡 HIVE STREAM - ESP32 ({mode})</Text>
-
-      <Text style={styles.text}>
-        ESP32:{" "}
-        <Text style={{ color: status.led_builtin === "on" ? "green" : "red" }}>
-          {status.led_builtin.toUpperCase()}
-        </Text>
-      </Text>
-
-      <Text style={styles.text}>
-        LED pino 32:{" "}
-        <Text style={{ color: status.led_opposite === "on" ? "green" : "red" }}>
-          {status.led_opposite.toUpperCase()}
-        </Text>
-      </Text>
-
-      <Text style={styles.text}>IP do ESP32: {status.ip}</Text>
-
-      <Button
-        title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
-        onPress={toggleLed}
-      />
-      <View style={{ marginVertical: 10 }} />
-      <Button
-        title={`Mudar para ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
-        onPress={switchMode}
-        color="#facc15"
-      />
-
-      {/* STREAM DO ESP32 */}
-      <Text style={[styles.text, { marginTop: 20 }]}>📷 Câmera ESP32:</Text>
-      <View style={styles.videoContainer}>
-        <WebView
-          source={{ uri: `${status.ip}/stream` }}
-          style={styles.video}
-          javaScriptEnabled
-          domStorageEnabled
-          allowsFullscreenVideo
-          onHttpError={({ nativeEvent }) =>
-            console.log("HTTP Error:", nativeEvent)
-          }
-        />
-      </View>
+      <Text style={styles.title}>📡 HIVE STREAM</Text>
 
       {/* CÂMERA NATIVA DO DISPOSITIVO */}
       <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
       <View style={styles.nativeCamera}>
         {hasPermission ? (
-          <Camera style={StyleSheet.absoluteFill} type={type} />
+          <>
+            <CameraView style={StyleSheet.absoluteFill} facing={type} />
+
+            {/* OVERLAY COM INFOS DO ESP32 */}
+            <View style={styles.overlay}>
+              <Text style={styles.overlayText}>Modo: {mode}</Text>
+              <Text style={styles.overlayText}>
+                ESP32:{" "}
+                <Text
+                  style={{
+                    color: status.led_builtin === "on" ? "lightgreen" : "red",
+                  }}
+                >
+                  {status.led_builtin.toUpperCase()}
+                </Text>
+              </Text>
+              <Text style={styles.overlayText}>
+                LED 32:{" "}
+                <Text
+                  style={{
+                    color: status.led_opposite === "on" ? "lightgreen" : "red",
+                  }}
+                >
+                  {status.led_opposite.toUpperCase()}
+                </Text>
+              </Text>
+              <Text style={styles.overlayText}>IP: {status.ip}</Text>
+
+              <View style={styles.buttonRow}>
+                <Button
+                  title={
+                    status.led_builtin === "on"
+                      ? "Desligar ESP32"
+                      : "Ligar ESP32"
+                  }
+                  onPress={toggleLed}
+                />
+                <Button
+                  title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
+                  onPress={switchMode}
+                  color="#facc15"
+                />
+              </View>
+              <Button
+                title="🔄 Trocar câmera"
+                onPress={() => setType(type === "back" ? "front" : "back")}
+                color="#0af"
+              />
+            </View>
+          </>
         ) : (
           <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
         )}
@@ -148,12 +154,31 @@ const styles = StyleSheet.create({
   },
   nativeCamera: {
     width: "100%",
-    height: 300,
+    height: 350,
     borderWidth: 2,
     borderColor: "#0f0",
     borderRadius: 10,
     overflow: "hidden",
     marginTop: 15,
     backgroundColor: "black",
+  },
+  overlay: {
+    position: "absolute",
+    bottom: 10,
+    left: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 10,
+    borderRadius: 8,
+  },
+  overlayText: {
+    color: "#fff",
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  buttonRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
 });
