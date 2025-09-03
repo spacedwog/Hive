@@ -51,7 +51,6 @@ export default function DataScienceCardScreen() {
 
   // IPs
   const STA_IP = '192.168.15.138'; // STA - conectado ao seu roteador
-  const STA_VESPA = '192.168.15.166'; // STA - conectado ao seu roteador
   const SOFTAP_IP = '192.168.4.1'; // SoftAP - fallback
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
