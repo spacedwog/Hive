@@ -1,6 +1,6 @@
+import { Camera, CameraType } from "expo-camera";
 import React, { useEffect, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Camera, useCameraDevices } from "react-native-vision-camera";
 import { WebView } from "react-native-webview";
 
 const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
@@ -12,7 +12,7 @@ type StatusResponse = {
   ip: string;
 };
 
-export default function App() {
+export default function StreamScreen() {
   const [status, setStatus] = useState<StatusResponse>({
     led_builtin: "off",
     led_opposite: "on",
@@ -21,16 +21,14 @@ export default function App() {
 
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
 
-  // ======= CONFIG DA CÂMERA NATIVA =======
-  const [permission, setPermission] = useState(false);
-  const devices = useCameraDevices();
-  const device = devices.find((d) => d.position === "back");
+  // ======= CONFIG DA CÂMERA NATIVA (expo-camera) =======
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [type, setType] = useState<CameraType>(Camera.Constants.Type.back);
 
   useEffect(() => {
     (async () => {
-      const camPerm = await Camera.requestCameraPermission();
-      const micPerm = await Camera.requestMicrophonePermission();
-      setPermission(camPerm === "granted" && micPerm === "granted");
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === "granted");
     })();
   }, []);
 
@@ -105,10 +103,10 @@ export default function App() {
       {/* CÂMERA NATIVA DO DISPOSITIVO */}
       <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
       <View style={styles.nativeCamera}>
-        {device && permission ? (
-          <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} />
+        {hasPermission ? (
+          <Camera style={StyleSheet.absoluteFill} type={type} />
         ) : (
-          <Text style={{ color: "red" }}>Permissão ou câmera indisponível</Text>
+          <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
         )}
       </View>
     </ScrollView>
