@@ -1,12 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withTiming,
-} from 'react-native-reanimated';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 interface SensorData {
   device: string;
@@ -22,10 +16,8 @@ interface SensorData {
   };
 }
 
-const MAX_POINTS = 60;
 const STORAGE_KEY = "@HiveStatusHistory";
 
-// SparkBar component
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({ data, width, height = 120 }) => {
   const n = Math.max(data.length, 1);
   const barGap = 2;
@@ -54,20 +46,17 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
   );
 };
 
-export default function HiveHomeScreen() {
+export default function DataScienceCardScreen() {
   const { width: winWidth } = useWindowDimensions();
   const [node, setNode] = useState<SensorData | null>(null);
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
-
-  const opacityTitle = useSharedValue(0);
-  const translateYTitle = useSharedValue(-20);
-  const scaleCard = useSharedValue(0.9);
-  const rotateHex = useSharedValue(-10);
+  const [page, setPage] = useState<number>(0); // página atual do card
 
   const STA_IP = '192.168.15.138';
   const SOFTAP_IP = '192.168.4.1';
 
-  // Carrega histórico do AsyncStorage
+  const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
+
   const loadHistory = async () => {
     try {
       const json = await AsyncStorage.getItem(STORAGE_KEY);
@@ -77,7 +66,7 @@ export default function HiveHomeScreen() {
     }
   };
 
-  // Função para enviar comando
+  // Envia comando para o nó
   const sendCommand = async (cmd: 'on' | 'off') => {
     if (!node) return;
     const ip = node.sta_ip !== 'desconectado' ? node.sta_ip : node.server_ip;
@@ -93,11 +82,6 @@ export default function HiveHomeScreen() {
   };
 
   useEffect(() => {
-    opacityTitle.value = withTiming(1, { duration: 800 });
-    translateYTitle.value = withTiming(0, { duration: 800 });
-    scaleCard.value = withDelay(400, withTiming(1, { duration: 800 }));
-    rotateHex.value = withDelay(800, withTiming(0, { duration: 1000 }));
-
     loadHistory();
 
     const fetchData = async () => {
@@ -124,93 +108,89 @@ export default function HiveHomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Estilos animados
-  const titleStyle = useAnimatedStyle(() => ({
-    opacity: opacityTitle.value,
-    transform: [{ translateY: translateYTitle.value }],
-  }));
-
-  const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scaleCard.value }],
-  }));
-
-  const hexStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotateHex.value}deg` }],
-  }));
-
-  const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
+  const nextPage = () => setPage((prev) => (prev + 1) % 3);
+  const prevPage = () => setPage((prev) => (prev - 1 + 3) % 3);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Animated.View style={[styles.header, titleStyle]}>
-        <Text style={styles.title}>🧠 H.I.V.E. Project</Text>
-        <Text style={styles.subtitle}>Hyper-Intelligent Virtual Entity</Text>
-      </Animated.View>
+      <Text style={styles.title}>📊 Data Science Dashboard</Text>
 
-      {/* Card do Nó Ativo */}
-      {node ? (
-        <Animated.View style={[styles.card, cardStyle]}>
-          <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
-          <Text style={styles.description}>📡 IP AP: {node.server_ip}</Text>
-          <Text style={styles.description}>🌐 IP STA: {node.sta_ip}</Text>
-          <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw}</Text>
-          <Text style={styles.description}>📈 Som (dB): {node.sensor_db.toFixed(1)}</Text>
-          <Text style={styles.description}>
-            ⚠️ Anomalia: {node.anomaly.detected ? node.anomaly.message : 'Normal'}
-          </Text>
-          <Text style={styles.description}>🔌 Status: {node.status}</Text>
+      <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
+        {node ? (
+          <>
+            {page === 0 && (
+              <View>
+                <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
+                <Text style={styles.description}>📡 IP AP: {node.server_ip}</Text>
+                <Text style={styles.description}>🌐 IP STA: {node.sta_ip}</Text>
+                <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw}</Text>
+                <Text style={styles.description}>📈 Som (dB): {node.sensor_db.toFixed(1)}</Text>
+                <Text style={styles.description}>
+                  ⚠️ Anomalia: {node.anomaly.detected ? node.anomaly.message : 'Normal'}
+                </Text>
+                <Text style={styles.description}>🔌 Status: {node.status}</Text>
+              </View>
+            )}
 
-          <View style={{ flexDirection: 'row', marginTop: 12 }}>
-            <TouchableOpacity style={[styles.btn, { backgroundColor: '#4CAF50' }]} onPress={() => sendCommand('on')}>
-              <Text style={styles.btnText}>Ativar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.btn, { backgroundColor: '#f44336', marginLeft: 10 }]} onPress={() => sendCommand('off')}>
-              <Text style={styles.btnText}>Desativar</Text>
-            </TouchableOpacity>
-          </View>
+            {page === 1 && history[node.sta_ip] && history[node.sta_ip].length > 0 && (
+              <View>
+                <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
+                <SparkBar data={history[node.sta_ip]} width={graphWidth} height={120} />
+                
+                {/* Botões de comando */}
+                <View style={{ flexDirection: 'row', marginTop: 16 }}>
+                  <TouchableOpacity
+                    style={[styles.cmdBtn, { backgroundColor: '#4CAF50' }]}
+                    onPress={() => sendCommand('on')}
+                  >
+                    <Text style={styles.cmdBtnText}>Ativar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.cmdBtn, { backgroundColor: '#f44336', marginLeft: 10 }]}
+                    onPress={() => sendCommand('off')}
+                  >
+                    <Text style={styles.cmdBtnText}>Desativar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
-          {/* Histórico do nó */}
-          {history[node.sta_ip] && history[node.sta_ip].length > 0 && (
-            <View style={{ marginTop: 20 }}>
-              <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
-              <SparkBar data={history[node.sta_ip]} width={graphWidth} height={120} />
+            {page === 2 && Object.keys(history).length > 0 && (
+              <View>
+                <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>
+                  📦 Histórico Geral
+                </Text>
+                {Object.entries(history).map(([serverIp, values]) => (
+                  <View key={serverIp} style={{ marginBottom: 12 }}>
+                    <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>
+                      🌐 {serverIp} — Últimos {values.length} pontos
+                    </Text>
+                    <SparkBar data={values} width={graphWidth} height={80} />
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Navegação de páginas */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+              <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
+                <Text style={styles.pageBtnText}>⬅ Anterior</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={nextPage} style={styles.pageBtn}>
+                <Text style={styles.pageBtnText}>Próximo ➡</Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </Animated.View>
-      ) : (
-        <Text style={{ color: '#facc15', marginTop: 20 }}>
-          Conecte-se ao nó via WiFi (STA ou Soft-AP)...
-        </Text>
-      )}
-
-      {/* Card do Histórico Geral do AsyncStorage */}
-      {Object.keys(history).length > 0 && (
-        <View style={[styles.card, { backgroundColor: '#162447', marginTop: 20 }]}>
-          <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>
-            📦 Histórico Geral do AsyncStorage
+            <Text style={{ color: '#a8dadc', textAlign: 'center', marginTop: 8 }}>Página {page + 1} de 3</Text>
+          </>
+        ) : (
+          <Text style={{ color: '#facc15', textAlign: 'center' }}>
+            Conecte-se ao nó via WiFi (STA ou Soft-AP)...
           </Text>
-          {Object.entries(history).map(([serverIp, values]) => (
-            <View key={serverIp} style={{ marginBottom: 12 }}>
-              <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>
-                🌐 {serverIp} — Últimos {values.length} pontos
-              </Text>
-              <SparkBar data={values} width={graphWidth} height={80} />
-            </View>
-          ))}
-        </View>
-      )}
-
-      <Animated.View style={[styles.hexagonWrapper, hexStyle]}>
-        <View style={styles.hexagon}>
-          <View style={styles.hexagonInner} />
-        </View>
-        <Text style={styles.hexagonLabel}>{node ? 'Nó Ativo' : 'Nenhum nó'}</Text>
-      </Animated.View>
+        )}
+      </View>
     </ScrollView>
   );
 }
-
-const HEX_SIZE = 80;
 
 const styles = StyleSheet.create({
   container: {
@@ -218,19 +198,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
     alignItems: 'center',
   },
-  header: {
-    marginBottom: 20,
-    alignItems: 'center',
-  },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     color: '#facc15',
     fontWeight: 'bold',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#cbd5e1',
-    marginTop: 4,
+    marginBottom: 20,
   },
   card: {
     borderRadius: 16,
@@ -238,7 +210,6 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.3,
     shadowRadius: 12,
-    marginVertical: 12,
     width: '100%',
   },
   description: {
@@ -246,39 +217,24 @@ const styles = StyleSheet.create({
     color: '#e2e8f0',
     lineHeight: 24,
   },
-  hexagonWrapper: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  hexagon: {
-    width: HEX_SIZE,
-    height: HEX_SIZE * 0.866,
-    backgroundColor: '#facc15',
-    marginVertical: HEX_SIZE * 0.133,
-    justifyContent: 'center',
-    alignItems: 'center',
-    transform: [{ rotate: '30deg' }],
-  },
-  hexagonInner: {
-    width: HEX_SIZE,
-    height: HEX_SIZE * 0.866,
-    backgroundColor: '#facc15',
-    transform: [{ rotate: '-30deg' }],
-  },
-  hexagonLabel: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#facc15',
-    fontWeight: '600',
-  },
-  btn: {
+  cmdBtn: {
     flex: 1,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
   },
-  btnText: {
+  cmdBtnText: {
     color: '#fff',
+    fontWeight: '600',
+  },
+  pageBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#50fa7b',
+    borderRadius: 8,
+  },
+  pageBtnText: {
+    color: '#0f172a',
     fontWeight: '600',
   },
   chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
