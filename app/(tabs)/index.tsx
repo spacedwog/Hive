@@ -49,8 +49,10 @@ export default function DataScienceCardScreen() {
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [page, setPage] = useState<number>(0); // página atual do card
 
-  const STA_IP = '192.168.15.138';
-  const SOFTAP_IP = '192.168.4.1';
+  // IPs
+  const STA_IP = '192.168.15.138'; // STA - conectado ao seu roteador
+  const STA_VESPA = '192.168.15.166'; // STA - conectado ao seu roteador
+  const SOFTAP_IP = '192.168.4.1'; // SoftAP - fallback
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
@@ -69,15 +71,16 @@ export default function DataScienceCardScreen() {
     }
   };
 
+  // Loop de coleta de dados
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Tenta no IP STA
         let response = await fetch(`http://${STA_IP}/status`);
         if (!response.ok) throw new Error('STA offline');
         const data: SensorData = await response.json();
         setNode(data);
 
-        // Atualiza histórico em memória
         setHistory(prev => {
           const next = { ...prev };
           const key = data.sta_ip;
@@ -89,12 +92,12 @@ export default function DataScienceCardScreen() {
         });
       } catch {
         try {
+          // Fallback no SoftAP
           let response = await fetch(`http://${SOFTAP_IP}/status`);
           if (!response.ok) throw new Error('Soft-AP offline');
           const data: SensorData = await response.json();
           setNode(data);
 
-          // Atualiza histórico em memória
           setHistory(prev => {
             const next = { ...prev };
             const key = data.server_ip;
@@ -123,6 +126,7 @@ export default function DataScienceCardScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📊 Data Science Dashboard</Text>
 
+      {/* Card principal */}
       <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
         {node ? (
           <>
@@ -144,8 +148,7 @@ export default function DataScienceCardScreen() {
               <View>
                 <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
                 <SparkBar data={history[node.sta_ip]} width={graphWidth} height={120} />
-                
-                {/* Botões de comando */}
+
                 <View style={{ flexDirection: 'row', marginTop: 16 }}>
                   <TouchableOpacity
                     style={[styles.cmdBtn, { backgroundColor: '#4CAF50' }]}
@@ -179,7 +182,6 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
-            {/* Navegação de páginas */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
               <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
                 <Text style={styles.pageBtnText}>⬅ Anterior</Text>
@@ -193,6 +195,55 @@ export default function DataScienceCardScreen() {
         ) : (
           <Text style={{ color: '#facc15', textAlign: 'center' }}>
             Conecte-se ao nó via WiFi (STA ou Soft-AP)...
+          </Text>
+        )}
+      </View>
+
+      {/* Segundo Card - Energia */}
+      <View style={[styles.card, { backgroundColor: '#111827', marginTop: 20 }]}>
+        {node ? (
+          <>
+            <Text style={{ color: '#facc15', fontSize: 18, fontWeight: '600', marginBottom: 10 }}>
+              ⚡ Energia & Bateria
+            </Text>
+
+            <Text style={styles.description}>
+              🔋 Nível da Bateria: {Math.max(0, Math.min(100, (node.sensor_raw / 4095) * 100)).toFixed(0)}%
+            </Text>
+            <Text style={styles.description}>
+              ⚡ Tensão: {(node.sensor_raw * 3.3 / 4095).toFixed(2)} V
+            </Text>
+            <Text style={styles.description}>📶 Status Vespa: {node.status}</Text>
+
+            {history[node.sta_ip] && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={{ color: '#fff', marginBottom: 8 }}>🔋 Histórico de Tensão</Text>
+                <SparkBar
+                  data={history[node.sta_ip].map(v => Math.max(0, Math.min(100, (v / 4095) * 100)))}
+                  width={graphWidth}
+                  height={80}
+                />
+              </View>
+            )}
+
+            <View style={{ flexDirection: 'row', marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.cmdBtn, { backgroundColor: '#22c55e' }]}
+                onPress={() => sendCommand('on')}
+              >
+                <Text style={styles.cmdBtnText}>Ligar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cmdBtn, { backgroundColor: '#ef4444', marginLeft: 10 }]}
+                onPress={() => sendCommand('off')}
+              >
+                <Text style={styles.cmdBtnText}>Desligar</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <Text style={{ color: '#facc15', textAlign: 'center' }}>
+            Conecte-se à Vespa para visualizar energia...
           </Text>
         )}
       </View>
@@ -245,10 +296,43 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontWeight: '600',
   },
-  chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
-  chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
-  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
-  chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
-  chartLabels: { position: "absolute", top: 4, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between" },
-  chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
+  chartBox: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 10,
+    overflow: "hidden",
+    alignSelf: "center",
+    paddingTop: 8,
+    paddingHorizontal: 8
+  },
+  chartAxis: {
+    position: "absolute",
+    bottom: 8,
+    left: 8,
+    right: 8,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.2)"
+  },
+  chartBarsRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    height: "100%",
+    paddingBottom: 8
+  },
+  chartBar: {
+    backgroundColor: "#50fa7b",
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3
+  },
+  chartLabels: {
+    position: "absolute",
+    top: 4,
+    left: 8,
+    right: 8,
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  chartLabelText: {
+    fontSize: 10,
+    color: "rgba(255,255,255,0.6)"
+  },
 });
