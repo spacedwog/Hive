@@ -29,6 +29,7 @@ interface SparkBarProps {
   width: number;
   height?: number;
   highlightThreshold?: number;
+  onBarPress?: (index: number, value: number) => void;
 }
 
 const SparkBar: React.FC<SparkBarProps> = ({
@@ -36,11 +37,11 @@ const SparkBar: React.FC<SparkBarProps> = ({
   width,
   height = 120,
   highlightThreshold = 80,
+  onBarPress,
 }) => {
   const n = Math.max(data.length, 1);
   const barGap = 2;
   const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
-  const [tooltipIndex, setTooltipIndex] = useState<number | null>(null);
 
   return (
     <View style={[styles.chartBox, { width, height }]}>
@@ -54,8 +55,7 @@ const SparkBar: React.FC<SparkBarProps> = ({
           return (
             <Pressable
               key={`${i}-${v}`}
-              onPressIn={() => setTooltipIndex(i)}
-              onPressOut={() => setTooltipIndex(null)}
+              onPress={() => onBarPress && onBarPress(i, clamped)}
               style={{ marginRight: i === n - 1 ? 0 : barGap }}
             >
               <View
@@ -64,11 +64,6 @@ const SparkBar: React.FC<SparkBarProps> = ({
                   { width: barWidth, height: h, backgroundColor: isAnomaly ? '#ff5555' : '#50fa7b' },
                 ]}
               />
-              {tooltipIndex === i && (
-                <View style={styles.tooltip}>
-                  <Text style={styles.tooltipText}>{clamped.toFixed(1)}%</Text>
-                </View>
-              )}
             </Pressable>
           );
         })}
@@ -87,6 +82,7 @@ export default function DataScienceCardScreen() {
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [page, setPage] = useState<number>(0);
   const [alert, setAlert] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ index: number; value: number } | null>(null);
   const alertAnim = useMemo(() => new Animated.Value(0), []);
 
   const STA_IP = '192.168.15.138';
@@ -162,7 +158,7 @@ export default function DataScienceCardScreen() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [alertAnim]); // Lint-safe
+  }, [alertAnim]);
 
   const nextPage = () => setPage(prev => (prev + 1) % 3);
   const prevPage = () => setPage(prev => (prev - 1 + 3) % 3);
@@ -205,7 +201,21 @@ export default function DataScienceCardScreen() {
             {page === 1 && history[node.sta_ip] && history[node.sta_ip].length > 0 && (
               <View>
                 <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
-                <SparkBar data={history[node.sta_ip]} width={graphWidth} height={120} highlightThreshold={80} />
+                <SparkBar
+                  data={history[node.sta_ip]}
+                  width={graphWidth}
+                  height={120}
+                  highlightThreshold={80}
+                  onBarPress={(index, value) => setTooltip({ index, value })}
+                />
+
+                {tooltip && (
+                  <View style={styles.tooltipCard}>
+                    <Text style={styles.tooltipCardText}>
+                      Ponto {tooltip.index + 1}: {tooltip.value.toFixed(1)}%
+                    </Text>
+                  </View>
+                )}
 
                 <View style={{ flexDirection: 'row', marginTop: 16 }}>
                   <TouchableOpacity
@@ -253,55 +263,6 @@ export default function DataScienceCardScreen() {
         ) : (
           <Text style={{ color: '#facc15', textAlign: 'center' }}>
             Conecte-se ao nó via WiFi (STA ou Soft-AP)...
-          </Text>
-        )}
-      </View>
-
-      {/* Card de Energia */}
-      <View style={[styles.card, { backgroundColor: '#111827', marginTop: 20 }]}>
-        {node ? (
-          <>
-            <Text style={{ color: '#facc15', fontSize: 18, fontWeight: '600', marginBottom: 10 }}>
-              ⚡ Energia & Bateria
-            </Text>
-            <Text style={styles.description}>
-              🔋 Nível da Bateria: {Math.max(0, Math.min(100, (node.sensor_raw / 4095) * 100)).toFixed(0)}%
-            </Text>
-            <Text style={styles.description}>
-              ⚡ Tensão: {(node.sensor_raw * 3.3 / 4095).toFixed(2)} V
-            </Text>
-            <Text style={styles.description}>📶 Status Vespa: {node.status}</Text>
-
-            {history[node.sta_ip] && (
-              <View style={{ marginTop: 12 }}>
-                <Text style={{ color: '#fff', marginBottom: 8 }}>🔋 Histórico de Tensão</Text>
-                <SparkBar
-                  data={history[node.sta_ip].map(v => Math.max(0, Math.min(100, (v / 4095) * 100)))}
-                  width={graphWidth}
-                  height={80}
-                  highlightThreshold={90}
-                />
-              </View>
-            )}
-
-            <View style={{ flexDirection: 'row', marginTop: 16 }}>
-              <TouchableOpacity
-                style={[styles.cmdBtn, { backgroundColor: '#22c55e' }]}
-                onPress={() => sendCommand('on')}
-              >
-                <Text style={styles.cmdBtnText}>Ligar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.cmdBtn, { backgroundColor: '#ef4444', marginLeft: 10 }]}
-                onPress={() => sendCommand('off')}
-              >
-                <Text style={styles.cmdBtnText}>Desligar</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <Text style={{ color: '#facc15', textAlign: 'center' }}>
-            Conecte-se à Vespa para visualizar energia...
           </Text>
         )}
       </View>
@@ -392,17 +353,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: 'rgba(255,255,255,0.6)',
   },
-  tooltip: {
-    position: 'absolute',
-    top: -24,
-    left: -12,
+  tooltipCard: {
+    marginTop: 12,
     backgroundColor: '#222',
-    padding: 4,
-    borderRadius: 4,
-    zIndex: 10,
+    padding: 8,
+    borderRadius: 8,
+    alignItems: 'center',
   },
-  tooltipText: {
+  tooltipCardText: {
     color: '#fff',
-    fontSize: 12,
+    fontWeight: '600',
   },
 });
