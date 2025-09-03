@@ -5,7 +5,7 @@ import { Camera, useCameraDevices } from "react-native-vision-camera";
 export default function NativeCamera() {
   const [permission, setPermission] = useState(false);
   const devices = useCameraDevices();
-  const device = devices.back;
+  const device = devices.find((d) => d.position === "back");
 
   useEffect(() => {
     (async () => {

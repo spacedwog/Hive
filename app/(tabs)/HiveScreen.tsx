@@ -73,7 +73,7 @@ export default function HiveScreen() {
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
   // Busca status dos servidores
-  const fetchStatus = async () => {
+  const fetchStatus = React.useCallback(async () => {
     try {
       const servers = ["192.168.4.1", "192.168.15.166"];
       const responses = await Promise.all(
@@ -116,7 +116,7 @@ export default function HiveScreen() {
     } catch (err) {
       console.error("Erro ao buscar status:", err);
     }
-  };
+  }, [authHeader]);
 
   // Envia comando
   const sendCommand = async (server: string, command: string, payload?: any) => {
@@ -141,7 +141,7 @@ export default function HiveScreen() {
     fetchStatus();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchStatus]);
 
   const onRefresh = async () => {
     setRefreshing(true);

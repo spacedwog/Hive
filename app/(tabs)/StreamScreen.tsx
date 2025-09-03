@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Camera, useCameraDevices } from "react-native-vision-camera";
 import { WebView } from "react-native-webview";
 
 const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
-const STA_IP = "http://192.168.15.188";  // ESP32 conectado à rede WiFi (STA)
+const STA_IP = "http://192.168.15.188"; // ESP32 conectado à rede WiFi (STA)
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -20,6 +21,20 @@ export default function App() {
 
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
 
+  // ======= CONFIG DA CÂMERA NATIVA =======
+  const [permission, setPermission] = useState(false);
+  const devices = useCameraDevices();
+  const device = devices.find((d) => d.position === "back");
+
+  useEffect(() => {
+    (async () => {
+      const camPerm = await Camera.requestCameraPermission();
+      const micPerm = await Camera.requestMicrophonePermission();
+      setPermission(camPerm === "granted" && micPerm === "granted");
+    })();
+  }, []);
+
+  // ======= FUNÇÕES DO ESP32 =======
   const toggleLed = async () => {
     try {
       const newState = status.led_builtin === "on" ? "L" : "H";
@@ -72,7 +87,8 @@ export default function App() {
         color="#facc15"
       />
 
-      <Text style={[styles.text, { marginTop: 20 }]}>📷 Câmera ao vivo:</Text>
+      {/* STREAM DO ESP32 */}
+      <Text style={[styles.text, { marginTop: 20 }]}>📷 Câmera ESP32:</Text>
       <View style={styles.videoContainer}>
         <WebView
           source={{ uri: `${status.ip}/stream` }}
@@ -80,8 +96,20 @@ export default function App() {
           javaScriptEnabled
           domStorageEnabled
           allowsFullscreenVideo
-          onHttpError={({ nativeEvent }) => console.log("HTTP Error:", nativeEvent)}
+          onHttpError={({ nativeEvent }) =>
+            console.log("HTTP Error:", nativeEvent)
+          }
         />
+      </View>
+
+      {/* CÂMERA NATIVA DO DISPOSITIVO */}
+      <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
+      <View style={styles.nativeCamera}>
+        {device && permission ? (
+          <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} />
+        ) : (
+          <Text style={{ color: "red" }}>Permissão ou câmera indisponível</Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -119,5 +147,15 @@ const styles = StyleSheet.create({
   },
   video: {
     flex: 1,
+  },
+  nativeCamera: {
+    width: "100%",
+    height: 300,
+    borderWidth: 2,
+    borderColor: "#0f0",
+    borderRadius: 10,
+    overflow: "hidden",
+    marginTop: 15,
+    backgroundColor: "black",
   },
 });
