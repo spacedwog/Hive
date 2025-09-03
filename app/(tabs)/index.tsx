@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
@@ -15,8 +14,6 @@ interface SensorData {
     current_value: number;
   };
 }
-
-const STORAGE_KEY = "@HiveStatusHistory";
 
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({ data, width, height = 120 }) => {
   const n = Math.max(data.length, 1);
@@ -57,15 +54,6 @@ export default function DataScienceCardScreen() {
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
-  const loadHistory = async () => {
-    try {
-      const json = await AsyncStorage.getItem(STORAGE_KEY);
-      if (json) setHistory(JSON.parse(json));
-    } catch (err) {
-      console.error("Erro ao carregar histórico:", err);
-    }
-  };
-
   // Envia comando para o nó
   const sendCommand = async (cmd: 'on' | 'off') => {
     if (!node) return;
@@ -82,20 +70,40 @@ export default function DataScienceCardScreen() {
   };
 
   useEffect(() => {
-    loadHistory();
-
     const fetchData = async () => {
       try {
         let response = await fetch(`http://${STA_IP}/status`);
         if (!response.ok) throw new Error('STA offline');
         const data: SensorData = await response.json();
         setNode(data);
+
+        // Atualiza histórico em memória
+        setHistory(prev => {
+          const next = { ...prev };
+          const key = data.sta_ip;
+          const values = next[key] ?? [];
+          const newArr = [...values, data.sensor_db];
+          if (newArr.length > 60) newArr.splice(0, newArr.length - 60);
+          next[key] = newArr;
+          return next;
+        });
       } catch {
         try {
           let response = await fetch(`http://${SOFTAP_IP}/status`);
           if (!response.ok) throw new Error('Soft-AP offline');
           const data: SensorData = await response.json();
           setNode(data);
+
+          // Atualiza histórico em memória
+          setHistory(prev => {
+            const next = { ...prev };
+            const key = data.server_ip;
+            const values = next[key] ?? [];
+            const newArr = [...values, data.sensor_db];
+            if (newArr.length > 60) newArr.splice(0, newArr.length - 60);
+            next[key] = newArr;
+            return next;
+          });
         } catch (error) {
           console.log('Erro ao obter dados do nó:', error);
           setNode(null);

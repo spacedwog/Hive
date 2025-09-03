@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as base64 from "base-64";
 import { LinearGradient } from "expo-linear-gradient";
@@ -25,7 +24,6 @@ type NodeStatus = {
 };
 
 const MAX_POINTS = 60;
-const STORAGE_KEY = "@HiveStatusHistory";
 
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
   data,
@@ -74,27 +72,6 @@ export default function HiveScreen() {
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // Carrega histórico do AsyncStorage
-  const loadHistory = async () => {
-    try {
-      const json = await AsyncStorage.getItem(STORAGE_KEY);
-      if (json) {
-        setHistory(JSON.parse(json));
-      }
-    } catch (err) {
-      console.error("Erro ao carregar histórico:", err);
-    }
-  };
-
-  // Salva histórico no AsyncStorage
-  const saveHistory = async (hist: { [key: string]: number[] }) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(hist));
-    } catch (err) {
-      console.error("Erro ao salvar histórico:", err);
-    }
-  };
-
   // Busca status dos servidores
   const fetchStatus = async () => {
     try {
@@ -122,7 +99,7 @@ export default function HiveScreen() {
         }
       });
 
-      // Atualiza histórico
+      // Atualiza histórico em memória
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
@@ -134,7 +111,6 @@ export default function HiveScreen() {
             next[key] = newArr;
           } else if (!next[key]) next[key] = [];
         });
-        saveHistory(next);
         return next;
       });
     } catch (err) {
@@ -162,7 +138,6 @@ export default function HiveScreen() {
   };
 
   useEffect(() => {
-    loadHistory();
     fetchStatus();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
