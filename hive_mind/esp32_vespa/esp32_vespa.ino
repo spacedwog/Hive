@@ -2,7 +2,8 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
-#include <time.h>  // Para timestamp ISO 8601
+#include <time.h>   // Para timestamp ISO 8601
+#include "DHT.h"    // Biblioteca DHT
 
 // ==== Sensor Ultrassônico ====
 #define TRIG 21
@@ -41,6 +42,17 @@ long medirDistancia() {
 long lerSensor() {
   return analogRead(POT_PIN); // 0 a 4095
 }
+
+// ==== Sensor PIR ====
+#define PIR_PIN 25
+bool lerPIR() {
+  return digitalRead(PIR_PIN) == HIGH;
+}
+
+// ==== Sensor DHT22 ====
+#define DHTPIN 26
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
 
 // ==== Credenciais do AP ====
 const char* ap_ssid = "HIVE VESPA";
@@ -121,11 +133,19 @@ void handleStatus() {
   float distancia_m = distancia_cm / 100.0;
   float analog_percent = (analog_val / 4095.0) * 100;
 
+  // Sensores novos
+  bool movimento = lerPIR();
+  float temperatura = dht.readTemperature();
+  float umidade = dht.readHumidity();
+
   DynamicJsonDocument doc(512);
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_m"] = distancia_m;
   doc["analog_percent"] = analog_percent;
+  doc["pir_movimento"] = movimento ? "detectado" : "ausente";
+  doc["temperatura_C"] = isnan(temperatura) ? nullptr : temperatura;
+  doc["umidade_pct"] = isnan(umidade) ? nullptr : umidade;
   doc["wifi_mode"] = staConnected ? "STA" : "AP";
   doc["ip"] = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
   doc["timestamp"] = getISOTime();
@@ -192,6 +212,9 @@ void setup() {
   pinMode(POT_PIN, INPUT);
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
+  pinMode(PIR_PIN, INPUT);
+
+  dht.begin();
 
   SerialVESPA.begin(BAUD_UART, SERIAL_8N1, RX_VESPA, TX_VESPA);
   Serial.println("UART para ESP32-CAM iniciada");

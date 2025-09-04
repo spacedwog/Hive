@@ -19,6 +19,9 @@ type NodeStatus = {
   status?: "ativo" | "parado" | "offline";
   ultrassonico_m?: number;
   analog_percent?: number;
+  pir_movimento?: "detectado" | "ausente";
+  temperatura_C?: number | null;
+  umidade_pct?: number | null;
   timestamp?: string;
   error?: string;
 };
@@ -194,6 +197,17 @@ export default function HiveScreen() {
                 {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
                 {s.analog_percent !== undefined && (
                   <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)} %</Text>
+                )}
+                {s.pir_movimento && (
+                  <Text style={styles.statusText}>
+                    🚶 Movimento: {s.pir_movimento === "detectado" ? "Detectado" : "Ausente"}
+                  </Text>
+                )}
+                {typeof s.temperatura_C === "number" && (
+                  <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>
+                )}
+                {typeof s.umidade_pct === "number" && (
+                  <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>
                 )}
                 {s.timestamp && <Text style={styles.statusText}>⏱️ {s.timestamp}</Text>}
                 {pingValues[serverKey] !== undefined && (
