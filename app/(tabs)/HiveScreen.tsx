@@ -1,6 +1,7 @@
 import Slider from "@react-native-community/slider";
 import axios from "axios";
 import * as base64 from "base-64";
+import * as Location from "expo-location"; // 👈 adicionado
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Button,
@@ -72,12 +73,30 @@ export default function HiveScreen() {
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [refreshing, setRefreshing] = useState(false);
   const [zoom, setZoom] = useState(0.05); // controla zoom do mapa
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null); // 👈 nova state
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
   const authUsername = "spacedwog";
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
+
+  // Busca localização atual do usuário
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        console.warn("Permissão de localização negada");
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+    })();
+  }, []);
 
   // Busca status dos servidores
   const fetchStatus = React.useCallback(async () => {
@@ -273,12 +292,14 @@ export default function HiveScreen() {
         <MapView
           style={{ flex: 1 }}
           region={{
-            latitude: -23.5505,
-            longitude: -46.6333,
+            latitude: userLocation?.latitude || -23.5505,
+            longitude: userLocation?.longitude || -46.6333,
             latitudeDelta: zoom,
             longitudeDelta: zoom,
           }}
+          showsUserLocation={true} // 👈 já mostra posição nativa
         >
+          {/* Servidores */}
           {onlineStatus.map((s, idx) => (
             <Marker
               key={idx}
@@ -307,6 +328,16 @@ export default function HiveScreen() {
               </Callout>
             </Marker>
           ))}
+
+          {/* Minha posição (azul) */}
+          {userLocation && (
+            <Marker
+              coordinate={userLocation}
+              pinColor="blue"
+              title="Minha posição"
+              description="Localização atual"
+            />
+          )}
         </MapView>
 
         {/* Slider controla zoom */}
