@@ -28,8 +28,8 @@ long medirDistancia() {
   ultraBuffer[ultraIndex] = distancia > 0 ? distancia : ultraBuffer[ultraIndex];
   ultraIndex = (ultraIndex + 1) % ULTRASONIC_BUFFER;
   long sum = 0, count = 0;
-  for(int i=0; i<ULTRASONIC_BUFFER; i++) {
-    if(ultraBuffer[i] > 0) {
+  for (int i = 0; i < ULTRASONIC_BUFFER; i++) {
+    if (ultraBuffer[i] > 0) {
       sum += ultraBuffer[i];
       count++;
     }
@@ -144,8 +144,11 @@ void handleStatus() {
   doc["ultrassonico_m"] = distancia_m;
   doc["analog_percent"] = analog_percent;
   doc["pir_movimento"] = movimento ? "detectado" : "ausente";
-  doc["temperatura_C"] = isnan(temperatura) ? nullptr : temperatura;
-  doc["umidade_pct"] = isnan(umidade) ? nullptr : umidade;
+
+  // Corrigido para usar JsonVariant()
+  doc["temperatura_C"] = isnan(temperatura) ? JsonVariant() : temperatura;
+  doc["umidade_pct"]   = isnan(umidade)     ? JsonVariant() : umidade;
+
   doc["wifi_mode"] = staConnected ? "STA" : "AP";
   doc["ip"] = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
   doc["timestamp"] = getISOTime();
