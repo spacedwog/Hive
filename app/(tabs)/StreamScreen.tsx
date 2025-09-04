@@ -1,6 +1,6 @@
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
-import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
 
 const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
 const STA_IP = "http://192.168.15.188"; // ESP32 na rede Wi-Fi
@@ -20,7 +20,7 @@ export default function StreamScreen() {
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
-  const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
+  const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
 
   useEffect(() => {
     (async () => {
@@ -105,16 +105,7 @@ export default function StreamScreen() {
           <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
         )}
       </View>
-
-      {/* STREAM DO ESP32 (MJPEG) */}
-      <Text style={[styles.text, { marginTop: 20 }]}>📡 Stream ESP32:</Text>
-      <View style={styles.videoContainer}>
-        <Image
-          source={{ uri: frameUrl }}
-          style={styles.video}
-          resizeMode="cover"
-        />
-      </View>
+      
     </ScrollView>
   );
 }
