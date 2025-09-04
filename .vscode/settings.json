@@ -121,6 +121,7 @@
     "comum",
     "comunicação",
     "Conecta",
+    "conectada",
     "conectado",
     "conectados",
     "Conectando",
@@ -142,6 +143,7 @@
     "conteúdo",
     "contínua",
     "continuam",
+    "Continuando",
     "continuar",
     "controlada",
     "controle",
@@ -553,6 +555,7 @@
     "visualização",
     "Visualizar",
     "Você",
+    "WROVER",
     "xclk"
   ],
   "C_Cpp.errorSquiggles": "disabled"
