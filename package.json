@@ -61,7 +61,8 @@
     "react-native-webview": "13.13.5",
     "react-native-wifi-reborn": "^4.13.6",
     "three": "^0.166.1",
-    "victory-native": "^41.19.3"
+    "victory-native": "^41.19.3",
+    "react-native-maps": "1.20.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
