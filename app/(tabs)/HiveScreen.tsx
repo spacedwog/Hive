@@ -19,7 +19,7 @@ type NodeStatus = {
   status?: "ativo" | "parado" | "offline";
   ultrassonico_m?: number;
   analog_percent?: number;
-  pir_movimento?: "detectado" | "ausente";
+  presenca?: boolean; // Sensor de Presença PIR - HC-SR501
   temperatura_C?: number | null;
   umidade_pct?: number | null;
   timestamp?: string;
@@ -198,9 +198,9 @@ export default function HiveScreen() {
                 {s.analog_percent !== undefined && (
                   <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)} %</Text>
                 )}
-                {s.pir_movimento && (
+                {s.presenca !== undefined && (
                   <Text style={styles.statusText}>
-                    🚶 Movimento: {s.pir_movimento === "detectado" ? "Detectado" : "Ausente"}
+                    🚶 Presença (HC-SR501): {s.presenca ? "Detectada" : "Ausente"}
                   </Text>
                 )}
                 {typeof s.temperatura_C === "number" && (
