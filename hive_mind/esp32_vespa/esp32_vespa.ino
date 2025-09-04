@@ -2,13 +2,15 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
-#include <time.h>
+#include <time.h>   
+#include "Adafruit_Sensor.h"
 #include "DHT.h"
+#include "DHT_U.h"
 
 // ==== Sensor Ultrassônico ====
 #define TRIG 21
 #define ECHO 22
-#define ULTRASONIC_BUFFER 5
+#define ULTRASONIC_BUFFER 5  
 
 long ultraBuffer[ULTRASONIC_BUFFER] = {0};
 int ultraIndex = 0;
@@ -20,8 +22,8 @@ long medirDistancia() {
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);
 
-  long duracao = pulseIn(ECHO, HIGH, 30000);
-  long distancia = duracao * 0.034 / 2;
+  long duracao = pulseIn(ECHO, HIGH, 30000); 
+  long distancia = duracao * 0.034 / 2;      
   distancia = distancia > 0 ? distancia : -1;
 
   ultraBuffer[ultraIndex] = distancia > 0 ? distancia : ultraBuffer[ultraIndex];
@@ -39,31 +41,26 @@ long medirDistancia() {
 // ==== Potenciômetro ====
 #define POT_PIN 33
 long lerSensor() {
-  return analogRead(POT_PIN);
+  return analogRead(POT_PIN); 
 }
 
-// ==== Sensor PIR ====
+// ==== Sensor de Presença PIR - HC-SR501 ====
 #define PIR_PIN 25
-bool lerPIR() {
+bool lerPresenca() {
   return digitalRead(PIR_PIN) == HIGH;
 }
 
-// ==== Sensor DHT22 ====
+// ==== Sensor DHT22 via Adafruit ====
 #define DHTPIN 26
 #define DHTTYPE DHT22
-DHT dht(DHTPIN, DHTTYPE);
+DHT_Unified dht(DHTPIN, DHTTYPE);
+sensors_event_t event;
 
-// ==== Bateria ====
-#define BAT_PIN 34
-float lerBateria() {
-  int raw = analogRead(BAT_PIN);
-  float tensao = (raw / 4095.0) * 2.0 * 3.3; // divisor de tensão 1:2
-  return tensao;
-}
-
-// ==== Credenciais WiFi ====
+// ==== Credenciais do AP ====
 const char* ap_ssid = "HIVE VESPA";
 const char* ap_password = "hivemind";
+
+// ==== Credenciais do STA ====
 const char* sta_ssid = "FAMILIA SANTOS";
 const char* sta_password = "6z2h1j3k9f";
 
@@ -82,6 +79,17 @@ HardwareSerial SerialVESPA(1);
 #define RX_VESPA 17
 #define BAUD_UART 9600
 String uartBuffer = "";
+
+// ==== PROIoT Config ====
+WiFiClient cliente;
+const String SERVIDOR = "things.proiot.network";
+const uint16_t PORTA = 80;
+const String TOKEN = "HIVE-TOKEN";
+const String ROTULO = "HIVE-PRIME";
+const String ALIAS_TEMP = "temperatura";
+const String ALIAS_UMID = "umidade";
+const int ESPERA = 5;  
+const long ATRASO = 60000; // 1 min para teste
 
 // ==== Funções internas ====
 String base64Decode(const String &input) {
@@ -119,6 +127,7 @@ bool checkAuth() {
   return true;
 }
 
+// ==== Timestamp ISO 8601 ====
 String getISOTime() {
   time_t now;
   time(&now);
@@ -126,6 +135,29 @@ String getISOTime() {
   char buffer[25];
   strftime(buffer, 25, "%Y-%m-%dT%H:%M:%SZ", tm_info);
   return String(buffer);
+}
+
+// ==== PROIoT - Envio de Dados ====
+void sendProIoT(float temperatura, float umidade) {
+  if (!cliente.connect(SERVIDOR.c_str(), PORTA)) {
+    Serial.println("Falha ao conectar ao PROIoT");
+    return;
+  }
+
+  String dados = "POST /stream/device/"+ROTULO+"/variable/"+ALIAS_TEMP+"/"+String(temperatura,2)+" HTTP/1.1\r\n";
+  dados += "Host: "+SERVIDOR+"\r\n";
+  dados += "Authorization: "+TOKEN+"\r\n";
+  dados += "Connection: Keep-Alive\r\n\r\n";
+  cliente.println(dados);
+
+  dados = "POST /stream/device/"+ROTULO+"/variable/"+ALIAS_UMID+"/"+String(umidade,2)+" HTTP/1.1\r\n";
+  dados += "Host: "+SERVIDOR+"\r\n";
+  dados += "Authorization: "+TOKEN+"\r\n";
+  dados += "Connection: close\r\n\r\n";
+  cliente.println(dados);
+
+  Serial.println("Dados enviados para PROIoT.");
+  cliente.stop();
 }
 
 // ==== HTTP Handlers ====
@@ -137,23 +169,27 @@ void handleStatus() {
   float distancia_m = distancia_cm / 100.0;
   float analog_percent = (analog_val / 4095.0) * 100;
 
-  bool movimento = lerPIR();
-  float temperatura = dht.readTemperature();
-  float umidade = dht.readHumidity();
-  float tensao_bat = lerBateria();
+  bool presenca = lerPresenca();
+  float temperatura = NAN;
+  float umidade = NAN;
+
+  dht.temperature().getEvent(&event);
+  if (!isnan(event.temperature)) temperatura = event.temperature;
+
+  dht.humidity().getEvent(&event);
+  if (!isnan(event.relative_humidity)) umidade = event.relative_humidity;
 
   DynamicJsonDocument doc(512);
   doc["device"] = "Vespa";
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_m"] = distancia_m;
   doc["analog_percent"] = analog_percent;
-  doc["pir_movimento"] = movimento ? "detectado" : "ausente";
+  doc["presenca"] = presenca;
   doc["temperatura_C"] = isnan(temperatura) ? JsonVariant() : temperatura;
   doc["umidade_pct"]   = isnan(umidade)     ? JsonVariant() : umidade;
-  doc["bateria_V"]     = tensao_bat;
-  doc["wifi_mode"]     = staConnected ? "STA" : "AP";
-  doc["ip"]            = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
-  doc["timestamp"]     = getISOTime();
+  doc["wifi_mode"] = staConnected ? "STA" : "AP";
+  doc["ip"] = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+  doc["timestamp"] = getISOTime();
 
   String response;
   serializeJson(doc, response);
@@ -162,6 +198,10 @@ void handleStatus() {
   SerialVESPA.print("STATUS:");
   serializeJson(doc, SerialVESPA);
   SerialVESPA.println();
+
+  if (!isnan(temperatura) && !isnan(umidade)) {
+    sendProIoT(temperatura, umidade);
+  }
 }
 
 void handleCommand() {
@@ -216,7 +256,6 @@ void setup() {
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
   pinMode(PIR_PIN, INPUT);
-  pinMode(BAT_PIN, INPUT);
 
   dht.begin();
 
@@ -227,7 +266,8 @@ void setup() {
   Serial.print("AP ativo. IP: "); Serial.println(WiFi.softAPIP());
 
   WiFi.begin(sta_ssid, sta_password);
-  Serial.print("Conectando ao STA "); Serial.print(sta_ssid);
+  Serial.print("Conectando ao STA ");
+  Serial.print(sta_ssid);
 
   unsigned long startAttempt = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
