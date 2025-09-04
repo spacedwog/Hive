@@ -2,13 +2,13 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
-#include <time.h>   // Para timestamp ISO 8601
-#include "DHT.h"    // Biblioteca DHT
+#include <time.h>
+#include "DHT.h"
 
 // ==== Sensor Ultrassônico ====
 #define TRIG 21
 #define ECHO 22
-#define ULTRASONIC_BUFFER 5  // Média móvel
+#define ULTRASONIC_BUFFER 5
 
 long ultraBuffer[ULTRASONIC_BUFFER] = {0};
 int ultraIndex = 0;
@@ -20,11 +20,10 @@ long medirDistancia() {
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);
 
-  long duracao = pulseIn(ECHO, HIGH, 30000); // timeout 30ms (~5m)
-  long distancia = duracao * 0.034 / 2;      // cm
+  long duracao = pulseIn(ECHO, HIGH, 30000);
+  long distancia = duracao * 0.034 / 2;
   distancia = distancia > 0 ? distancia : -1;
 
-  // Média móvel
   ultraBuffer[ultraIndex] = distancia > 0 ? distancia : ultraBuffer[ultraIndex];
   ultraIndex = (ultraIndex + 1) % ULTRASONIC_BUFFER;
   long sum = 0, count = 0;
@@ -40,7 +39,7 @@ long medirDistancia() {
 // ==== Potenciômetro ====
 #define POT_PIN 33
 long lerSensor() {
-  return analogRead(POT_PIN); // 0 a 4095
+  return analogRead(POT_PIN);
 }
 
 // ==== Sensor PIR ====
@@ -54,11 +53,17 @@ bool lerPIR() {
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-// ==== Credenciais do AP ====
+// ==== Bateria ====
+#define BAT_PIN 34
+float lerBateria() {
+  int raw = analogRead(BAT_PIN);
+  float tensao = (raw / 4095.0) * 2.0 * 3.3; // divisor de tensão 1:2
+  return tensao;
+}
+
+// ==== Credenciais WiFi ====
 const char* ap_ssid = "HIVE VESPA";
 const char* ap_password = "hivemind";
-
-// ==== Credenciais do STA ====
 const char* sta_ssid = "FAMILIA SANTOS";
 const char* sta_password = "6z2h1j3k9f";
 
@@ -114,7 +119,6 @@ bool checkAuth() {
   return true;
 }
 
-// ==== Timestamp ISO 8601 ====
 String getISOTime() {
   time_t now;
   time(&now);
@@ -133,10 +137,10 @@ void handleStatus() {
   float distancia_m = distancia_cm / 100.0;
   float analog_percent = (analog_val / 4095.0) * 100;
 
-  // Sensores novos
   bool movimento = lerPIR();
   float temperatura = dht.readTemperature();
   float umidade = dht.readHumidity();
+  float tensao_bat = lerBateria();
 
   DynamicJsonDocument doc(512);
   doc["device"] = "Vespa";
@@ -144,20 +148,17 @@ void handleStatus() {
   doc["ultrassonico_m"] = distancia_m;
   doc["analog_percent"] = analog_percent;
   doc["pir_movimento"] = movimento ? "detectado" : "ausente";
-
-  // Corrigido para usar JsonVariant()
   doc["temperatura_C"] = isnan(temperatura) ? JsonVariant() : temperatura;
   doc["umidade_pct"]   = isnan(umidade)     ? JsonVariant() : umidade;
-
-  doc["wifi_mode"] = staConnected ? "STA" : "AP";
-  doc["ip"] = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
-  doc["timestamp"] = getISOTime();
+  doc["bateria_V"]     = tensao_bat;
+  doc["wifi_mode"]     = staConnected ? "STA" : "AP";
+  doc["ip"]            = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+  doc["timestamp"]     = getISOTime();
 
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
 
-  // Envia status via UART
   SerialVESPA.print("STATUS:");
   serializeJson(doc, SerialVESPA);
   SerialVESPA.println();
@@ -202,7 +203,6 @@ void handleCommand() {
   serializeJson(res, jsonResponse);
   server.send(200, "application/json", jsonResponse);
 
-  // Envia comando via UART
   SerialVESPA.print("CMD:");
   SerialVESPA.println(command);
 }
@@ -216,20 +216,18 @@ void setup() {
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
   pinMode(PIR_PIN, INPUT);
+  pinMode(BAT_PIN, INPUT);
 
   dht.begin();
 
   SerialVESPA.begin(BAUD_UART, SERIAL_8N1, RX_VESPA, TX_VESPA);
   Serial.println("UART para ESP32-CAM iniciada");
 
-  // Inicia AP
   WiFi.softAP(ap_ssid, ap_password);
   Serial.print("AP ativo. IP: "); Serial.println(WiFi.softAPIP());
 
-  // Tenta conectar como STA
   WiFi.begin(sta_ssid, sta_password);
-  Serial.print("Conectando ao STA ");
-  Serial.print(sta_ssid);
+  Serial.print("Conectando ao STA "); Serial.print(sta_ssid);
 
   unsigned long startAttempt = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
@@ -246,7 +244,6 @@ void setup() {
     Serial.println("Falha ao conectar no STA. Usando apenas AP.");
   }
 
-  // Sincroniza horário (opcional para timestamp correto)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
   server.on("/status", handleStatus);
