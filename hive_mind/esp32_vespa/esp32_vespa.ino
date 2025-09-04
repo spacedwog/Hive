@@ -2,7 +2,7 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
-#include <time.h>   
+#include <time.h>
 #include "Adafruit_Sensor.h"
 #include "DHT.h"
 #include "DHT_U.h"
@@ -42,6 +42,11 @@ long medirDistancia() {
 #define POT_PIN 33
 long lerSensor() {
   return analogRead(POT_PIN); 
+}
+
+// Função auxiliar para converter potenciômetro em zoom (1–20)
+int calcularZoom(long analog_val) {
+  return map(analog_val, 0, 4095, 1, 20);
 }
 
 // ==== Sensor de Presença PIR - HC-SR501 ====
@@ -168,6 +173,7 @@ void handleStatus() {
   long analog_val = lerSensor();
   float distancia_m = distancia_cm / 100.0;
   float analog_percent = (analog_val / 4095.0) * 100;
+  int zoom_level = calcularZoom(analog_val);
 
   bool presenca = lerPresenca();
   float temperatura = NAN;
@@ -184,6 +190,7 @@ void handleStatus() {
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_m"] = distancia_m;
   doc["analog_percent"] = analog_percent;
+  doc["zoom_level"] = zoom_level;   // <-- NOVO campo
   doc["presenca"] = presenca;
   doc["temperatura_C"] = isnan(temperatura) ? JsonVariant() : temperatura;
   doc["umidade_pct"]   = isnan(umidade)     ? JsonVariant() : umidade;
