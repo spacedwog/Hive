@@ -12,7 +12,7 @@ bool ledOn = false;
 const char* ap_ssid = "HIVE STREAM";
 const char* ap_password = "hvstream";
 
-// --- Credenciais de STA (conexão com roteador) ---
+// --- Credenciais de STA ---
 const char* sta_ssid = "FAMILIA SANTOS";
 const char* sta_password = "6z2h1j3k9f";
 
@@ -33,31 +33,6 @@ String getStatusJSON() {
   return json;
 }
 
-// --- Streaming simulado (HTML atualizando status) ---
-void handleStream(WiFiClient &client) {
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println("Connection: close");
-  client.println();
-  client.println("<html><body>");
-  client.println("<h1>HIVE STREAM - Streaming</h1>");
-  client.println("<div id='status'></div>");
-  client.println("<script>");
-  client.println("async function fetchStatus(){");
-  client.println("  const res = await fetch('/status');");
-  client.println("  const data = await res.json();");
-  client.println("  document.getElementById('status').innerHTML = ");
-  client.println("    `<p>ESP32 LED: ${data.led_builtin}</p>` +");
-  client.println("    `<p>LED 32: ${data.led_opposite}</p>` +");
-  client.println("    `<p>IP AP: ${data.ip_ap}</p>` +");
-  client.println("    `<p>IP STA: ${data.ip_sta}</p>`;");
-  client.println("}");
-  client.println("setInterval(fetchStatus, 1000);");
-  client.println("fetchStatus();");
-  client.println("</script>");
-  client.println("</body></html>");
-}
-
 // --- Setup ---
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -70,6 +45,7 @@ void setup() {
   Serial.println("🚀 Iniciando HIVE STREAM (ESP32-WROVER-DEV)...");
 
   // --- Inicializa Soft-AP ---
+  WiFi.mode(WIFI_AP_STA); // Suporta AP + STA simultaneamente
   if (!WiFi.softAP(ap_ssid, ap_password)) {
     Serial.println("❌ Falha ao iniciar Soft-AP");
     while (true) delay(1000);
@@ -77,7 +53,7 @@ void setup() {
   Serial.print("📡 AP iniciado. IP: ");
   Serial.println(WiFi.softAPIP());
 
-  // --- Tenta conectar como STA ---
+  // --- Conecta como STA ---
   WiFi.begin(sta_ssid, sta_password);
   Serial.print("🔄 Conectando a STA (");
   Serial.print(sta_ssid);
@@ -110,6 +86,7 @@ void loop() {
   String request = client.readStringUntil('\r');
   client.flush();
 
+  // --- Controle dos LEDs ---
   if (request.indexOf("GET /H") >= 0) {
     digitalWrite(LED_BUILTIN, HIGH);
     digitalWrite(PIN_OPPOSITE, LOW);
@@ -128,16 +105,12 @@ void loop() {
     client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
     client.print(getStatusJSON());
   }
-  else if (request.indexOf("GET /stream") >= 0) {
-    handleStream(client);
-  }
   else {
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
     client.print("<html><body><h1>HIVE STREAM ESP32-WROVER-DEV</h1>");
     client.print("<p><a href='/H'>🔴 Ligar LED</a></p>");
     client.print("<p><a href='/L'>⚪ Desligar LED</a></p>");
     client.print("<p><a href='/status'>📊 Status JSON</a></p>");
-    client.print("<p><a href='/stream'>🎥 Streaming</a></p>");
     client.print("</body></html>");
   }
 

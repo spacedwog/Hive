@@ -1,9 +1,9 @@
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
-import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 
 const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
-const STA_IP = "http://192.168.15.188"; // ESP32 conectado à rede WiFi (STA)
+const STA_IP = "http://192.168.15.188"; // ESP32 na rede Wi-Fi
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -17,12 +17,10 @@ export default function StreamScreen() {
     led_opposite: "on",
     ip: SOFTAP_IP,
   });
-
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
-
-  // ======= CONFIG DA CÂMERA NATIVA (expo-camera) =======
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
+  const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
 
   useEffect(() => {
     (async () => {
@@ -31,7 +29,14 @@ export default function StreamScreen() {
     })();
   }, []);
 
-  // ======= FUNÇÕES DO ESP32 =======
+  // Atualiza o frame do MJPEG a cada 200ms
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFrameUrl(`${status.ip}/stream?${Date.now()}`); // evita cache
+    }, 200);
+    return () => clearInterval(interval);
+  }, [status.ip]);
+
   const toggleLed = async () => {
     try {
       const newState = status.led_builtin === "on" ? "L" : "H";
@@ -57,45 +62,30 @@ export default function StreamScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM</Text>
 
-      {/* CÂMERA NATIVA DO DISPOSITIVO */}
+      {/* CÂMERA NATIVA */}
       <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
       <View style={styles.nativeCamera}>
         {hasPermission ? (
           <>
             <CameraView style={StyleSheet.absoluteFill} facing={type} />
-
-            {/* OVERLAY COM INFOS DO ESP32 */}
             <View style={styles.overlay}>
               <Text style={styles.overlayText}>Modo: {mode}</Text>
               <Text style={styles.overlayText}>
                 ESP32:{" "}
-                <Text
-                  style={{
-                    color: status.led_builtin === "on" ? "lightgreen" : "red",
-                  }}
-                >
+                <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
                   {status.led_builtin.toUpperCase()}
                 </Text>
               </Text>
               <Text style={styles.overlayText}>
                 LED 32:{" "}
-                <Text
-                  style={{
-                    color: status.led_opposite === "on" ? "lightgreen" : "red",
-                  }}
-                >
+                <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
                   {status.led_opposite.toUpperCase()}
                 </Text>
               </Text>
               <Text style={styles.overlayText}>IP: {status.ip}</Text>
-
               <View style={styles.buttonRow}>
                 <Button
-                  title={
-                    status.led_builtin === "on"
-                      ? "Desligar ESP32"
-                      : "Ligar ESP32"
-                  }
+                  title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
                   onPress={toggleLed}
                 />
                 <Button
@@ -115,6 +105,16 @@ export default function StreamScreen() {
           <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
         )}
       </View>
+
+      {/* STREAM DO ESP32 (MJPEG) */}
+      <Text style={[styles.text, { marginTop: 20 }]}>📡 Stream ESP32:</Text>
+      <View style={styles.videoContainer}>
+        <Image
+          source={{ uri: frameUrl }}
+          style={styles.video}
+          resizeMode="cover"
+        />
+      </View>
     </ScrollView>
   );
 }
@@ -127,58 +127,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  text: {
-    fontSize: 16,
-    color: "#fff",
-    marginVertical: 5,
-    textAlign: "center",
-  },
-  videoContainer: {
-    width: "100%",
-    height: 300,
-    borderWidth: 2,
-    borderColor: "#fff",
-    borderRadius: 10,
-    overflow: "hidden",
-    marginTop: 15,
-  },
-  video: {
-    flex: 1,
-  },
-  nativeCamera: {
-    width: "100%",
-    height: 350,
-    borderWidth: 2,
-    borderColor: "#0f0",
-    borderRadius: 10,
-    overflow: "hidden",
-    marginTop: 15,
-    backgroundColor: "black",
-  },
-  overlay: {
-    position: "absolute",
-    bottom: 10,
-    left: 10,
-    right: 10,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 10,
-    borderRadius: 8,
-  },
-  overlayText: {
-    color: "#fff",
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  buttonRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
+  title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 15, textAlign: "center" },
+  text: { fontSize: 16, color: "#fff", marginVertical: 5, textAlign: "center" },
+  videoContainer: { width: "100%", height: 300, borderWidth: 2, borderColor: "#fff", borderRadius: 10, overflow: "hidden", marginTop: 15 },
+  video: { flex: 1 },
+  nativeCamera: { width: "100%", height: 350, borderWidth: 2, borderColor: "#0f0", borderRadius: 10, overflow: "hidden", marginTop: 15, backgroundColor: "black" },
+  overlay: { position: "absolute", bottom: 10, left: 10, right: 10, backgroundColor: "rgba(0,0,0,0.5)", padding: 10, borderRadius: 8 },
+  overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
+  buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
 });

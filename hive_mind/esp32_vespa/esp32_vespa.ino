@@ -2,7 +2,7 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
-#include <time.h>
+#include <time.h>   
 #include "Adafruit_Sensor.h"
 #include "DHT.h"
 #include "DHT_U.h"
@@ -44,28 +44,22 @@ long lerSensor() {
   return analogRead(POT_PIN); 
 }
 
-// Função auxiliar para converter potenciômetro em zoom (1–20)
-int calcularZoom(long analog_val) {
-  return map(analog_val, 0, 4095, 1, 20);
-}
-
-// ==== Sensor de Presença PIR - HC-SR501 ====
+// ==== Sensor de Presença PIR ====
 #define PIR_PIN 25
 bool lerPresenca() {
   return digitalRead(PIR_PIN) == HIGH;
 }
 
-// ==== Sensor DHT22 via Adafruit ====
+// ==== Sensor DHT22 ====
 #define DHTPIN 26
 #define DHTTYPE DHT22
 DHT_Unified dht(DHTPIN, DHTTYPE);
 sensors_event_t event;
 
-// ==== Credenciais do AP ====
+// ==== Credenciais WiFi ====
 const char* ap_ssid = "HIVE VESPA";
 const char* ap_password = "hivemind";
 
-// ==== Credenciais do STA ====
 const char* sta_ssid = "FAMILIA SANTOS";
 const char* sta_password = "6z2h1j3k9f";
 
@@ -93,8 +87,10 @@ const String TOKEN = "HIVE-TOKEN";
 const String ROTULO = "HIVE-PRIME";
 const String ALIAS_TEMP = "temperatura";
 const String ALIAS_UMID = "umidade";
-const int ESPERA = 5;  
-const long ATRASO = 60000; // 1 min para teste
+
+// ==== Coordenadas (FIXAS) ====
+const float LATITUDE  = -23.550520;  // exemplo São Paulo
+const float LONGITUDE = -46.633308;  // exemplo São Paulo
 
 // ==== Funções internas ====
 String base64Decode(const String &input) {
@@ -173,7 +169,6 @@ void handleStatus() {
   long analog_val = lerSensor();
   float distancia_m = distancia_cm / 100.0;
   float analog_percent = (analog_val / 4095.0) * 100;
-  int zoom_level = calcularZoom(analog_val);
 
   bool presenca = lerPresenca();
   float temperatura = NAN;
@@ -190,13 +185,17 @@ void handleStatus() {
   doc["status"] = activated ? "ativo" : "parado";
   doc["ultrassonico_m"] = distancia_m;
   doc["analog_percent"] = analog_percent;
-  doc["zoom_level"] = zoom_level;   // <-- NOVO campo
   doc["presenca"] = presenca;
   doc["temperatura_C"] = isnan(temperatura) ? JsonVariant() : temperatura;
   doc["umidade_pct"]   = isnan(umidade)     ? JsonVariant() : umidade;
   doc["wifi_mode"] = staConnected ? "STA" : "AP";
   doc["ip"] = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
   doc["timestamp"] = getISOTime();
+
+  // ==== Adiciona coordenadas ====
+  JsonObject location = doc.createNestedObject("location");
+  location["latitude"] = LATITUDE;
+  location["longitude"] = LONGITUDE;
 
   String response;
   serializeJson(doc, response);
