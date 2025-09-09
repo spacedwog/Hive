@@ -1,10 +1,10 @@
-import { AdMobBanner } from 'expo-ads-admob';
+import { AdMobBanner } from "expo-ads-admob";
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
-import { Button, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 
-const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
-const STA_IP = "http://192.168.15.188"; // ESP32 na rede Wi-Fi
+const SOFTAP_IP = "http://192.168.4.1";
+const STA_IP = "http://192.168.15.188";
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -30,10 +30,9 @@ export default function StreamScreen() {
     })();
   }, []);
 
-  // Atualiza o frame do MJPEG a cada 200ms
   useEffect(() => {
     const interval = setInterval(() => {
-      setFrameUrl(`${status.ip}/stream?${Date.now()}`); // evita cache
+      setFrameUrl(`${status.ip}/stream?${Date.now()}`);
     }, 200);
     return () => clearInterval(interval);
   }, [status.ip]);
@@ -60,83 +59,103 @@ export default function StreamScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>📡 HIVE STREAM</Text>
+    <SafeAreaView style={styles.safeContainer}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>📡 HIVE STREAM</Text>
 
-      {/* BANNER DO GOOGLE ADS */}
-      <AdMobBanner
-        bannerSize="fullBanner"
-        adUnitID={
-          Platform.OS === 'ios'
-            ? 'ca-app-pub-3940256099942544/2934735716' // ID de teste iOS
-            : 'ca-app-pub-3940256099942544/6300978111' // ID de teste Android
-        }
-        servePersonalizedAds
-        onDidFailToReceiveAdWithError={(error) => console.log('AdMob Error:', error)}
-      />
-
-      {/* CÂMERA NATIVA */}
-      <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
-      <View style={styles.nativeCamera}>
-        {hasPermission ? (
-          <>
-            <CameraView style={StyleSheet.absoluteFill} facing={type} />
-            <View style={styles.overlay}>
-              <Text style={styles.overlayText}>Modo: {mode}</Text>
-              <Text style={styles.overlayText}>
-                ESP32:{" "}
-                <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
-                  {status.led_builtin.toUpperCase()}
+        {/* CÂMERA NATIVA */}
+        <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
+        <View style={styles.nativeCamera}>
+          {hasPermission ? (
+            <>
+              <CameraView style={StyleSheet.absoluteFill} facing={type} />
+              <View style={styles.overlay}>
+                <Text style={styles.overlayText}>Modo: {mode}</Text>
+                <Text style={styles.overlayText}>
+                  ESP32:{" "}
+                  <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
+                    {status.led_builtin.toUpperCase()}
+                  </Text>
                 </Text>
-              </Text>
-              <Text style={styles.overlayText}>
-                LED 32:{" "}
-                <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
-                  {status.led_opposite.toUpperCase()}
+                <Text style={styles.overlayText}>
+                  LED 32:{" "}
+                  <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
+                    {status.led_opposite.toUpperCase()}
+                  </Text>
                 </Text>
-              </Text>
-              <Text style={styles.overlayText}>IP: {status.ip}</Text>
-              <View style={styles.buttonRow}>
+                <Text style={styles.overlayText}>IP: {status.ip}</Text>
+                <View style={styles.buttonRow}>
+                  <Button
+                    title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
+                    onPress={toggleLed}
+                  />
+                  <Button
+                    title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
+                    onPress={switchMode}
+                    color="#facc15"
+                  />
+                </View>
                 <Button
-                  title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
-                  onPress={toggleLed}
-                />
-                <Button
-                  title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
-                  onPress={switchMode}
-                  color="#facc15"
+                  title="🔄 Trocar câmera"
+                  onPress={() => setType(type === "back" ? "front" : "back")}
+                  color="#0af"
                 />
               </View>
-              <Button
-                title="🔄 Trocar câmera"
-                onPress={() => setType(type === "back" ? "front" : "back")}
-                color="#0af"
-              />
-            </View>
-          </>
-        ) : (
-          <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
-        )}
+            </>
+          ) : (
+            <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* BANNER ADMOB FIXO */}
+      <View style={styles.adContainer}>
+        <AdMobBanner
+          bannerSize="fullBanner"
+          adUnitID="ca-app-pub-3940256099942544/6300978111" // ID de teste
+          servePersonalizedAds
+          onDidFailToReceiveAdWithError={(err) => console.error('AdMob error:', err)}
+        />
       </View>
-      
-    </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: { flex: 1, backgroundColor: "#121212" },
   container: {
     flexGrow: 1,
     padding: 20,
-    backgroundColor: "#121212",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 15, textAlign: "center" },
   text: { fontSize: 16, color: "#fff", marginVertical: 5, textAlign: "center" },
-  videoContainer: { width: "100%", height: 300, borderWidth: 2, borderColor: "#fff", borderRadius: 10, overflow: "hidden", marginTop: 15 },
-  video: { flex: 1 },
-  nativeCamera: { width: "100%", height: 350, borderWidth: 2, borderColor: "#0f0", borderRadius: 10, overflow: "hidden", marginTop: 15, backgroundColor: "black" },
-  overlay: { position: "absolute", bottom: 10, left: 10, right: 10, backgroundColor: "rgba(0,0,0,0.5)", padding: 10, borderRadius: 8 },
+  nativeCamera: {
+    width: "100%",
+    height: 350,
+    borderWidth: 2,
+    borderColor: "#0f0",
+    borderRadius: 10,
+    overflow: "hidden",
+    marginTop: 15,
+    backgroundColor: "black",
+  },
+  overlay: {
+    position: "absolute",
+    bottom: 10,
+    left: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 10,
+    borderRadius: 8,
+  },
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
+  adContainer: {
+    backgroundColor: "#121212",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 5,
+  },
 });
