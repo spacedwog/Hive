@@ -6,6 +6,7 @@
 #include "Adafruit_Sensor.h"
 #include "DHT.h"
 #include "DHT_U.h"
+#include <vector>  // Lista dinâmica de clientes
 
 // ==== Sensor Ultrassônico ====
 #define TRIG 21
@@ -89,8 +90,17 @@ const String ALIAS_TEMP = "temperatura";
 const String ALIAS_UMID = "umidade";
 
 // ==== Coordenadas (FIXAS) ====
-const float LATITUDE  = -23.550520;  // exemplo São Paulo
-const float LONGITUDE = -46.633308;  // exemplo São Paulo
+const float LATITUDE  = -23.550520;  
+const float LONGITUDE = -46.633308;  
+
+// ==== Lista dinâmica de clientes ====
+struct Client {
+  String name;
+  float latitude;
+  float longitude;
+};
+
+std::vector<Client> clients;
 
 // ==== Funções internas ====
 String base64Decode(const String &input) {
@@ -161,6 +171,31 @@ void sendProIoT(float temperatura, float umidade) {
   cliente.stop();
 }
 
+// ==== Envia cliente para PROIoT ====
+void sendClientProIoT(const Client &c) {
+  if (!cliente.connect(SERVIDOR.c_str(), PORTA)) {
+    Serial.println("Falha ao conectar ao PROIoT para cliente " + c.name);
+    return;
+  }
+
+  // Latitude
+  String dados = "POST /stream/device/"+ROTULO+"/variable/latitude/"+String(c.latitude,6)+" HTTP/1.1\r\n";
+  dados += "Host: "+SERVIDOR+"\r\n";
+  dados += "Authorization: "+TOKEN+"\r\n";
+  dados += "Connection: Keep-Alive\r\n\r\n";
+  cliente.println(dados);
+
+  // Longitude
+  dados = "POST /stream/device/"+ROTULO+"/variable/longitude/"+String(c.longitude,6)+" HTTP/1.1\r\n";
+  dados += "Host: "+SERVIDOR+"\r\n";
+  dados += "Authorization: "+TOKEN+"\r\n";
+  dados += "Connection: close\r\n\r\n";
+  cliente.println(dados);
+
+  Serial.println("Dados do cliente " + c.name + " enviados para PROIoT.");
+  cliente.stop();
+}
+
 // ==== HTTP Handlers ====
 void handleStatus() {
   if (!checkAuth()) return;
@@ -192,7 +227,6 @@ void handleStatus() {
   doc["ip"] = staConnected ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
   doc["timestamp"] = getISOTime();
 
-  // ==== Adiciona coordenadas ====
   JsonObject location = doc.createNestedObject("location");
   location["latitude"] = LATITUDE;
   location["longitude"] = LONGITUDE;
@@ -253,6 +287,24 @@ void handleCommand() {
   SerialVESPA.println(command);
 }
 
+void handleClients() {
+  if (!checkAuth()) return;
+
+  DynamicJsonDocument doc(1024);
+  JsonArray arr = doc.createNestedArray("clients");
+
+  for (auto &c : clients) {
+    JsonObject clientObj = arr.createNestedObject();
+    clientObj["name"] = c.name;
+    clientObj["latitude"] = c.latitude;
+    clientObj["longitude"] = c.longitude;
+  }
+
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
 // ==== Setup ====
 void setup() {
   Serial.begin(115200);
@@ -294,6 +346,7 @@ void setup() {
 
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
+  server.on("/clients", handleClients);
   server.begin();
   Serial.println("Servidor HTTP iniciado");
 }
@@ -308,6 +361,30 @@ void loop() {
       uartBuffer.trim();
       if (uartBuffer.length() > 0) {
         Serial.println("Recebido do CAM: " + uartBuffer);
+        DynamicJsonDocument doc(256);
+        DeserializationError err = deserializeJson(doc, uartBuffer);
+        if (!err) {
+          Client newClient;
+          if (doc.containsKey("name") && doc.containsKey("latitude") && doc.containsKey("longitude")) {
+            newClient.name = doc["name"].as<String>();
+            newClient.latitude = doc["latitude"].as<float>();
+            newClient.longitude = doc["longitude"].as<float>();
+            // Atualiza ou adiciona cliente
+            bool found = false;
+            for (auto &c : clients) {
+              if (c.name == newClient.name) {
+                c.latitude = newClient.latitude;
+                c.longitude = newClient.longitude;
+                found = true;
+                break;
+              }
+            }
+            if (!found) clients.push_back(newClient);
+
+            // Envia para PROIoT
+            sendClientProIoT(newClient);
+          }
+        }
       }
       uartBuffer = "";
     } else {
