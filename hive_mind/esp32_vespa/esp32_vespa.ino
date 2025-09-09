@@ -94,13 +94,13 @@ const float LATITUDE  = -23.550520;
 const float LONGITUDE = -46.633308;  
 
 // ==== Lista dinâmica de clientes ====
-struct Client {
+struct MyClient {
   String name;
   float latitude;
   float longitude;
 };
 
-std::vector<Client> clients;
+std::vector<MyClient> clients;  // lista de clientes
 
 // ==== Funções internas ====
 String base64Decode(const String &input) {
@@ -172,7 +172,7 @@ void sendProIoT(float temperatura, float umidade) {
 }
 
 // ==== Envia cliente para PROIoT ====
-void sendClientProIoT(const Client &c) {
+void sendClientProIoT(const MyClient &c) {
   if (!cliente.connect(SERVIDOR.c_str(), PORTA)) {
     Serial.println("Falha ao conectar ao PROIoT para cliente " + c.name);
     return;
@@ -364,11 +364,12 @@ void loop() {
         DynamicJsonDocument doc(256);
         DeserializationError err = deserializeJson(doc, uartBuffer);
         if (!err) {
-          Client newClient;
+          MyClient newClient;  // <-- CORREÇÃO
           if (doc.containsKey("name") && doc.containsKey("latitude") && doc.containsKey("longitude")) {
             newClient.name = doc["name"].as<String>();
             newClient.latitude = doc["latitude"].as<float>();
             newClient.longitude = doc["longitude"].as<float>();
+
             // Atualiza ou adiciona cliente
             bool found = false;
             for (auto &c : clients) {
