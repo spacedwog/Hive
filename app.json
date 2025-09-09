@@ -12,7 +12,18 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.spacedwog.Hive",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "O aplicativo precisa acessar a câmera para transmitir vídeo.",
+        "NSLocationWhenInUseUsageDescription": "O aplicativo precisa acessar sua localização para mostrar dispositivos próximos.",
+        "NSLocationAlwaysUsageDescription": "O aplicativo precisa acessar sua localização em segundo plano para monitoramento contínuo.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSExceptionDomains": {
+            "192.168.4.1": { "NSExceptionAllowsInsecureHTTPLoads": true },
+            "192.168.15.166": { "NSExceptionAllowsInsecureHTTPLoads": true }
+          }
+        },
+        "UIBackgroundModes": ["fetch", "location"]
       }
     },
     "android": {
@@ -21,7 +32,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.spacedwog.Hive"
+      "package": "com.spacedwog.Hive",
+      "permissions": ["ACCESS_FINE_LOCATION", "CAMERA", "INTERNET", "VIBRATE"]
     },
     "web": {
       "bundler": "metro",

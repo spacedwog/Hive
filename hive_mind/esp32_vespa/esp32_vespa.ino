@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
 #include <time.h>
@@ -104,6 +105,12 @@ const String ALIAS_UMID = "umidade";
 // ==== Coordenadas (FIXAS) ====
 const float LATITUDE  = -23.550520;  
 const float LONGITUDE = -46.633308;  
+
+// ==== Google People API ====
+const char* GOOGLE_HOST = "people.googleapis.com";
+const int   GOOGLE_PORT = 443;
+// Gere este Access Token no OAuth Playground
+String GOOGLE_ACCESS_TOKEN = "AIzaSyD-eetfXns-7sBnvu_2WAH9ncLR1QL8ud4"; 
 
 // ==== Funções internas ====
 String base64Decode(const String &input) {
@@ -289,19 +296,37 @@ void handleCommand() {
 void handleClients() {
   if (!checkAuth()) return;
 
-  DynamicJsonDocument doc(1024);
-  JsonArray arr = doc.createNestedArray("clients");
+  WiFiClientSecure client;
+  client.setInsecure(); // ⚠ Ignora certificado SSL, pode trocar por raiz válida
 
-  for (int i = 0; i < clientCount; i++) {
-    JsonObject clientObj = arr.createNestedObject();
-    clientObj["name"] = clients[i].name;
-    clientObj["latitude"] = clients[i].latitude;
-    clientObj["longitude"] = clients[i].longitude;
+  if (!client.connect(GOOGLE_HOST, GOOGLE_PORT)) {
+    server.send(500, "application/json", "{\"error\":\"Falha na conexão com Google API\"}");
+    return;
   }
 
-  String response;
-  serializeJson(doc, response);
-  server.send(200, "application/json", response);
+  String url = "/v1/people/me/connections?personFields=names,emailAddresses";
+  String request = String("GET ") + url + " HTTP/1.1\r\n" +
+                   "Host: " + GOOGLE_HOST + "\r\n" +
+                   "Authorization: Bearer " + GOOGLE_ACCESS_TOKEN + "\r\n" +
+                   "Connection: close\r\n\r\n";
+
+  client.print(request);
+
+  String payload;
+  while (client.connected()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") break; // fim dos headers
+  }
+  while (client.available()) {
+    payload += client.readString();
+  }
+
+  if (payload.length() == 0) {
+    server.send(500, "application/json", "{\"error\":\"Resposta vazia do Google API\"}");
+    return;
+  }
+
+  server.send(200, "application/json", payload);
 }
 
 // ==== Processa UART sem travar ====
@@ -323,7 +348,6 @@ void processUART() {
           newClient.latitude = doc["latitude"].as<float>();
           newClient.longitude = doc["longitude"].as<float>();
 
-          // Atualiza ou adiciona cliente
           bool found = false;
           for (int i = 0; i < clientCount; i++) {
             if (clients[i].name == newClient.name) {
@@ -336,7 +360,6 @@ void processUART() {
             clients[clientCount++] = newClient;
           }
 
-          // Envia para PROIoT
           sendClientProIoT(newClient);
         }
       }
@@ -394,6 +417,6 @@ void setup() {
 
 // ==== Loop ====
 void loop() {
-  server.handleClient(); // Responde HTTP rapidamente
-  processUART();         // Processa Serial sem travar
+  server.handleClient();
+  processUART();
 }
