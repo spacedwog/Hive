@@ -1,6 +1,7 @@
+import { AdMobBanner } from 'expo-ads-admob';
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
-import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
 const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
 const STA_IP = "http://192.168.15.188"; // ESP32 na rede Wi-Fi
@@ -61,6 +62,18 @@ export default function StreamScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM</Text>
+
+      {/* BANNER DO GOOGLE ADS */}
+      <AdMobBanner
+        bannerSize="fullBanner"
+        adUnitID={
+          Platform.OS === 'ios'
+            ? 'ca-app-pub-3940256099942544/2934735716' // ID de teste iOS
+            : 'ca-app-pub-3940256099942544/6300978111' // ID de teste Android
+        }
+        servePersonalizedAds
+        onDidFailToReceiveAdWithError={(error) => console.log('AdMob Error:', error)}
+      />
 
       {/* CÂMERA NATIVA */}
       <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
