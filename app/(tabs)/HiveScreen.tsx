@@ -1,7 +1,7 @@
 import Slider from "@react-native-community/slider";
 import axios from "axios";
 import * as base64 from "base-64";
-import * as Location from "expo-location"; // 👈 GPS do usuário
+import * as Location from "expo-location";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Button,
@@ -82,9 +82,7 @@ export default function HiveScreen() {
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [refreshing, setRefreshing] = useState(false);
   const [zoom, setZoom] = useState(0.05);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(
-    null
-  );
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
@@ -92,24 +90,18 @@ export default function HiveScreen() {
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // 🔹 Busca localização atual do usuário
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         console.warn("Permissão de localização negada");
         return;
       }
-
-      let location = await Location.getCurrentPositionAsync({});
-      setUserLocation({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
+      const location = await Location.getCurrentPositionAsync({});
+      setUserLocation({ latitude: location.coords.latitude, longitude: location.coords.longitude });
     })();
   }, []);
 
-  // 🔹 Busca status dos servidores / Vespa + clientes
   const fetchStatus = React.useCallback(async () => {
     try {
       const servers = ["192.168.4.1", "192.168.15.166"];
@@ -121,11 +113,9 @@ export default function HiveScreen() {
               headers: { Authorization: authHeader },
             });
 
-            // Coordenadas vindas do objeto location
             const latitude = res.data.location?.latitude ?? -23.5505;
             const longitude = res.data.location?.longitude ?? -46.6333;
 
-            // Busca clientes conectados
             let clients: ClientInfo[] = [];
             try {
               const clientsRes = await axios.get(`http://${server}/clients`, {
@@ -135,7 +125,7 @@ export default function HiveScreen() {
               clients = clientsRes.data?.clients ?? [];
             } catch (err) {
               console.warn(`Não foi possível buscar clientes de ${server}`);
-              console.error('Erro:', err);
+              console.error(`Ocorreu um erro ao buscar clientes de ${server}:`, err);
             }
 
             return { ...res.data, server, latitude, longitude, clients };
@@ -154,20 +144,16 @@ export default function HiveScreen() {
 
       setStatus(responses);
 
-      // Vibração se ultrassônico próximo
       responses.forEach((s) => {
-        if (s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1) {
-          Vibration.vibrate(500);
-        }
+        if (s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1) Vibration.vibrate(500);
       });
 
-      // Atualiza histórico
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
           const key = s.server ?? "unknown";
+          const prevArr = next[key] ?? [];
           if (typeof s.analog_percent === "number") {
-            const prevArr = next[key] ?? [];
             const newArr = [...prevArr, s.analog_percent];
             if (newArr.length > MAX_POINTS) newArr.splice(0, newArr.length - MAX_POINTS);
             next[key] = newArr;
@@ -180,14 +166,11 @@ export default function HiveScreen() {
     }
   }, [authHeader]);
 
-  // 🔹 Envia comando
   const sendCommand = async (server: string, command: string, payload?: any) => {
     try {
-      const res = await axios.post(
-        `http://${server}/command`,
-        { command, ...payload },
-        { headers: { Authorization: authHeader } }
-      );
+      const res = await axios.post(`http://${server}/command`, { command, ...payload }, {
+        headers: { Authorization: authHeader },
+      });
 
       if (command === "ping" && res.data.analog_percent !== undefined) {
         setPingValues((prev) => ({ ...prev, [server]: res.data.analog_percent }));
@@ -216,7 +199,6 @@ export default function HiveScreen() {
 
   return (
     <View style={[styles.container, { minHeight: winHeight }]}>
-      {/* Lista de servidores */}
       <View style={{ flex: 1 }}>
         <FlatList
           data={onlineStatus}
@@ -231,84 +213,37 @@ export default function HiveScreen() {
             return (
               <View style={styles.nodeCard}>
                 <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                <Text style={styles.statusText}>
-                  📡 {s.server || "-"} - {s.status || "-"}
-                </Text>
-                <Text style={styles.statusText}>
-                  📏 Distância:{" "}
-                  {s.ultrassonico_m !== undefined ? s.ultrassonico_m.toFixed(2) + " m" : "-"}
-                </Text>
+                <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
+                <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m?.toFixed(2) ?? "-"} m</Text>
                 {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
-                {s.analog_percent !== undefined && (
-                  <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)} %</Text>
-                )}
-                {s.presenca !== undefined && (
-                  <Text style={styles.statusText}>
-                    🚶 Presença (HC-SR501): {s.presenca ? "Detectada" : "Ausente"}
-                  </Text>
-                )}
-                {typeof s.temperatura_C === "number" && (
-                  <Text style={styles.statusText}>
-                    🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C
-                  </Text>
-                )}
-                {typeof s.umidade_pct === "number" && (
-                  <Text style={styles.statusText}>
-                    💧 Umidade: {s.umidade_pct.toFixed(1)} %
-                  </Text>
-                )}
+                {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)} %</Text>}
+                {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Detectada" : "Ausente"}</Text>}
+                {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
+                {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
                 {s.timestamp && <Text style={styles.statusText}>⏱️ {s.timestamp}</Text>}
-                {pingValues[serverKey] !== undefined && (
-                  <Text style={styles.statusText}>
-                    ⚡ Ping Sensor: {pingValues[serverKey].toFixed(1)} %
-                  </Text>
-                )}
+                {pingValues[serverKey] !== undefined && <Text style={styles.statusText}>⚡ Ping Sensor: {pingValues[serverKey].toFixed(1)} %</Text>}
 
-                {/* Lista de clientes conectados */}
-                {s.clients && s.clients.length > 0 && (
+                {(s.clients ?? []).length > 0 && (
                   <View style={{ marginTop: 10 }}>
                     <Text style={{ fontWeight: "600", textAlign: "center" }}>👥 Clientes conectados:</Text>
-                    {s.clients.map((c, i) => (
-                      <Text key={i} style={styles.statusText}>
-                        🔗 {c.mac} ({c.ip}) {c.rssi !== undefined ? `RSSI: ${c.rssi} dBm` : ""}
-                      </Text>
+                    {(s.clients ?? []).map((c, i) => (
+                      <Text key={i} style={styles.statusText}>🔗 {c.mac} ({c.ip}) {c.rssi ? `RSSI: ${c.rssi} dBm` : ""}</Text>
                     ))}
                   </View>
                 )}
 
                 <View style={styles.buttonRow}>
-                  <Button
-                    title="Ativar"
-                    disabled={!s.server || isNear}
-                    onPress={() => s.server && sendCommand(s.server, "activate")}
-                  />
-                  <Button
-                    title="Desativar"
-                    disabled={!s.server || isNear}
-                    onPress={() => s.server && sendCommand(s.server, "deactivate")}
-                  />
-                  <Button
-                    title="Ping"
-                    disabled={!s.server || isNear}
-                    onPress={() => s.server && sendCommand(s.server, "ping")}
-                  />
+                  <Button title="Ativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "activate")} />
+                  <Button title="Desativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
+                  <Button title="Ping" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "ping")} />
                 </View>
 
                 <View style={styles.chartCard}>
-                  <Text style={styles.chartTitle}>
-                    📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s
-                  </Text>
+                  <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
                   <SparkBar data={hist} width={graphWidth} />
                   <View style={styles.chartFooter}>
-                    <Text style={styles.chartFooterText}>
-                      Pontos: {hist.length}/{MAX_POINTS}
-                    </Text>
-                    <Text style={styles.chartFooterText}>
-                      Atual:{" "}
-                      {typeof s.analog_percent === "number"
-                        ? s.analog_percent.toFixed(1) + "%"
-                        : "-"}
-                    </Text>
+                    <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
+                    <Text style={styles.chartFooterText}>Atual: {s.analog_percent?.toFixed(1) ?? "-"}%</Text>
                   </View>
                 </View>
               </View>
@@ -317,49 +252,36 @@ export default function HiveScreen() {
         />
       </View>
 
-      {/* Mapa + Slider */}
       <View style={{ flex: 1, width: "100%" }}>
         <MapView
           style={{ flex: 1 }}
           region={{
-            latitude: userLocation?.latitude || -23.5505,
-            longitude: userLocation?.longitude || -46.6333,
+            latitude: userLocation?.latitude ?? -23.5505,
+            longitude: userLocation?.longitude ?? -46.6333,
             latitudeDelta: zoom,
             longitudeDelta: zoom,
           }}
-          showsUserLocation={true}
+          showsUserLocation
         >
-          {/* Servidores / Vespa */}
           {onlineStatus.map((s, idx) => (
             <Marker
               key={`srv-${idx}`}
               coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
-              pinColor={
-                s.status === "ativo" ? "green" : s.status === "parado" ? "orange" : "red"
-              }
+              pinColor={s.status === "ativo" ? "green" : s.status === "parado" ? "orange" : "red"}
             >
               <Callout>
                 <View style={{ padding: 4 }}>
                   <Text>🖥️ {s.device || "Dispositivo"}</Text>
                   <Text>📡 {s.server}</Text>
-                  {typeof s.temperatura_C === "number" && (
-                    <Text>🌡️ {s.temperatura_C.toFixed(1)} °C</Text>
-                  )}
-                  {typeof s.umidade_pct === "number" && (
-                    <Text>💧 {s.umidade_pct.toFixed(1)} %</Text>
-                  )}
-                  {s.presenca !== undefined && (
-                    <Text>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>
-                  )}
-                  <Text>
-                    📍 Coordenadas: {s.latitude?.toFixed(6)}, {s.longitude?.toFixed(6)}
-                  </Text>
+                  {typeof s.temperatura_C === "number" && <Text>🌡️ {s.temperatura_C.toFixed(1)} °C</Text>}
+                  {typeof s.umidade_pct === "number" && <Text>💧 {s.umidade_pct.toFixed(1)} %</Text>}
+                  {s.presenca !== undefined && <Text>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
+                  <Text>📍 {s.latitude?.toFixed(6)}, {s.longitude?.toFixed(6)}</Text>
                 </View>
               </Callout>
             </Marker>
           ))}
 
-          {/* Clientes conectados */}
           {onlineStatus.flatMap((s) =>
             (s.clients ?? []).map((c, idx) => (
               <Marker
@@ -382,7 +304,6 @@ export default function HiveScreen() {
             ))
           )}
 
-          {/* Minha posição */}
           {userLocation && (
             <Marker
               coordinate={userLocation}
@@ -401,7 +322,7 @@ export default function HiveScreen() {
             maximumValue={0.2}
             step={0.005}
             value={zoom}
-            onValueChange={(val) => setZoom(val)}
+            onValueChange={setZoom}
           />
         </View>
       </View>
@@ -412,84 +333,20 @@ export default function HiveScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flatListContent: { flexGrow: 1 },
-  nodeCard: {
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 3,
-    width: "90%",
-    alignSelf: "center",
-    backgroundColor: "#f5f5f5",
-  },
-  chartCard: {
-    width: "100%",
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 12,
-    backgroundColor: "#222",
-  },
-  chartTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#eaeaea",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  chartBox: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 10,
-    overflow: "hidden",
-    alignSelf: "center",
-    paddingTop: 8,
-    paddingHorizontal: 8,
-  },
-  chartAxis: {
-    position: "absolute",
-    bottom: 8,
-    left: 8,
-    right: 8,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  chartBarsRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    height: "100%",
-    paddingBottom: 8,
-  },
-  chartBar: {
-    backgroundColor: "#50fa7b",
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
-  },
-  chartLabels: {
-    position: "absolute",
-    top: 4,
-    left: 8,
-    right: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
+  nodeCard: { padding: 12, borderRadius: 12, marginBottom: 12, elevation: 3, width: "90%", alignSelf: "center", backgroundColor: "#f5f5f5" },
+  chartCard: { width: "100%", borderRadius: 12, padding: 12, marginTop: 12, backgroundColor: "#222" },
+  chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
+  chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
+  chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
+  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
+  chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  chartLabels: { position: "absolute", top: 4, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between" },
   chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
-  chartFooter: {
-    marginTop: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
+  chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
   chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
   nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
   statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
-  warningText: {
-    fontSize: 16,
-    marginTop: 6,
-    fontWeight: "bold",
-    color: "#856404",
-    textAlign: "center",
-  },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 10,
-  },
+  warningText: { fontSize: 16, marginTop: 6, fontWeight: "bold", color: "#856404", textAlign: "center" },
+  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
   sliderBox: { padding: 8, backgroundColor: "#eee" },
 });

@@ -2,11 +2,22 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
-#include <time.h>   
+#include <time.h>
 #include "Adafruit_Sensor.h"
 #include "DHT.h"
 #include "DHT_U.h"
-#include <vector>  // Lista dinâmica de clientes
+
+// ==== MyClient Struct ====
+typedef struct {
+  String name;
+  float latitude;
+  float longitude;
+} MyClient;
+
+// ==== Lista de clientes fixa ====
+#define MAX_CLIENTS 10
+MyClient clients[MAX_CLIENTS];
+int clientCount = 0;
 
 // ==== Sensor Ultrassônico ====
 #define TRIG 21
@@ -93,15 +104,6 @@ const String ALIAS_UMID = "umidade";
 const float LATITUDE  = -23.550520;  
 const float LONGITUDE = -46.633308;  
 
-// ==== Lista dinâmica de clientes ====
-struct MyClient {
-  String name;
-  float latitude;
-  float longitude;
-};
-
-std::vector<MyClient> clients;  // lista de clientes
-
 // ==== Funções internas ====
 String base64Decode(const String &input) {
   size_t input_len = input.length();
@@ -171,7 +173,7 @@ void sendProIoT(float temperatura, float umidade) {
   cliente.stop();
 }
 
-// ==== Envia cliente para PROIoT ====
+// ==== Envia cliente para PROIoT (passando por referência) ====
 void sendClientProIoT(const MyClient &c) {
   if (!cliente.connect(SERVIDOR.c_str(), PORTA)) {
     Serial.println("Falha ao conectar ao PROIoT para cliente " + c.name);
@@ -293,11 +295,11 @@ void handleClients() {
   DynamicJsonDocument doc(1024);
   JsonArray arr = doc.createNestedArray("clients");
 
-  for (auto &c : clients) {
+  for (int i = 0; i < clientCount; i++) {
     JsonObject clientObj = arr.createNestedObject();
-    clientObj["name"] = c.name;
-    clientObj["latitude"] = c.latitude;
-    clientObj["longitude"] = c.longitude;
+    clientObj["name"] = clients[i].name;
+    clientObj["latitude"] = clients[i].latitude;
+    clientObj["longitude"] = clients[i].longitude;
   }
 
   String response;
@@ -361,26 +363,27 @@ void loop() {
       uartBuffer.trim();
       if (uartBuffer.length() > 0) {
         Serial.println("Recebido do CAM: " + uartBuffer);
-        DynamicJsonDocument doc(256);
+        DynamicJsonDocument doc(512);  // Buffer maior
         DeserializationError err = deserializeJson(doc, uartBuffer);
         if (!err) {
-          MyClient newClient;  // <-- CORREÇÃO
           if (doc.containsKey("name") && doc.containsKey("latitude") && doc.containsKey("longitude")) {
+            MyClient newClient;
             newClient.name = doc["name"].as<String>();
             newClient.latitude = doc["latitude"].as<float>();
             newClient.longitude = doc["longitude"].as<float>();
 
             // Atualiza ou adiciona cliente
             bool found = false;
-            for (auto &c : clients) {
-              if (c.name == newClient.name) {
-                c.latitude = newClient.latitude;
-                c.longitude = newClient.longitude;
+            for (int i = 0; i < clientCount; i++) {
+              if (clients[i].name == newClient.name) {
+                clients[i] = newClient;
                 found = true;
                 break;
               }
             }
-            if (!found) clients.push_back(newClient);
+            if (!found && clientCount < MAX_CLIENTS) {
+              clients[clientCount++] = newClient;
+            }
 
             // Envia para PROIoT
             sendClientProIoT(newClient);
@@ -390,6 +393,10 @@ void loop() {
       uartBuffer = "";
     } else {
       uartBuffer += c;
+      // Limitar tamanho do buffer para evitar overflow
+      if (uartBuffer.length() > 1024) {
+        uartBuffer = uartBuffer.substring(uartBuffer.length() - 1024);
+      }
     }
   }
 }
