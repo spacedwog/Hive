@@ -86,9 +86,6 @@ export default function HiveScreen() {
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
-  // URL do servidor Vercel
-  const serverUrl = "https://hive-pearl.vercel.app/api";
-
   const authUsername = "spacedwog";
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
@@ -107,17 +104,43 @@ export default function HiveScreen() {
 
   const fetchStatus = React.useCallback(async () => {
     try {
-      const res = await axios.get(`${serverUrl}/status`, {
-        timeout: 5000,
-        headers: { Authorization: authHeader },
-      });
+      const servers = ["192.168.4.1", "192.168.15.166"];
+      const responses = await Promise.all(
+        servers.map(async (server) => {
+          try {
+            const res = await axios.get(`http://${server}/status`, {
+              timeout: 3000,
+              headers: { Authorization: authHeader },
+            });
 
-      const responses: NodeStatus[] = res.data.map((s: any) => ({
-        ...s,
-        latitude: s.latitude ?? -23.5505,
-        longitude: s.longitude ?? -46.6333,
-        clients: s.clients ?? [],
-      }));
+            const latitude = res.data.location?.latitude ?? -23.5505;
+            const longitude = res.data.location?.longitude ?? -46.6333;
+
+            let clients: ClientInfo[] = [];
+            try {
+              const clientsRes = await axios.get(`http://${server}/clients`, {
+                timeout: 10000, // 10 segundos
+                headers: { Authorization: authHeader },
+              });
+              clients = clientsRes.data?.clients ?? [];
+            } catch (err) {
+              console.warn(`Não foi possível buscar clientes de ${server}`);
+              console.error(`Ocorreu um erro ao buscar clientes de ${server}:`, err);
+            }
+
+            return { ...res.data, server, latitude, longitude, clients };
+          } catch (err) {
+            return {
+              server,
+              status: "offline",
+              error: String(err),
+              latitude: -23.55,
+              longitude: -46.63,
+              clients: [],
+            };
+          }
+        })
+      );
 
       setStatus(responses);
 
@@ -145,7 +168,7 @@ export default function HiveScreen() {
 
   const sendCommand = async (server: string, command: string, payload?: any) => {
     try {
-      const res = await axios.post(`${serverUrl}/command`, { server, command, ...payload }, {
+      const res = await axios.post(`http://${server}/command`, { command, ...payload }, {
         headers: { Authorization: authHeader },
       });
 
