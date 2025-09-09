@@ -23,7 +23,6 @@ int clientCount = 0;
 #define TRIG 21
 #define ECHO 22
 #define ULTRASONIC_BUFFER 5  
-
 long ultraBuffer[ULTRASONIC_BUFFER] = {0};
 int ultraIndex = 0;
 
@@ -89,7 +88,9 @@ HardwareSerial SerialVESPA(1);
 #define TX_VESPA 16
 #define RX_VESPA 17
 #define BAUD_UART 9600
-String uartBuffer = "";
+#define MAX_UART_BUFFER 1024
+char uartBuffer[MAX_UART_BUFFER];
+int uartIndex = 0;
 
 // ==== PROIoT Config ====
 WiFiClient cliente;
@@ -173,21 +174,18 @@ void sendProIoT(float temperatura, float umidade) {
   cliente.stop();
 }
 
-// ==== Envia cliente para PROIoT (passando por referência) ====
 void sendClientProIoT(const MyClient &c) {
   if (!cliente.connect(SERVIDOR.c_str(), PORTA)) {
     Serial.println("Falha ao conectar ao PROIoT para cliente " + c.name);
     return;
   }
 
-  // Latitude
   String dados = "POST /stream/device/"+ROTULO+"/variable/latitude/"+String(c.latitude,6)+" HTTP/1.1\r\n";
   dados += "Host: "+SERVIDOR+"\r\n";
   dados += "Authorization: "+TOKEN+"\r\n";
   dados += "Connection: Keep-Alive\r\n\r\n";
   cliente.println(dados);
 
-  // Longitude
   dados = "POST /stream/device/"+ROTULO+"/variable/longitude/"+String(c.longitude,6)+" HTTP/1.1\r\n";
   dados += "Host: "+SERVIDOR+"\r\n";
   dados += "Authorization: "+TOKEN+"\r\n";
@@ -206,7 +204,6 @@ void handleStatus() {
   long analog_val = lerSensor();
   float distancia_m = distancia_cm / 100.0;
   float analog_percent = (analog_val / 4095.0) * 100;
-
   bool presenca = lerPresenca();
   float temperatura = NAN;
   float umidade = NAN;
@@ -307,6 +304,48 @@ void handleClients() {
   server.send(200, "application/json", response);
 }
 
+// ==== Processa UART sem travar ====
+void processUART() {
+  while (SerialVESPA.available()) {
+    char c = SerialVESPA.read();
+    if (c == '\n' || uartIndex >= MAX_UART_BUFFER - 1) {
+      uartBuffer[uartIndex] = '\0';
+      String uartLine = String(uartBuffer);
+      uartLine.trim();
+      uartIndex = 0;
+
+      if (uartLine.length() > 0) {
+        DynamicJsonDocument doc(512);
+        DeserializationError err = deserializeJson(doc, uartLine);
+        if (!err && doc.containsKey("name") && doc.containsKey("latitude") && doc.containsKey("longitude")) {
+          MyClient newClient;
+          newClient.name = doc["name"].as<String>();
+          newClient.latitude = doc["latitude"].as<float>();
+          newClient.longitude = doc["longitude"].as<float>();
+
+          // Atualiza ou adiciona cliente
+          bool found = false;
+          for (int i = 0; i < clientCount; i++) {
+            if (clients[i].name == newClient.name) {
+              clients[i] = newClient;
+              found = true;
+              break;
+            }
+          }
+          if (!found && clientCount < MAX_CLIENTS) {
+            clients[clientCount++] = newClient;
+          }
+
+          // Envia para PROIoT
+          sendClientProIoT(newClient);
+        }
+      }
+    } else {
+      uartBuffer[uartIndex++] = c;
+    }
+  }
+}
+
 // ==== Setup ====
 void setup() {
   Serial.begin(115200);
@@ -355,48 +394,6 @@ void setup() {
 
 // ==== Loop ====
 void loop() {
-  server.handleClient();
-
-  while (SerialVESPA.available()) {
-    char c = SerialVESPA.read();
-    if (c == '\n') {
-      uartBuffer.trim();
-      if (uartBuffer.length() > 0) {
-        Serial.println("Recebido do CAM: " + uartBuffer);
-        DynamicJsonDocument doc(512);  // Buffer maior
-        DeserializationError err = deserializeJson(doc, uartBuffer);
-        if (!err) {
-          if (doc.containsKey("name") && doc.containsKey("latitude") && doc.containsKey("longitude")) {
-            MyClient newClient;
-            newClient.name = doc["name"].as<String>();
-            newClient.latitude = doc["latitude"].as<float>();
-            newClient.longitude = doc["longitude"].as<float>();
-
-            // Atualiza ou adiciona cliente
-            bool found = false;
-            for (int i = 0; i < clientCount; i++) {
-              if (clients[i].name == newClient.name) {
-                clients[i] = newClient;
-                found = true;
-                break;
-              }
-            }
-            if (!found && clientCount < MAX_CLIENTS) {
-              clients[clientCount++] = newClient;
-            }
-
-            // Envia para PROIoT
-            sendClientProIoT(newClient);
-          }
-        }
-      }
-      uartBuffer = "";
-    } else {
-      uartBuffer += c;
-      // Limitar tamanho do buffer para evitar overflow
-      if (uartBuffer.length() > 1024) {
-        uartBuffer = uartBuffer.substring(uartBuffer.length() - 1024);
-      }
-    }
-  }
+  server.handleClient(); // Responde HTTP rapidamente
+  processUART();         // Processa Serial sem travar
 }

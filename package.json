@@ -21,6 +21,8 @@
     "@shopify/react-native-skia": "^2.2.3",
     "axios": "^1.11.0",
     "base-64": "^1.0.0",
+    "basic-auth": "^2.0.1",
+    "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
     "expo": "^53.0.20",
     "expo-av": "~15.1.7",

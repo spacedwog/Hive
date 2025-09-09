@@ -119,7 +119,7 @@ export default function HiveScreen() {
             let clients: ClientInfo[] = [];
             try {
               const clientsRes = await axios.get(`http://${server}/clients`, {
-                timeout: 3000,
+                timeout: 10000, // 10 segundos
                 headers: { Authorization: authHeader },
               });
               clients = clientsRes.data?.clients ?? [];
