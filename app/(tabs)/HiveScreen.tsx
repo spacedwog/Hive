@@ -1,7 +1,7 @@
 import Slider from "@react-native-community/slider";
 import axios from "axios";
 import * as base64 from "base-64";
-import * as Location from "expo-location"; // 👈 para GPS
+import * as Location from "expo-location"; // 👈 GPS do usuário
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Button,
@@ -26,6 +26,15 @@ type NodeStatus = {
   umidade_pct?: number | null;
   timestamp?: string;
   error?: string;
+  latitude?: number;
+  longitude?: number;
+  clients?: ClientInfo[];
+};
+
+type ClientInfo = {
+  mac: string;
+  ip: string;
+  rssi?: number;
   latitude?: number;
   longitude?: number;
 };
@@ -73,7 +82,9 @@ export default function HiveScreen() {
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [refreshing, setRefreshing] = useState(false);
   const [zoom, setZoom] = useState(0.05);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(
+    null
+  );
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
@@ -98,7 +109,7 @@ export default function HiveScreen() {
     })();
   }, []);
 
-  // 🔹 Busca status dos servidores / Vespa
+  // 🔹 Busca status dos servidores / Vespa + clientes
   const fetchStatus = React.useCallback(async () => {
     try {
       const servers = ["192.168.4.1", "192.168.15.166"];
@@ -110,11 +121,24 @@ export default function HiveScreen() {
               headers: { Authorization: authHeader },
             });
 
-            // Usa coordenadas retornadas pelo próprio Vespa se disponíveis
-            const latitude = res.data.latitude ?? -23.5505;
-            const longitude = res.data.longitude ?? -46.6333;
+            // Coordenadas vindas do objeto location
+            const latitude = res.data.location?.latitude ?? -23.5505;
+            const longitude = res.data.location?.longitude ?? -46.6333;
 
-            return { ...res.data, server, latitude, longitude };
+            // Busca clientes conectados
+            let clients: ClientInfo[] = [];
+            try {
+              const clientsRes = await axios.get(`http://${server}/clients`, {
+                timeout: 3000,
+                headers: { Authorization: authHeader },
+              });
+              clients = clientsRes.data?.clients ?? [];
+            } catch (err) {
+              console.warn(`Não foi possível buscar clientes de ${server}`);
+              console.error('Erro:', err);
+            }
+
+            return { ...res.data, server, latitude, longitude, clients };
           } catch (err) {
             return {
               server,
@@ -122,6 +146,7 @@ export default function HiveScreen() {
               error: String(err),
               latitude: -23.55,
               longitude: -46.63,
+              clients: [],
             };
           }
         })
@@ -206,9 +231,12 @@ export default function HiveScreen() {
             return (
               <View style={styles.nodeCard}>
                 <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                <Text style={styles.statusText}>📡 {s.server || "-"} - {s.status || "-"}</Text>
                 <Text style={styles.statusText}>
-                  📏 Distância: {s.ultrassonico_m !== undefined ? s.ultrassonico_m.toFixed(2) + " m" : "-"}
+                  📡 {s.server || "-"} - {s.status || "-"}
+                </Text>
+                <Text style={styles.statusText}>
+                  📏 Distância:{" "}
+                  {s.ultrassonico_m !== undefined ? s.ultrassonico_m.toFixed(2) + " m" : "-"}
                 </Text>
                 {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
                 {s.analog_percent !== undefined && (
@@ -220,20 +248,50 @@ export default function HiveScreen() {
                   </Text>
                 )}
                 {typeof s.temperatura_C === "number" && (
-                  <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>
+                  <Text style={styles.statusText}>
+                    🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C
+                  </Text>
                 )}
                 {typeof s.umidade_pct === "number" && (
-                  <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>
+                  <Text style={styles.statusText}>
+                    💧 Umidade: {s.umidade_pct.toFixed(1)} %
+                  </Text>
                 )}
                 {s.timestamp && <Text style={styles.statusText}>⏱️ {s.timestamp}</Text>}
                 {pingValues[serverKey] !== undefined && (
-                  <Text style={styles.statusText}>⚡ Ping Sensor: {pingValues[serverKey].toFixed(1)} %</Text>
+                  <Text style={styles.statusText}>
+                    ⚡ Ping Sensor: {pingValues[serverKey].toFixed(1)} %
+                  </Text>
+                )}
+
+                {/* Lista de clientes conectados */}
+                {s.clients && s.clients.length > 0 && (
+                  <View style={{ marginTop: 10 }}>
+                    <Text style={{ fontWeight: "600", textAlign: "center" }}>👥 Clientes conectados:</Text>
+                    {s.clients.map((c, i) => (
+                      <Text key={i} style={styles.statusText}>
+                        🔗 {c.mac} ({c.ip}) {c.rssi !== undefined ? `RSSI: ${c.rssi} dBm` : ""}
+                      </Text>
+                    ))}
+                  </View>
                 )}
 
                 <View style={styles.buttonRow}>
-                  <Button title="Ativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "activate")} />
-                  <Button title="Desativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
-                  <Button title="Ping" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "ping")} />
+                  <Button
+                    title="Ativar"
+                    disabled={!s.server || isNear}
+                    onPress={() => s.server && sendCommand(s.server, "activate")}
+                  />
+                  <Button
+                    title="Desativar"
+                    disabled={!s.server || isNear}
+                    onPress={() => s.server && sendCommand(s.server, "deactivate")}
+                  />
+                  <Button
+                    title="Ping"
+                    disabled={!s.server || isNear}
+                    onPress={() => s.server && sendCommand(s.server, "ping")}
+                  />
                 </View>
 
                 <View style={styles.chartCard}>
@@ -242,9 +300,14 @@ export default function HiveScreen() {
                   </Text>
                   <SparkBar data={hist} width={graphWidth} />
                   <View style={styles.chartFooter}>
-                    <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
                     <Text style={styles.chartFooterText}>
-                      Atual: {typeof s.analog_percent === "number" ? s.analog_percent.toFixed(1) + "%" : "-"}
+                      Pontos: {hist.length}/{MAX_POINTS}
+                    </Text>
+                    <Text style={styles.chartFooterText}>
+                      Atual:{" "}
+                      {typeof s.analog_percent === "number"
+                        ? s.analog_percent.toFixed(1) + "%"
+                        : "-"}
                     </Text>
                   </View>
                 </View>
@@ -269,26 +332,64 @@ export default function HiveScreen() {
           {/* Servidores / Vespa */}
           {onlineStatus.map((s, idx) => (
             <Marker
-              key={idx}
+              key={`srv-${idx}`}
               coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
-              pinColor={s.status === "ativo" ? "green" : s.status === "parado" ? "orange" : "red"}
+              pinColor={
+                s.status === "ativo" ? "green" : s.status === "parado" ? "orange" : "red"
+              }
             >
               <Callout>
                 <View style={{ padding: 4 }}>
                   <Text>🖥️ {s.device || "Dispositivo"}</Text>
                   <Text>📡 {s.server}</Text>
-                  {typeof s.temperatura_C === "number" && <Text>🌡️ {s.temperatura_C.toFixed(1)} °C</Text>}
-                  {typeof s.umidade_pct === "number" && <Text>💧 {s.umidade_pct.toFixed(1)} %</Text>}
-                  {s.presenca !== undefined && <Text>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
-                  <Text>📍 Coordenadas: {s.latitude?.toFixed(6)}, {s.longitude?.toFixed(6)}</Text>
+                  {typeof s.temperatura_C === "number" && (
+                    <Text>🌡️ {s.temperatura_C.toFixed(1)} °C</Text>
+                  )}
+                  {typeof s.umidade_pct === "number" && (
+                    <Text>💧 {s.umidade_pct.toFixed(1)} %</Text>
+                  )}
+                  {s.presenca !== undefined && (
+                    <Text>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>
+                  )}
+                  <Text>
+                    📍 Coordenadas: {s.latitude?.toFixed(6)}, {s.longitude?.toFixed(6)}
+                  </Text>
                 </View>
               </Callout>
             </Marker>
           ))}
 
+          {/* Clientes conectados */}
+          {onlineStatus.flatMap((s) =>
+            (s.clients ?? []).map((c, idx) => (
+              <Marker
+                key={`clt-${s.server}-${idx}`}
+                coordinate={{
+                  latitude: c.latitude ?? s.latitude!,
+                  longitude: c.longitude ?? s.longitude!,
+                }}
+                pinColor="purple"
+              >
+                <Callout>
+                  <View style={{ padding: 4 }}>
+                    <Text>📱 Cliente</Text>
+                    <Text>🔗 {c.mac}</Text>
+                    <Text>🌐 {c.ip}</Text>
+                    {c.rssi !== undefined && <Text>📶 RSSI: {c.rssi} dBm</Text>}
+                  </View>
+                </Callout>
+              </Marker>
+            ))
+          )}
+
           {/* Minha posição */}
           {userLocation && (
-            <Marker coordinate={userLocation} pinColor="blue" title="Minha posição" description="Localização atual" />
+            <Marker
+              coordinate={userLocation}
+              pinColor="blue"
+              title="Minha posição"
+              description="Localização atual"
+            />
           )}
         </MapView>
 
@@ -370,7 +471,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
-  chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
+  chartFooter: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
   chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
   nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
   statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
@@ -381,6 +486,10 @@ const styles = StyleSheet.create({
     color: "#856404",
     textAlign: "center",
   },
-  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 10,
+  },
   sliderBox: { padding: 8, backgroundColor: "#eee" },
 });
