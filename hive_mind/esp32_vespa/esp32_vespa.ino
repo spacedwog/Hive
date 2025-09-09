@@ -1,9 +1,12 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include "Adafruit_Sensor.h"
 #include "DHT.h"
 #include "DHT_U.h"
+#include <Arduino.h>
+#include "mbedtls/base64.h"
 
 // ==== MyClient Struct ====
 typedef struct {
@@ -104,16 +107,18 @@ const float LATITUDE  = -23.550520;
 const float LONGITUDE = -46.633308;  
 
 // ==== Funções internas ====
+// Base64 decode usando mbedtls
 String base64Decode(const String &input) {
-  size_t input_len = input.length();
-  size_t out_len = 3 * ((input_len + 3) / 4);
-  unsigned char output[out_len];
-  int ret = mbedtls_base64_decode(output, out_len, &out_len,
-                                  (const unsigned char*)input.c_str(), input_len);
-  if (ret == 0) {
-    return String((char*)output).substring(0, out_len);
+  size_t output_len = 0;
+  int input_len = input.length();
+  byte output[input_len];
+  int ret = mbedtls_base64_decode(output, input_len, &output_len, (const unsigned char*)input.c_str(), input_len);
+  if (ret != 0) {
+    Serial.println("Erro ao decodificar Base64");
+    return "";
   }
-  return String("");
+  output[output_len] = '\0'; // garante terminação
+  return String((char*)output);
 }
 
 bool checkAuth() {
@@ -284,29 +289,6 @@ void handleCommand() {
   SerialVESPA.println(command);
 }
 
-// ==== Handler /clients atualizado ====
-void handleClients() {
-  if (!checkAuth()) return;
-
-  DynamicJsonDocument doc(512);
-  JsonArray arr = doc.createNestedArray("clients");
-
-  for (int i = 0; i < clientCount; i++) {
-    JsonObject c = arr.createNestedObject();
-    c["name"] = clients[i].name;
-    c["latitude"] = clients[i].latitude;
-    c["longitude"] = clients[i].longitude;
-  }
-
-  String response;
-  serializeJson(doc, response);
-  server.send(200, "application/json", response);
-
-  SerialVESPA.print("CLIENTS:");
-  serializeJson(doc, SerialVESPA);
-  SerialVESPA.println();
-}
-
 // ==== Processa UART sem travar ====
 void processUART() {
   while (SerialVESPA.available()) {
@@ -388,7 +370,6 @@ void setup() {
 
   server.on("/status", handleStatus);
   server.on("/command", HTTP_POST, handleCommand);
-  server.on("/clients", handleClients);
   server.begin();
   Serial.println("Servidor HTTP iniciado");
 }
