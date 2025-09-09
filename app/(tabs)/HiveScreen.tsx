@@ -39,6 +39,12 @@ type ClientInfo = {
   longitude?: number;
 };
 
+type GoogleContact = {
+  resourceName: string;
+  names?: { displayName: string }[];
+  emailAddresses?: { value: string }[];
+};
+
 const MAX_POINTS = 60;
 const FALLBACK_LAT = -23.5505;
 const FALLBACK_LON = -46.6333;
@@ -85,6 +91,8 @@ export default function HiveScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [zoom, setZoom] = useState(0.05);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [people, setPeople] = useState<GoogleContact[]>([]);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
@@ -92,14 +100,24 @@ export default function HiveScreen() {
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
+  // Função para buscar contatos via Google People API
+  const fetchGoogleContacts = async (token: string) => {
+    try {
+      const res = await axios.get("https://people.googleapis.com/v1/people/me/connections", {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { personFields: "names,emailAddresses,photos", pageSize: 50 },
+      });
+      setPeople(res.data.connections || []);
+    } catch (err) {
+      console.error("Erro ao buscar contatos do Google:", err);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          console.warn("⚠️ Permissão de localização negada");
-          return;
-        }
+        if (status !== "granted") return;
         const location = await Location.getCurrentPositionAsync({});
         setUserLocation({ latitude: location.coords.latitude, longitude: location.coords.longitude });
       } catch (err) {
@@ -107,6 +125,10 @@ export default function HiveScreen() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (googleToken) fetchGoogleContacts(googleToken);
+  }, [googleToken]);
 
   const fetchStatus = React.useCallback(async () => {
     try {
@@ -324,15 +346,9 @@ export default function HiveScreen() {
                 <View style={{ padding: 4 }}>
                   <Text>🖥️ {s.device || "Dispositivo"}</Text>
                   <Text>📡 {s.server}</Text>
-                  {typeof s.temperatura_C === "number" && (
-                    <Text>🌡️ {s.temperatura_C.toFixed(1)} °C</Text>
-                  )}
-                  {typeof s.umidade_pct === "number" && (
-                    <Text>💧 {s.umidade_pct.toFixed(1)} %</Text>
-                  )}
-                  {s.presenca !== undefined && (
-                    <Text>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>
-                  )}
+                  {typeof s.temperatura_C === "number" && <Text>🌡️ {s.temperatura_C.toFixed(1)} °C</Text>}
+                  {typeof s.umidade_pct === "number" && <Text>💧 {s.umidade_pct.toFixed(1)} %</Text>}
+                  {s.presenca !== undefined && <Text>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
                   <Text>
                     📍 {s.latitude?.toFixed(6)}, {s.longitude?.toFixed(6)}
                   </Text>
@@ -341,27 +357,27 @@ export default function HiveScreen() {
             </Marker>
           ))}
 
-          {onlineStatus.flatMap((s) =>
-            (s.clients ?? []).map((c, idx) => (
-              <Marker
-                key={`clt-${s.server}-${idx}`}
-                coordinate={{
-                  latitude: c.latitude ?? s.latitude!,
-                  longitude: c.longitude ?? s.longitude!,
-                }}
-                pinColor="purple"
-              >
-                <Callout>
-                  <View style={{ padding: 4 }}>
-                    <Text>📱 Cliente</Text>
-                    <Text>🔗 {c.mac}</Text>
-                    <Text>🌐 {c.ip}</Text>
-                    {c.rssi !== undefined && <Text>📶 RSSI: {c.rssi} dBm</Text>}
-                  </View>
-                </Callout>
-              </Marker>
-            ))
-          )}
+          {(people ?? []).map((c, idx) => (
+            <Marker
+              key={`google-${c.resourceName}`}
+              coordinate={{
+                latitude: FALLBACK_LAT + Math.random() * 0.01, // posição fictícia, pode ser ajustada
+                longitude: FALLBACK_LON + Math.random() * 0.01,
+              }}
+              pinColor="purple"
+            >
+              <Callout>
+                <View style={{ padding: 4 }}>
+                  <Text>📇 {c.names?.[0]?.displayName ?? "Sem nome"}</Text>
+                  {c.emailAddresses?.map((e, i) => (
+                    <Text key={i} style={{ fontSize: 12, color: "#555" }}>
+                      {e.value}
+                    </Text>
+                  ))}
+                </View>
+              </Callout>
+            </Marker>
+          ))}
 
           {userLocation && (
             <Marker

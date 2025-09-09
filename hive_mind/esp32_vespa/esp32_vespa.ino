@@ -1,9 +1,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
-#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
-#include <mbedtls/base64.h>
-#include <time.h>
 #include "Adafruit_Sensor.h"
 #include "DHT.h"
 #include "DHT_U.h"
@@ -105,12 +102,6 @@ const String ALIAS_UMID = "umidade";
 // ==== Coordenadas (FIXAS) ====
 const float LATITUDE  = -23.550520;  
 const float LONGITUDE = -46.633308;  
-
-// ==== Google People API ====
-const char* GOOGLE_HOST = "people.googleapis.com";
-const int   GOOGLE_PORT = 443;
-// Gere este Access Token no OAuth Playground
-String GOOGLE_ACCESS_TOKEN = "AIzaSyD-eetfXns-7sBnvu_2WAH9ncLR1QL8ud4"; 
 
 // ==== Funções internas ====
 String base64Decode(const String &input) {
@@ -293,40 +284,27 @@ void handleCommand() {
   SerialVESPA.println(command);
 }
 
+// ==== Handler /clients atualizado ====
 void handleClients() {
   if (!checkAuth()) return;
 
-  WiFiClientSecure client;
-  client.setInsecure(); // ⚠ Ignora certificado SSL, pode trocar por raiz válida
+  DynamicJsonDocument doc(512);
+  JsonArray arr = doc.createNestedArray("clients");
 
-  if (!client.connect(GOOGLE_HOST, GOOGLE_PORT)) {
-    server.send(500, "application/json", "{\"error\":\"Falha na conexão com Google API\"}");
-    return;
+  for (int i = 0; i < clientCount; i++) {
+    JsonObject c = arr.createNestedObject();
+    c["name"] = clients[i].name;
+    c["latitude"] = clients[i].latitude;
+    c["longitude"] = clients[i].longitude;
   }
 
-  String url = "/v1/people/me/connections?personFields=names,emailAddresses";
-  String request = String("GET ") + url + " HTTP/1.1\r\n" +
-                   "Host: " + GOOGLE_HOST + "\r\n" +
-                   "Authorization: Bearer " + GOOGLE_ACCESS_TOKEN + "\r\n" +
-                   "Connection: close\r\n\r\n";
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
 
-  client.print(request);
-
-  String payload;
-  while (client.connected()) {
-    String line = client.readStringUntil('\n');
-    if (line == "\r") break; // fim dos headers
-  }
-  while (client.available()) {
-    payload += client.readString();
-  }
-
-  if (payload.length() == 0) {
-    server.send(500, "application/json", "{\"error\":\"Resposta vazia do Google API\"}");
-    return;
-  }
-
-  server.send(200, "application/json", payload);
+  SerialVESPA.print("CLIENTS:");
+  serializeJson(doc, SerialVESPA);
+  SerialVESPA.println();
 }
 
 // ==== Processa UART sem travar ====
