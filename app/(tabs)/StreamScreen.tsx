@@ -8,7 +8,7 @@ const SOFTAP_IP = "http://192.168.4.1";
 const STA_IP = "http://192.168.15.188";
 
 // Endpoint Vercel
-const VERCEL_URL = "https://hive-odo4bfutl-spacedwogs-projects.vercel.app/api/status";
+const VERCEL_URL = "https://hive-7ugzfs0kc-spacedwogs-projects.vercel.app/api/status";
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -105,7 +105,7 @@ export default function StreamScreen() {
         {page === "camera" && (
           <>
             <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
-            <View style={styles.dataBox}>
+            <View style={[styles.dataBox, { alignSelf: "center" }]}>
               <Text style={styles.overlayText}>
                 LED Built-in:{" "}
                 <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
@@ -153,15 +153,47 @@ export default function StreamScreen() {
         {/* Renderiza WebView */}
         {page === "webview" && (
           <>
-            <Text style={[styles.text, { marginTop: 20 }]}>🌐 Dados do Vercel:</Text>
-            <View style={styles.dataBox}>
-              {vercelData && <Text style={{ color: "#0f0" }}>{JSON.stringify(vercelData, null, 2)}</Text>}
-              {vercelHTML && (
-                <View style={{ height: 400 }}>
-                  <WebView originWhitelist={['*']} source={{ html: vercelHTML }} />
-                </View>
+            {/* Status ESP32 igual à página da câmera */}
+            <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
+            <View style={[styles.dataBox, { alignSelf: "center" }]}>
+              <Text style={styles.overlayText}>
+                LED Built-in:{" "}
+                <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
+                  {status.led_builtin.toUpperCase()}
+                </Text>
+              </Text>
+              <Text style={styles.overlayText}>
+                LED Opposite:{" "}
+                <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
+                  {status.led_opposite.toUpperCase()}
+                </Text>
+              </Text>
+              <Text style={styles.overlayText}>IP: {status.ip}</Text>
+              <View style={styles.buttonRow}>
+                <Button
+                  title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
+                  onPress={toggleLed}
+                />
+                <Button
+                  title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
+                  onPress={switchMode}
+                  color="#facc15"
+                />
+              </View>
+            </View>
+
+            {/* WebView com mesmo estilo da câmera */}
+            <Text style={[styles.text, { marginTop: 20 }]}>🌐 WebView Vercel:</Text>
+            <View style={[styles.nativeCamera, { backgroundColor: "#111", alignSelf: "center" }]}>
+              {vercelHTML ? (
+                <WebView originWhitelist={['*']} source={{ html: vercelHTML }} style={{ flex: 1 }} />
+              ) : vercelData ? (
+                <ScrollView contentContainerStyle={{ padding: 10 }}>
+                  <Text style={{ color: "#0f0" }}>{JSON.stringify(vercelData, null, 2)}</Text>
+                </ScrollView>
+              ) : (
+                <Text style={{ color: "red", textAlign: "center", marginTop: 20 }}>Carregando...</Text>
               )}
-              {!vercelData && !vercelHTML && <Text style={{ color: "#f00" }}>Carregando...</Text>}
             </View>
           </>
         )}
@@ -181,14 +213,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 15, textAlign: "center" },
   text: { fontSize: 16, color: "#fff", marginVertical: 5, textAlign: "center" },
   dataBox: {
-    width: "100%",
+    width: "90%",
+    maxWidth: 400,
     padding: 10,
     backgroundColor: "#222",
     borderRadius: 8,
     marginBottom: 15,
   },
   nativeCamera: {
-    width: "100%",
+    width: 320,
     height: 350,
     borderWidth: 2,
     borderColor: "#0f0",
