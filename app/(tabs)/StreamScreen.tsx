@@ -4,7 +4,7 @@ import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
 
 const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
 const STA_IP = "http://192.168.15.188"; // ESP32 na rede Wi-Fi
-const VERCEL_URL = "https://hive-72jprvszi-spacedwogs-projects.vercel.app/api/status"; // endpoint JSON
+const VERCEL_URL = "https://hive-72jprvszi-spacedwogs-projects.vercel.app"; // endpoint JSON
 
 type StatusResponse = {
   led_builtin: "on" | "off";
