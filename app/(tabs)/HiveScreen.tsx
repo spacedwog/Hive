@@ -1,7 +1,5 @@
 import Slider from "@react-native-community/slider";
 import axios from "axios";
-import * as base64 from "base-64";
-import * as Google from "expo-auth-session/providers/google";
 import * as Location from "expo-location";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -37,12 +35,6 @@ type ClientInfo = {
   rssi?: number;
   latitude?: number;
   longitude?: number;
-};
-
-type GoogleContact = {
-  resourceName: string;
-  names?: { displayName: string }[];
-  emailAddresses?: { value: string }[];
 };
 
 const MAX_POINTS = 60;
@@ -90,70 +82,50 @@ export default function HiveScreen() {
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [zoom, setZoom] = useState(0.05);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [googleToken, setGoogleToken] = useState<string | null>(null);
-  const [people, setPeople] = useState<GoogleContact[]>([]);
+  const [githubUsers, setGithubUsers] = useState<any[]>([]);
+  const [userDisplayCount, setUserDisplayCount] = useState(10);
 
   const { width: winWidth } = useWindowDimensions();
 
-  const authUsername = "spacedwog";
-  const authPassword = "Kimera12@";
-  const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
+  // =========================
+  // Autenticação GitHub
+  // =========================
+  const GITHUB_TOKEN = "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"; // Coloque seu token
+  const githubAuthHeader = React.useMemo(() => ({
+    headers: {
+      Authorization: `token ${GITHUB_TOKEN}`,
+    },
+  }), [GITHUB_TOKEN]);
 
-  // Google OAuth - People API
-  const [, response, promptAsync] = Google.useAuthRequest({
-    clientId: "1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi.apps.googleusercontent.com",
-    iosClientId: "com.googleusercontent.apps.1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi",
-    androidClientId: "1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi.apps.googleusercontent.com",
-    scopes: [
-      "profile",
-      "email",
-      "https://www.googleapis.com/auth/contacts.readonly",
-    ],
-  });
-
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { authentication } = response;
-      console.log("Token Google:", authentication?.accessToken);
-      setGoogleToken(authentication?.accessToken ?? null);
-    }
-  }, [response]);
-
-  const fetchGoogleContacts = async (token: string) => {
+  // =========================
+  // Buscar usuários GitHub + detalhes (e-mail)
+  // =========================
+  const fetchGithubUsersDetails = React.useCallback(async () => {
     try {
-      console.log("Buscando contatos Google...");
-      const res = await axios.get(
-        "https://people.googleapis.com/v1/people/me/connections",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          params: { personFields: "names,emailAddresses", pageSize: 100 },
-        }
+      const res = await axios.get("https://api.github.com/users?per_page=20", githubAuthHeader);
+      const users = res.data;
+
+      // Para cada usuário, buscar detalhes completos
+      const detailedUsers = await Promise.all(
+        users.map(async (user: any) => {
+          try {
+            const detailRes = await axios.get(`https://api.github.com/users/${user.login}`, githubAuthHeader);
+            return detailRes.data; // inclui email se público
+          } catch {
+            return user;
+          }
+        })
       );
 
-      if (res.data.connections?.length) {
-        const contatos: GoogleContact[] = res.data.connections.map((c: any) => ({
-          resourceName: c.resourceName,
-          names: c.names ?? [],
-          emailAddresses: c.emailAddresses ?? [],
-        }));
-
-        console.log("Contatos recebidos:", contatos.length);
-        setPeople(contatos);
-      } else {
-        console.warn("Nenhum contato retornado pela API.");
-        setPeople([]);
-      }
-    } catch (err: any) {
-      console.error("Erro ao buscar contatos do Google:", err.response?.data || err.message);
-      setPeople([]);
+      setGithubUsers(detailedUsers);
+    } catch (err) {
+      console.error("Erro ao buscar usuários do GitHub:", err);
     }
-  };
+  }, [githubAuthHeader]);
 
-  useEffect(() => {
-    if (googleToken) fetchGoogleContacts(googleToken);
-  }, [googleToken]);
-
+  // =========================
   // Localização
+  // =========================
   useEffect(() => {
     (async () => {
       try {
@@ -167,7 +139,13 @@ export default function HiveScreen() {
     })();
   }, []);
 
+  // =========================
   // Status servidores
+  // =========================
+  const authUsername = "spacedwog";
+  const authPassword = "Kimera12@";
+  const authHeader = "Basic " + btoa(`${authUsername}:${authPassword}`);
+
   const fetchStatus = React.useCallback(async () => {
     try {
       const servers = ["192.168.4.1", "192.168.15.166"];
@@ -249,9 +227,10 @@ export default function HiveScreen() {
 
   useEffect(() => {
     fetchStatus();
+    fetchGithubUsersDetails(); // 🔹 Busca usuários GitHub com detalhes
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [fetchStatus]);
+  }, [fetchGithubUsersDetails, fetchStatus]);
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
   const onlineStatus = status.filter((s) => s.status !== "offline");
@@ -287,29 +266,9 @@ export default function HiveScreen() {
             </Callout>
           </Marker>
         ))}
-
-        {(people ?? []).map((c) => (
-          <Marker
-            key={`google-${c.resourceName}`}
-            coordinate={{
-              latitude: FALLBACK_LAT + Math.random() * 0.01,
-              longitude: FALLBACK_LON + Math.random() * 0.01,
-            }}
-            pinColor="purple"
-          >
-            <Callout>
-              <View style={{ padding: 4 }}>
-                <Text>📇 {c.names?.[0]?.displayName ?? "Sem nome"}</Text>
-                {c.emailAddresses?.map((e, i) => (
-                  <Text key={i} style={{ fontSize: 12, color: "#555" }}>{e.value}</Text>
-                ))}
-              </View>
-            </Callout>
-          </Marker>
-        ))}
       </MapView>
 
-      {/* SLIDER ZOOM + LOGIN */}
+      {/* SLIDER ZOOM */}
       <View style={styles.sliderBox}>
         <Text style={{ textAlign: "center" }}>🔎 Zoom</Text>
         <Slider
@@ -320,24 +279,7 @@ export default function HiveScreen() {
           value={zoom}
           onValueChange={setZoom}
         />
-        <Button title="Login Google" onPress={() => promptAsync()} />
       </View>
-
-      {/* LISTA DE EMAILS */}
-      <ScrollView style={styles.contactList} contentContainerStyle={{ padding: 12 }}>
-        <Text style={styles.contactTitle}>📧 Contatos Google</Text>
-        {people.length === 0 && (
-          <Text style={styles.noContacts}>Nenhum contato carregado.</Text>
-        )}
-        {people.map((c) => (
-          <View key={c.resourceName} style={styles.contactCard}>
-            <Text style={styles.contactName}>{c.names?.[0]?.displayName ?? "Sem nome"}</Text>
-            {c.emailAddresses?.map((e, i) => (
-              <Text key={i} style={styles.contactEmail}>{e.value}</Text>
-            ))}
-          </View>
-        ))}
-      </ScrollView>
 
       {/* CARDS DE STATUS */}
       <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 120 }}>
@@ -374,6 +316,32 @@ export default function HiveScreen() {
             </View>
           );
         })}
+
+        {/* Lista de Usuários GitHub com slider */}
+        <View style={{ padding: 12, marginTop: 12 }}>
+          <Text style={{ fontWeight: "bold", fontSize: 16, marginBottom: 6 }}>
+            👥 Usuários GitHub ({userDisplayCount})
+          </Text>
+
+          {/* Slider para controlar quantidade de usuários exibidos */}
+          <Slider
+            style={{ width: "90%", alignSelf: "center", marginBottom: 8 }}
+            minimumValue={1}
+            maximumValue={githubUsers.length}
+            step={1}
+            value={userDisplayCount}
+            onValueChange={setUserDisplayCount}
+          />
+
+          {githubUsers.slice(0, userDisplayCount).map((user) => (
+            <View key={user.id} style={{ marginVertical: 4, padding: 8, backgroundColor: "#ddd", borderRadius: 6 }}>
+              <Text>ID: {user.id}</Text>
+              <Text>Nome: {user.login}</Text>
+              <Text>URL: {user.html_url}</Text>
+              <Text>Email: {user.email ?? "Não disponível"}</Text>
+            </View>
+          ))}
+        </View>
       </ScrollView>
     </View>
   );
@@ -406,10 +374,4 @@ const styles = StyleSheet.create({
   chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
   chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
   chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
-  contactList: { backgroundColor: "#fff", maxHeight: 200 },
-  contactTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
-  noContacts: { fontSize: 14, color: "#888" },
-  contactCard: { marginBottom: 12, padding: 8, borderRadius: 8, backgroundColor: "#f9f9f9", elevation: 2 },
-  contactName: { fontSize: 16, fontWeight: "600" },
-  contactEmail: { fontSize: 14, color: "#333" },
 });
