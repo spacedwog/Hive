@@ -1,3 +1,4 @@
+import { GITHUB_TOKEN } from "@env"; // ✅ Import do token protegido via .env
 import Slider from "@react-native-community/slider";
 import axios from "axios";
 import * as Location from "expo-location";
@@ -99,10 +100,7 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
           return (
             <View
               key={`${i}-${v}`}
-              style={[
-                styles.chartBar,
-                { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap },
-              ]}
+              style={[styles.chartBar, { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap }]}
             />
           );
         })}
@@ -133,8 +131,9 @@ export default function HiveScreen() {
   // =========================
   // Autenticação GitHub
   // =========================
-  const GITHUB_TOKEN = "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"; // Coloque seu token
-  const githubAuthHeader = useMemo(() => ({ headers: { Authorization: `token ${GITHUB_TOKEN}` } }), [GITHUB_TOKEN]);
+  const githubAuthHeader = useMemo(() => ({
+    headers: { Authorization: `token ${GITHUB_TOKEN}` }
+  }), []);
 
   // =========================
   // Buscar usuários GitHub + detalhes (e-mail)

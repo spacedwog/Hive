@@ -80,3 +80,6 @@ yarn-error.*
 
 # @end expo-cli
 .vercel
+
+# Tokens e secrets
+.env
