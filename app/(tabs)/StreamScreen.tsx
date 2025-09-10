@@ -25,6 +25,7 @@ export default function StreamScreen() {
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
+  const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
   const cameraRef = useRef<CameraView>(null);
 
   // Solicita permissão para a câmera
@@ -172,7 +173,3 @@ const styles = StyleSheet.create({
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
 });
-
-function setFrameUrl(arg0: string) {
-  throw new Error("Function not implemented.");
-}
