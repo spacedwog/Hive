@@ -133,7 +133,7 @@ export default function HiveScreen() {
   // =========================
   // Autenticação GitHub
   // =========================
-  const GITHUB_TOKEN = "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"; // Coloque seu token
+  const GITHUB_TOKEN = "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"; // Coloque seu token
   const githubAuthHeader = useMemo(() => ({ headers: { Authorization: `token ${GITHUB_TOKEN}` } }), [GITHUB_TOKEN]);
 
   // =========================
