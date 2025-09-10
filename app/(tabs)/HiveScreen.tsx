@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +15,48 @@ import {
 } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
 
-// Import da classe
+// ==================================
+// Classe para gerenciamento de e-mail
+// ==================================
+type GithubUser = {
+  login: string;
+  id: number;
+  email?: string | null;
+  html_url: string;
+  avatar_url: string;
+};
+
+class GithubEmailManager {
+  private usersWithEmail: GithubUser[] = [];
+
+  public setUsers(users: GithubUser[]) {
+    this.usersWithEmail = users.filter(u => u.email);
+  }
+
+  public getUsers(): GithubUser[] {
+    return this.usersWithEmail;
+  }
+
+  public sendEmail(userLogin: string, subject: string, body: string) {
+    const user = this.usersWithEmail.find(u => u.login === userLogin);
+    if (!user || !user.email) {
+      console.warn(`Usuário ${userLogin} não possui e-mail disponível.`);
+      return;
+    }
+
+    const url = `mailto:${user.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    Linking.canOpenURL(url)
+      .then(supported => {
+        if (!supported) console.warn("Não foi possível abrir o app de e-mail.");
+        else return Linking.openURL(url);
+      })
+      .catch(err => console.error("Erro ao abrir o app de e-mail:", err));
+  }
+}
+
+// ==================================
+// Tipos para servidores e sensores
+// ==================================
 type NodeStatus = {
   device?: string;
   server?: string;
@@ -28,21 +70,16 @@ type NodeStatus = {
   error?: string;
   latitude?: number;
   longitude?: number;
-  clients?: ClientInfo[];
-};
-
-type ClientInfo = {
-  mac: string;
-  ip: string;
-  rssi?: number;
-  latitude?: number;
-  longitude?: number;
+  clients?: any[];
 };
 
 const MAX_POINTS = 60;
 const FALLBACK_LAT = -23.5505;
 const FALLBACK_LON = -46.6333;
 
+// ==================================
+// Componente de gráfico de barras
+// ==================================
 const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
   data,
   width,
@@ -78,27 +115,26 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
   );
 };
 
+// ==================================
+// HiveScreen
+// ==================================
 export default function HiveScreen() {
   const [status, setStatus] = useState<NodeStatus[]>([]);
   const [, setPingValues] = useState<{ [key: string]: number }>({});
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [zoom, setZoom] = useState(0.05);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [githubUsers, setGithubUsers] = useState<any[]>([]);
+  const [githubUsers, setGithubUsers] = useState<GithubUser[]>([]);
   const [selectedUserIndex, setSelectedUserIndex] = useState(0);
 
   const { width: winWidth } = useWindowDimensions();
+  const githubManager = useMemo(() => new GithubEmailManager(), []);
 
   // =========================
   // Autenticação GitHub
   // =========================
-  const GITHUB_TOKEN = "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"; // coloque seu token
-  const githubAuthHeader = useMemo(
-    () => ({
-      headers: { Authorization: `token ${GITHUB_TOKEN}` },
-    }),
-    [GITHUB_TOKEN]
-  );
+  const GITHUB_TOKEN = "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"; // Coloque seu token
+  const githubAuthHeader = useMemo(() => ({ headers: { Authorization: `token ${GITHUB_TOKEN}` } }), [GITHUB_TOKEN]);
 
   // =========================
   // Buscar usuários GitHub + detalhes (e-mail)
@@ -121,10 +157,11 @@ export default function HiveScreen() {
       );
 
       setGithubUsers(detailedUsers);
+      githubManager.setUsers(detailedUsers);
     } catch (err) {
       console.error("Erro ao buscar usuários do GitHub:", err);
     }
-  }, [githubAuthHeader]);
+  }, [githubAuthHeader, githubManager]);
 
   // =========================
   // Localização
@@ -163,7 +200,7 @@ export default function HiveScreen() {
             const latitude = res.data.location?.latitude ?? FALLBACK_LAT;
             const longitude = res.data.location?.longitude ?? FALLBACK_LON;
 
-            let clients: ClientInfo[] = [];
+            let clients: any[] = [];
             try {
               const clientsRes = await axios.get(`http://${server}/clients`, {
                 timeout: 8000,
@@ -239,6 +276,9 @@ export default function HiveScreen() {
   const onlineStatus = status.filter((s) => s.status !== "offline");
   const selectedUser = githubUsers[selectedUserIndex] ?? null;
 
+  // ==================================
+  // Render
+  // ==================================
   return (
     <View style={styles.container}>
       {/* MAPA */}
@@ -293,9 +333,7 @@ export default function HiveScreen() {
           {/* SERVIDORES */}
           {onlineStatus.map((s, idx) => {
             const serverKey = s.server ?? "unknown";
-            const isNear = s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1;
             const hist = history[serverKey] ?? [];
-
             return (
               <View key={idx} style={styles.nodeBox}>
                 <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
@@ -305,21 +343,16 @@ export default function HiveScreen() {
                 {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
                 {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
                 {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
-                {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
 
                 <View style={styles.buttonRow}>
-                  <Button title="Ativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "activate")} />
-                  <Button title="Desativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
-                  <Button title="Ping" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "ping")} />
+                  <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
+                  <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
+                  <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
                 </View>
 
                 <View style={styles.chartCard}>
-                  <Text style={styles.chartTitle}>📈 Histórico ({serverKey}) — últimos {MAX_POINTS}s</Text>
+                  <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
                   <SparkBar data={hist} width={graphWidth} />
-                  <View style={styles.chartFooter}>
-                    <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
-                    <Text style={styles.chartFooterText}>Atual: {s.analog_percent?.toFixed(1) ?? "-"}</Text>
-                  </View>
                 </View>
               </View>
             );
@@ -333,12 +366,18 @@ export default function HiveScreen() {
               <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
               <Text style={styles.githubText}>🔗 URL: {selectedUser.html_url}</Text>
               <Text style={styles.githubText}>📧 Email: {selectedUser.email ?? "Não disponível"}</Text>
+
+              <Button
+                title="✉️ Enviar E-mail"
+                onPress={() => githubManager.sendEmail(selectedUser.login, "Projeto - HIVE", "Seja bem-vindo ao projeto - HIVE!")}
+                disabled={!selectedUser.email}
+              />
             </View>
           ) : (
             <Text style={styles.githubText}>Carregando usuários...</Text>
           )}
 
-          {/* Slider horizontal GitHub */}
+          {/* SLIDER HORIZONTAL */}
           <Slider
             style={styles.sliderHorizontal}
             minimumValue={0}
@@ -347,45 +386,35 @@ export default function HiveScreen() {
             value={selectedUserIndex}
             onValueChange={(val) => setSelectedUserIndex(Math.round(val))}
           />
-          <Text style={styles.githubCounter}>Usuário {selectedUserIndex + 1} de {githubUsers.length}</Text>
         </View>
       </ScrollView>
     </View>
   );
 }
 
+// ==================================
+// ESTILOS
+// ==================================
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
   sliderBox: { padding: 8, backgroundColor: "#eee" },
   overlayScroll: { position: "absolute", top: 20, left: 0, right: 0 },
-  
+
   unisonCard: {
+    backgroundColor: "rgba(0,0,0,0.6)",
     padding: 16,
+    marginHorizontal: 20,
     borderRadius: 16,
-    marginHorizontal: 12,
-    marginTop: 12,
-    backgroundColor: "rgba(0,0,0,0.6)", // transparente
-    alignSelf: "center",               // centralizado
-    width: "95%",
+    alignItems: "center",
   },
-  unisonTitle: {
-    fontWeight: "bold",
-    fontSize: 18,
-    color: "#fff",
-    textAlign: "center",
-    marginBottom: 12,
-  },
+  unisonTitle: { fontSize: 18, fontWeight: "bold", color: "#fff", marginBottom: 12 },
 
-  nodeBox: {
-    marginBottom: 12,
-  },
-  nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
-  statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
-  warningText: { fontSize: 16, marginTop: 6, fontWeight: "bold", color: "#856404", textAlign: "center" },
-  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
-
-  chartCard: { width: "100%", borderRadius: 12, padding: 12, marginTop: 12, backgroundColor: "#222" },
+  nodeBox: { marginBottom: 16, width: "100%", alignItems: "center" },
+  nodeText: { fontSize: 16, fontWeight: "600", color: "#fff", textAlign: "center" },
+  statusText: { fontSize: 14, color: "#fff", marginTop: 4, textAlign: "center" },
+  buttonRow: { flexDirection: "row", justifyContent: "space-around", width: "100%", marginTop: 10 },
+  chartCard: { width: "95%", borderRadius: 12, padding: 12, marginTop: 12, backgroundColor: "#222" },
   chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
   chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
   chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
@@ -393,13 +422,9 @@ const styles = StyleSheet.create({
   chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
   chartLabels: { position: "absolute", top: 4, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between" },
   chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
-  chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
-  chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
 
-  githubUserBox: { padding: 10, backgroundColor: "#333", borderRadius: 8, width: "100%", alignItems: "center", marginBottom: 12 },
+  githubUserBox: { padding: 10, backgroundColor: "#333", borderRadius: 8, width: "100%", alignItems: "center", marginTop: 12 },
   githubText: { color: "#fff", marginBottom: 4 },
   githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 8 },
   sliderHorizontal: { width: "90%", alignSelf: "center", marginTop: 10 },
-  githubNavButtons: { flexDirection: "row", justifyContent: "space-between", marginTop: 12, width: "100%" },
-  githubCounter: { textAlign: "center", marginTop: 8, color: "#fff", fontSize: 14, fontWeight: "500" },
 });
