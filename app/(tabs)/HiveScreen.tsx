@@ -101,8 +101,8 @@ export default function HiveScreen() {
 
   // Google OAuth - People API
   const [, response, promptAsync] = Google.useAuthRequest({
-    clientId: "d2162a99-5b08-44cf-82b7-dcf471b9540c",
-    iosClientId: "1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi.apps.googleusercontent.com",
+    clientId: "1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi.apps.googleusercontent.com",
+    iosClientId: "com.googleusercontent.apps.1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi",
     androidClientId: "1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi.apps.googleusercontent.com",
     scopes: [
       "profile",
@@ -114,22 +114,38 @@ export default function HiveScreen() {
   useEffect(() => {
     if (response?.type === "success") {
       const { authentication } = response;
+      console.log("Token Google:", authentication?.accessToken);
       setGoogleToken(authentication?.accessToken ?? null);
     }
   }, [response]);
 
   const fetchGoogleContacts = async (token: string) => {
     try {
+      console.log("Buscando contatos Google...");
       const res = await axios.get(
         "https://people.googleapis.com/v1/people/me/connections",
         {
           headers: { Authorization: `Bearer ${token}` },
-          params: { personFields: "names,emailAddresses,photos", pageSize: 50 },
+          params: { personFields: "names,emailAddresses", pageSize: 100 },
         }
       );
-      setPeople(res.data.connections ?? []);
-    } catch (err) {
-      console.error("Erro ao buscar contatos do Google:", err);
+
+      if (res.data.connections?.length) {
+        const contatos: GoogleContact[] = res.data.connections.map((c: any) => ({
+          resourceName: c.resourceName,
+          names: c.names ?? [],
+          emailAddresses: c.emailAddresses ?? [],
+        }));
+
+        console.log("Contatos recebidos:", contatos.length);
+        setPeople(contatos);
+      } else {
+        console.warn("Nenhum contato retornado pela API.");
+        setPeople([]);
+      }
+    } catch (err: any) {
+      console.error("Erro ao buscar contatos do Google:", err.response?.data || err.message);
+      setPeople([]);
     }
   };
 
@@ -272,7 +288,7 @@ export default function HiveScreen() {
           </Marker>
         ))}
 
-        {(people ?? []).map((c, idx) => (
+        {(people ?? []).map((c) => (
           <Marker
             key={`google-${c.resourceName}`}
             coordinate={{
@@ -293,7 +309,7 @@ export default function HiveScreen() {
         ))}
       </MapView>
 
-      {/* SLIDER ZOOM */}
+      {/* SLIDER ZOOM + LOGIN */}
       <View style={styles.sliderBox}>
         <Text style={{ textAlign: "center" }}>🔎 Zoom</Text>
         <Slider
@@ -306,6 +322,22 @@ export default function HiveScreen() {
         />
         <Button title="Login Google" onPress={() => promptAsync()} />
       </View>
+
+      {/* LISTA DE EMAILS */}
+      <ScrollView style={styles.contactList} contentContainerStyle={{ padding: 12 }}>
+        <Text style={styles.contactTitle}>📧 Contatos Google</Text>
+        {people.length === 0 && (
+          <Text style={styles.noContacts}>Nenhum contato carregado.</Text>
+        )}
+        {people.map((c) => (
+          <View key={c.resourceName} style={styles.contactCard}>
+            <Text style={styles.contactName}>{c.names?.[0]?.displayName ?? "Sem nome"}</Text>
+            {c.emailAddresses?.map((e, i) => (
+              <Text key={i} style={styles.contactEmail}>{e.value}</Text>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
 
       {/* CARDS DE STATUS */}
       <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 120 }}>
@@ -336,7 +368,7 @@ export default function HiveScreen() {
                 <SparkBar data={hist} width={graphWidth} />
                 <View style={styles.chartFooter}>
                   <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
-                  <Text style={styles.chartFooterText}>Atual: {s.analog_percent?.toFixed(1) ?? "-"}%</Text>
+                  <Text style={styles.chartFooterText}>Atual: {s.analog_percent?.toFixed(1) ?? "-"}</Text>
                 </View>
               </View>
             </View>
@@ -374,4 +406,10 @@ const styles = StyleSheet.create({
   chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
   chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
   chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
+  contactList: { backgroundColor: "#fff", maxHeight: 200 },
+  contactTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  noContacts: { fontSize: 14, color: "#888" },
+  contactCard: { marginBottom: 12, padding: 8, borderRadius: 8, backgroundColor: "#f9f9f9", elevation: 2 },
+  contactName: { fontSize: 16, fontWeight: "600" },
+  contactEmail: { fontSize: 14, color: "#333" },
 });
