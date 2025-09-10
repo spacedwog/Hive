@@ -52,6 +52,7 @@
     "expo-three": "^2.2.1",
     "expo-web-browser": "~14.2.0",
     "express": "^5.1.0",
+    "next": "^15.5.2",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "^0.79.6",
