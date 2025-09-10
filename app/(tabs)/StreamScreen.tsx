@@ -8,7 +8,7 @@ const SOFTAP_IP = "http://192.168.4.1";
 const STA_IP = "http://192.168.15.188";
 
 // Endpoint Vercel
-const VERCEL_URL = "https://hive-7ugzfs0kc-spacedwogs-projects.vercel.app/api/status";
+const VERCEL_URL = "https://hive-p8afadbcn-spacedwogs-projects.vercel.app/api/status";
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -24,7 +24,7 @@ export default function StreamScreen() {
   });
   const [vercelData, setVercelData] = useState<any>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
-  const [page, setPage] = useState<"camera" | "webview">("camera");
+  const [page, setPage] = useState<"camera" | "webview" | "vercelResponse">("camera");
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
@@ -47,24 +47,25 @@ export default function StreamScreen() {
   }, [status.ip]);
 
   // Busca dados do Vercel
-  useEffect(() => {
-    const fetchVercel = async () => {
+  const fetchVercelData = async () => {
+    try {
+      const response = await fetch(VERCEL_URL);
+      const text = await response.text();
       try {
-        const response = await fetch(VERCEL_URL);
-        const text = await response.text();
-        try {
-          const json = JSON.parse(text);
-          setVercelData(json);
-          setVercelHTML(null);
-        } catch {
-          setVercelHTML(text);
-          setVercelData(null);
-        }
-      } catch (err) {
-        console.error("Erro ao acessar Vercel:", err);
+        const json = JSON.parse(text);
+        setVercelData(json);
+        setVercelHTML(null);
+      } catch {
+        setVercelHTML(text);
+        setVercelData(null);
       }
-    };
-    fetchVercel();
+    } catch (err) {
+      console.error("Erro ao acessar Vercel:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchVercelData();
   }, []);
 
   // Alterna LED do ESP32
@@ -90,6 +91,28 @@ export default function StreamScreen() {
     setStatus((prev) => ({ ...prev, ip: newIP }));
   };
 
+  // Cria item no Vercel via POST e exibe resposta em WebView
+  const createVercelItem = async () => {
+    const newItem = { nome: "Felipe", email: "felipe@example.com" }; // exemplo
+    try {
+      const response = await fetch(VERCEL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newItem),
+      });
+
+      const text = await response.text(); // pega como texto
+      setVercelHTML(text); // exibe no WebView
+      setVercelData(null);
+      setPage("vercelResponse"); // muda automaticamente para a aba da resposta
+    } catch (err) {
+      console.error("Erro ao criar item:", err);
+      setVercelHTML(`<p style="color:red">Erro ao criar item: ${err}</p>`);
+      setVercelData(null);
+      setPage("vercelResponse");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM</Text>
@@ -98,10 +121,11 @@ export default function StreamScreen() {
       <View style={styles.pageButtons}>
         <Button title="📱 Câmera" onPress={() => setPage("camera")} />
         <Button title="🌐 WebView" onPress={() => setPage("webview")} />
+        <Button title="📝 Vercel Response" onPress={() => setPage("vercelResponse")} />
       </View>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
-        {/* Renderiza Câmera */}
+        {/* Página Câmera */}
         {page === "camera" && (
           <>
             <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
@@ -130,6 +154,9 @@ export default function StreamScreen() {
                   color="#facc15"
                 />
               </View>
+              <View style={{ marginTop: 10 }}>
+                <Button title="➕ Criar Item" onPress={createVercelItem} color="#0f0" />
+              </View>
             </View>
 
             <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
@@ -150,39 +177,9 @@ export default function StreamScreen() {
           </>
         )}
 
-        {/* Renderiza WebView */}
+        {/* Página WebView Vercel */}
         {page === "webview" && (
           <>
-            {/* Status ESP32 igual à página da câmera */}
-            <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
-            <View style={[styles.dataBox, { alignSelf: "center" }]}>
-              <Text style={styles.overlayText}>
-                LED Built-in:{" "}
-                <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
-                  {status.led_builtin.toUpperCase()}
-                </Text>
-              </Text>
-              <Text style={styles.overlayText}>
-                LED Opposite:{" "}
-                <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
-                  {status.led_opposite.toUpperCase()}
-                </Text>
-              </Text>
-              <Text style={styles.overlayText}>IP: {status.ip}</Text>
-              <View style={styles.buttonRow}>
-                <Button
-                  title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
-                  onPress={toggleLed}
-                />
-                <Button
-                  title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
-                  onPress={switchMode}
-                  color="#facc15"
-                />
-              </View>
-            </View>
-
-            {/* WebView com mesmo estilo da câmera */}
             <Text style={[styles.text, { marginTop: 20 }]}>🌐 WebView Vercel:</Text>
             <View style={[styles.nativeCamera, { backgroundColor: "#111", alignSelf: "center" }]}>
               {vercelHTML ? (
@@ -193,6 +190,20 @@ export default function StreamScreen() {
                 </ScrollView>
               ) : (
                 <Text style={{ color: "red", textAlign: "center", marginTop: 20 }}>Carregando...</Text>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* Página Vercel Response */}
+        {page === "vercelResponse" && (
+          <>
+            <Text style={[styles.text, { marginTop: 20 }]}>📝 Resposta do Vercel:</Text>
+            <View style={[styles.nativeCamera, { backgroundColor: "#111", alignSelf: "center" }]}>
+              {vercelHTML ? (
+                <WebView originWhitelist={['*']} source={{ html: vercelHTML }} style={{ flex: 1 }} />
+              ) : (
+                <Text style={{ color: "red", textAlign: "center", marginTop: 20 }}>Sem resposta ainda</Text>
               )}
             </View>
           </>
