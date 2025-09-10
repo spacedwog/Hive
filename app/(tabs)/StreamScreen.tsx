@@ -8,7 +8,7 @@ const SOFTAP_IP = "http://192.168.4.1";
 const STA_IP = "http://192.168.15.188";
 
 // Endpoint Vercel
-const VERCEL_URL = "https://hive-7ugzfs0kc-spacedwogs-projects.vercel.app/api/status";
+const VERCEL_URL = "https://hive-7ugzfs0kc-spacedwogs-projects.vercel.app/pages/api/status";
 
 type StatusResponse = {
   led_builtin: "on" | "off";
