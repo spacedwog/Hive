@@ -7,7 +7,7 @@ const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
 const STA_IP = "http://192.168.15.188"; // ESP32 na rede Wi-Fi
 
 // Endpoint JSON Vercel
-const VERCEL_URL = "https://hive-l3rgk3ees-spacedwogs-projects.vercel.app/api/status";
+const VERCEL_URL = "https://hive-qm9vhar10-spacedwogs-projects.vercel.app/api/status";
 
 type StatusResponse = {
   led_builtin: "on" | "off";
