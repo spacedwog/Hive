@@ -1,9 +1,14 @@
+import axios from "axios";
 import { Camera, CameraView } from "expo-camera";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
 
+// IPs do ESP32
 const SOFTAP_IP = "http://192.168.4.1"; // ESP32 Soft-AP
 const STA_IP = "http://192.168.15.188"; // ESP32 na rede Wi-Fi
+
+// Chave da API Google Cloud Vision (JSON importado)
+const GOOGLE_CLOUD_KEY = require("./service-account.json");
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -20,8 +25,9 @@ export default function StreamScreen() {
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
-  const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
+  const cameraRef = useRef<CameraView>(null);
 
+  // Solicita permissão para a câmera
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
@@ -29,7 +35,7 @@ export default function StreamScreen() {
     })();
   }, []);
 
-  // Atualiza o frame do MJPEG a cada 200ms
+  // Atualiza o frame MJPEG a cada 200ms
   useEffect(() => {
     const interval = setInterval(() => {
       setFrameUrl(`${status.ip}/stream?${Date.now()}`); // evita cache
@@ -37,6 +43,7 @@ export default function StreamScreen() {
     return () => clearInterval(interval);
   }, [status.ip]);
 
+  // Alterna LED do ESP32
   const toggleLed = async () => {
     try {
       const newState = status.led_builtin === "on" ? "L" : "H";
@@ -51,11 +58,43 @@ export default function StreamScreen() {
     }
   };
 
+  // Alterna modo Soft-AP/STA
   const switchMode = () => {
     const newMode = mode === "Soft-AP" ? "STA" : "Soft-AP";
     const newIP = newMode === "Soft-AP" ? SOFTAP_IP : STA_IP;
     setMode(newMode);
     setStatus((prev) => ({ ...prev, ip: newIP }));
+  };
+
+  // Captura foto e envia para Google Cloud Vision API
+  const captureAndAnalyze = async () => {
+    if (!cameraRef.current) return;
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ base64: true });
+
+      const requestBody = {
+        requests: [
+          {
+            image: { content: photo.base64 },
+            features: [
+              { type: "LABEL_DETECTION", maxResults: 5 },
+              { type: "TEXT_DETECTION", maxResults: 5 },
+            ],
+          },
+        ],
+      };
+
+      const response = await axios.post(
+        `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_CLOUD_KEY.api_key}`,
+        requestBody
+      );
+
+      console.log("Vision API Response:", response.data);
+      alert(JSON.stringify(response.data.responses[0], null, 2));
+    } catch (error) {
+      console.error("Erro ao acessar Vision API:", error);
+    }
   };
 
   return (
@@ -67,7 +106,7 @@ export default function StreamScreen() {
       <View style={styles.nativeCamera}>
         {hasPermission ? (
           <>
-            <CameraView style={StyleSheet.absoluteFill} facing={type} />
+            <CameraView style={StyleSheet.absoluteFill} ref={cameraRef} facing={type} />
             <View style={styles.overlay}>
               <Text style={styles.overlayText}>Modo: {mode}</Text>
               <Text style={styles.overlayText}>
@@ -99,13 +138,19 @@ export default function StreamScreen() {
                 onPress={() => setType(type === "back" ? "front" : "back")}
                 color="#0af"
               />
+              <View style={{ marginTop: 10 }}>
+                <Button
+                  title="📷 Analisar imagem"
+                  onPress={captureAndAnalyze}
+                  color="#ff5722"
+                />
+              </View>
             </View>
           </>
         ) : (
           <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
         )}
       </View>
-      
     </ScrollView>
   );
 }
@@ -127,3 +172,7 @@ const styles = StyleSheet.create({
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
 });
+
+function setFrameUrl(arg0: string) {
+  throw new Error("Function not implemented.");
+}
