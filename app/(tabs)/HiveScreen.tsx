@@ -4,6 +4,7 @@ import * as Location from "expo-location";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Button,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
 
+// Import da classe
 type NodeStatus = {
   device?: string;
   server?: string;
@@ -83,34 +85,35 @@ export default function HiveScreen() {
   const [zoom, setZoom] = useState(0.05);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [githubUsers, setGithubUsers] = useState<any[]>([]);
-  const [userDisplayCount, setUserDisplayCount] = useState(10);
+  const [selectedUserIndex, setSelectedUserIndex] = useState(0);
 
   const { width: winWidth } = useWindowDimensions();
 
   // =========================
   // Autenticação GitHub
   // =========================
-  const GITHUB_TOKEN = "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"; // Coloque seu token
-  const githubAuthHeader = React.useMemo(() => ({
-    headers: {
-      Authorization: `token ${GITHUB_TOKEN}`,
-    },
-  }), [GITHUB_TOKEN]);
+  const GITHUB_TOKEN = "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"; // coloque seu token
+  const githubAuthHeader = useMemo(
+    () => ({
+      headers: { Authorization: `token ${GITHUB_TOKEN}` },
+    }),
+    [GITHUB_TOKEN]
+  );
 
   // =========================
   // Buscar usuários GitHub + detalhes (e-mail)
   // =========================
-  const fetchGithubUsersDetails = React.useCallback(async () => {
+  const fetchGithubUsersPage = React.useCallback(async () => {
     try {
-      const res = await axios.get("https://api.github.com/users?per_page=20", githubAuthHeader);
+      const url = "https://api.github.com/users?per_page=100";
+      const res = await axios.get(url, githubAuthHeader);
       const users = res.data;
 
-      // Para cada usuário, buscar detalhes completos
       const detailedUsers = await Promise.all(
         users.map(async (user: any) => {
           try {
             const detailRes = await axios.get(`https://api.github.com/users/${user.login}`, githubAuthHeader);
-            return detailRes.data; // inclui email se público
+            return detailRes.data;
           } catch {
             return user;
           }
@@ -227,17 +230,18 @@ export default function HiveScreen() {
 
   useEffect(() => {
     fetchStatus();
-    fetchGithubUsersDetails(); // 🔹 Busca usuários GitHub com detalhes
+    fetchGithubUsersPage();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [fetchGithubUsersDetails, fetchStatus]);
+  }, [fetchGithubUsersPage, fetchStatus]);
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
   const onlineStatus = status.filter((s) => s.status !== "offline");
+  const selectedUser = githubUsers[selectedUserIndex] ?? null;
 
   return (
     <View style={styles.container}>
-      {/* MAPA FULLSCREEN */}
+      {/* MAPA */}
       <MapView
         style={styles.map}
         region={{
@@ -268,7 +272,7 @@ export default function HiveScreen() {
         ))}
       </MapView>
 
-      {/* SLIDER ZOOM */}
+      {/* SLIDER ZOOM MAPA */}
       <View style={styles.sliderBox}>
         <Text style={{ textAlign: "center" }}>🔎 Zoom</Text>
         <Slider
@@ -281,66 +285,69 @@ export default function HiveScreen() {
         />
       </View>
 
-      {/* CARDS DE STATUS */}
-      <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 120 }}>
-        {onlineStatus.map((s, idx) => {
-          const serverKey = s.server ?? "unknown";
-          const isNear = s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1;
-          const hist = history[serverKey] ?? [];
+      <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 140 }}>
+        {/* CARD UNÍSSONO */}
+        <View style={styles.unisonCard}>
+          <Text style={styles.unisonTitle}>🧠 Hive Prime 🧠</Text>
 
-          return (
-            <View key={idx} style={styles.nodeCard}>
-              <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-              <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
-              {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
-              {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
-              {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
-              {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
-              {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
-              {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
+          {/* SERVIDORES */}
+          {onlineStatus.map((s, idx) => {
+            const serverKey = s.server ?? "unknown";
+            const isNear = s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1;
+            const hist = history[serverKey] ?? [];
 
-              <View style={styles.buttonRow}>
-                <Button title="Ativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "activate")} />
-                <Button title="Desativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
-                <Button title="Ping" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "ping")} />
-              </View>
+            return (
+              <View key={idx} style={styles.nodeBox}>
+                <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+                <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
+                {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
+                {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
+                {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
+                {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
+                {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
+                {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
 
-              <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
-                <SparkBar data={hist} width={graphWidth} />
-                <View style={styles.chartFooter}>
-                  <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
-                  <Text style={styles.chartFooterText}>Atual: {s.analog_percent?.toFixed(1) ?? "-"}</Text>
+                <View style={styles.buttonRow}>
+                  <Button title="Ativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "activate")} />
+                  <Button title="Desativar" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
+                  <Button title="Ping" disabled={!s.server || isNear} onPress={() => s.server && sendCommand(s.server, "ping")} />
+                </View>
+
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartTitle}>📈 Histórico ({serverKey}) — últimos {MAX_POINTS}s</Text>
+                  <SparkBar data={hist} width={graphWidth} />
+                  <View style={styles.chartFooter}>
+                    <Text style={styles.chartFooterText}>Pontos: {hist.length}/{MAX_POINTS}</Text>
+                    <Text style={styles.chartFooterText}>Atual: {s.analog_percent?.toFixed(1) ?? "-"}</Text>
+                  </View>
                 </View>
               </View>
+            );
+          })}
+
+          {/* GITHUB */}
+          {selectedUser ? (
+            <View style={styles.githubUserBox}>
+              <Image source={{ uri: selectedUser.avatar_url }} style={styles.githubAvatar} />
+              <Text style={styles.githubText}>🆔 ID: {selectedUser.id}</Text>
+              <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
+              <Text style={styles.githubText}>🔗 URL: {selectedUser.html_url}</Text>
+              <Text style={styles.githubText}>📧 Email: {selectedUser.email ?? "Não disponível"}</Text>
             </View>
-          );
-        })}
+          ) : (
+            <Text style={styles.githubText}>Carregando usuários...</Text>
+          )}
 
-        {/* Lista de Usuários GitHub com slider */}
-        <View style={{ padding: 12, marginTop: 12 }}>
-          <Text style={{ fontWeight: "bold", fontSize: 16, marginBottom: 6 }}>
-            👥 Usuários GitHub ({userDisplayCount})
-          </Text>
-
-          {/* Slider para controlar quantidade de usuários exibidos */}
+          {/* Slider horizontal GitHub */}
           <Slider
-            style={{ width: "90%", alignSelf: "center", marginBottom: 8 }}
-            minimumValue={1}
-            maximumValue={githubUsers.length}
+            style={styles.sliderHorizontal}
+            minimumValue={0}
+            maximumValue={githubUsers.length > 0 ? githubUsers.length - 1 : 0}
             step={1}
-            value={userDisplayCount}
-            onValueChange={setUserDisplayCount}
+            value={selectedUserIndex}
+            onValueChange={(val) => setSelectedUserIndex(Math.round(val))}
           />
-
-          {githubUsers.slice(0, userDisplayCount).map((user) => (
-            <View key={user.id} style={{ marginVertical: 4, padding: 8, backgroundColor: "#ddd", borderRadius: 6 }}>
-              <Text>ID: {user.id}</Text>
-              <Text>Nome: {user.login}</Text>
-              <Text>URL: {user.html_url}</Text>
-              <Text>Email: {user.email ?? "Não disponível"}</Text>
-            </View>
-          ))}
+          <Text style={styles.githubCounter}>Usuário {selectedUserIndex + 1} de {githubUsers.length}</Text>
         </View>
       </ScrollView>
     </View>
@@ -352,18 +359,32 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   sliderBox: { padding: 8, backgroundColor: "#eee" },
   overlayScroll: { position: "absolute", top: 20, left: 0, right: 0 },
-  nodeCard: {
-    padding: 12,
-    borderRadius: 12,
+  
+  unisonCard: {
+    padding: 16,
+    borderRadius: 16,
     marginHorizontal: 12,
+    marginTop: 12,
+    backgroundColor: "rgba(0,0,0,0.6)", // transparente
+    alignSelf: "center",               // centralizado
+    width: "95%",
+  },
+  unisonTitle: {
+    fontWeight: "bold",
+    fontSize: 18,
+    color: "#fff",
+    textAlign: "center",
     marginBottom: 12,
-    backgroundColor: "#f5f5f5",
-    elevation: 4,
+  },
+
+  nodeBox: {
+    marginBottom: 12,
   },
   nodeText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
   statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
   warningText: { fontSize: 16, marginTop: 6, fontWeight: "bold", color: "#856404", textAlign: "center" },
   buttonRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
+
   chartCard: { width: "100%", borderRadius: 12, padding: 12, marginTop: 12, backgroundColor: "#222" },
   chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
   chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
@@ -374,4 +395,11 @@ const styles = StyleSheet.create({
   chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
   chartFooter: { marginTop: 8, flexDirection: "row", justifyContent: "space-between" },
   chartFooterText: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
+
+  githubUserBox: { padding: 10, backgroundColor: "#333", borderRadius: 8, width: "100%", alignItems: "center", marginBottom: 12 },
+  githubText: { color: "#fff", marginBottom: 4 },
+  githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 8 },
+  sliderHorizontal: { width: "90%", alignSelf: "center", marginTop: 10 },
+  githubNavButtons: { flexDirection: "row", justifyContent: "space-between", marginTop: 12, width: "100%" },
+  githubCounter: { textAlign: "center", marginTop: 8, color: "#fff", fontSize: 14, fontWeight: "500" },
 });
