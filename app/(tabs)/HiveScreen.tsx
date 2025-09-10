@@ -86,7 +86,7 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
 
 export default function HiveScreen() {
   const [status, setStatus] = useState<NodeStatus[]>([]);
-  const [setPingValues] = useState<{ [key: string]: number }>({});
+  const [, setPingValues] = useState<{ [key: string]: number }>({});
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [zoom, setZoom] = useState(0.05);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
