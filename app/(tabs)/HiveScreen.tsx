@@ -99,12 +99,16 @@ export default function HiveScreen() {
   const authPassword = "Kimera12@";
   const authHeader = "Basic " + base64.encode(`${authUsername}:${authPassword}`);
 
-  // Google OAuth
-  const [, response] = Google.useAuthRequest({
-    clientId: "<SEU_EXPO_CLIENT_ID>",
-    iosClientId: "<SEU_IOS_CLIENT_ID>",
-    androidClientId: "<SEU_ANDROID_CLIENT_ID>",
-    scopes: ["profile", "email", "https://www.googleapis.com/auth/contacts.readonly"],
+  // Google OAuth - People API
+  const [, response, promptAsync] = Google.useAuthRequest({
+    clientId: "d2162a99-5b08-44cf-82b7-dcf471b9540c",
+    iosClientId: "1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi.apps.googleusercontent.com",
+    androidClientId: "1042212436695-8aiqkjhbjdp15520pqfreg8ssr5vakmi.apps.googleusercontent.com",
+    scopes: [
+      "profile",
+      "email",
+      "https://www.googleapis.com/auth/contacts.readonly",
+    ],
   });
 
   useEffect(() => {
@@ -116,11 +120,14 @@ export default function HiveScreen() {
 
   const fetchGoogleContacts = async (token: string) => {
     try {
-      const res = await axios.get("https://people.googleapis.com/v1/people/me/connections", {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { personFields: "names,emailAddresses,photos", pageSize: 50 },
-      });
-      setPeople(res.data.connections || []);
+      const res = await axios.get(
+        "https://people.googleapis.com/v1/people/me/connections",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { personFields: "names,emailAddresses,photos", pageSize: 50 },
+        }
+      );
+      setPeople(res.data.connections ?? []);
     } catch (err) {
       console.error("Erro ao buscar contatos do Google:", err);
     }
@@ -258,9 +265,8 @@ export default function HiveScreen() {
                 <Text>📡 {s.server}</Text>
                 {typeof s.temperatura_C === "number" && <Text>🌡️ {s.temperatura_C.toFixed(1)} °C</Text>}
                 {typeof s.umidade_pct === "number" && <Text>💧 {s.umidade_pct.toFixed(1)} %</Text>}
-                {s.ultrassonico_m !== undefined && <Text>📏 Ultrassônico: {s.ultrassonico_m.toFixed(2)} m</Text>}
-                {s.analog_percent !== undefined && <Text>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
                 {s.presenca !== undefined && <Text>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
+                {s.ultrassonico_m !== undefined && <Text>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
               </View>
             </Callout>
           </Marker>
@@ -298,6 +304,7 @@ export default function HiveScreen() {
           value={zoom}
           onValueChange={setZoom}
         />
+        <Button title="Login Google" onPress={() => promptAsync()} />
       </View>
 
       {/* CARDS DE STATUS */}
@@ -312,11 +319,10 @@ export default function HiveScreen() {
               <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
               <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
               {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
-              {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Ultrassônico: {s.ultrassonico_m.toFixed(2)} m</Text>}
-              {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
               {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
               {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
-
+              {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
+              {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
               {isNear && <Text style={styles.warningText}>⚠️ Dispositivo próximo!</Text>}
 
               <View style={styles.buttonRow}>
@@ -345,12 +351,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
   sliderBox: { padding: 8, backgroundColor: "#eee" },
-  overlayScroll: {
-    position: "absolute",
-    top: 20,
-    left: 0,
-    right: 0,
-  },
+  overlayScroll: { position: "absolute", top: 20, left: 0, right: 0 },
   nodeCard: {
     padding: 12,
     borderRadius: 12,
@@ -363,22 +364,9 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 14, marginTop: 4, textAlign: "center" },
   warningText: { fontSize: 16, marginTop: 6, fontWeight: "bold", color: "#856404", textAlign: "center" },
   buttonRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
-  chartCard: {
-    width: "100%",
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 12,
-    backgroundColor: "#222",
-  },
+  chartCard: { width: "100%", borderRadius: 12, padding: 12, marginTop: 12, backgroundColor: "#222" },
   chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
-  chartBox: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 10,
-    overflow: "hidden",
-    alignSelf: "center",
-    paddingTop: 8,
-    paddingHorizontal: 8,
-  },
+  chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
   chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
   chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
   chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
