@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 
 interface SensorData {
   device: string;
@@ -61,7 +62,11 @@ const SparkBar: React.FC<SparkBarProps> = ({
               <View
                 style={[
                   styles.chartBar,
-                  { width: barWidth, height: h, backgroundColor: isAnomaly ? '#ff5555' : '#50fa7b' },
+                  {
+                    width: barWidth,
+                    height: h,
+                    backgroundColor: isAnomaly ? '#ff5555' : '#50fa7b',
+                  },
                 ]}
               />
             </Pressable>
@@ -88,12 +93,12 @@ export default function DataScienceCardScreen() {
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
   // Endpoint Vercel
-  const VERCEL_URL = "https://hive-jxyx72f9m-spacedwogs-projects.vercel.app";
+  const VERCEL_URL = 'https://hive-jxyx72f9m-spacedwogs-projects.vercel.app';
 
   const sendCommand = async (cmd: 'on' | 'off') => {
     if (!node) return;
     try {
-      await fetch(`${VERCEL_URL}`, {
+      await fetch(`${VERCEL_URL}/api/index`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: cmd }),
@@ -110,7 +115,7 @@ export default function DataScienceCardScreen() {
       if (!isMounted) return;
 
       const updateHistory = (data: SensorData) => {
-        setHistory(prev => {
+        setHistory((prev) => {
           const next = { ...prev };
           const key = data.sta_ip !== 'desconectado' ? data.sta_ip : data.server_ip;
           const values = next[key] ?? [];
@@ -132,8 +137,14 @@ export default function DataScienceCardScreen() {
       };
 
       try {
-        const response = await fetch('https://SEU-PROJETO.vercel.app/api/status');
-        if (!response.ok) throw new Error('API offline');
+        const response = await fetch(`${VERCEL_URL}/api/status`);
+        if (!response.ok) throw new Error(`API offline (${response.status})`);
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+          throw new Error('Resposta não é JSON');
+        }
+
         const data: SensorData = await response.json();
         setNode(data);
         updateHistory(data);
@@ -152,8 +163,8 @@ export default function DataScienceCardScreen() {
     };
   }, [alertAnim]);
 
-  const nextPage = () => setPage(prev => (prev + 1) % 3);
-  const prevPage = () => setPage(prev => (prev - 1 + 3) % 3);
+  const nextPage = () => setPage((prev) => (prev + 1) % 4);
+  const prevPage = () => setPage((prev) => (prev - 1 + 4) % 4);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -162,6 +173,7 @@ export default function DataScienceCardScreen() {
       <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
         {node ? (
           <>
+            {/* Página 0 - Informações do nó */}
             {page === 0 && (
               <View>
                 <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
@@ -189,6 +201,7 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
+            {/* Página 1 - Histórico do nó atual */}
             {page === 1 && history[node.sta_ip] && history[node.sta_ip].length > 0 && (
               <View>
                 <Text style={{ color: '#fff', marginBottom: 8 }}>
@@ -201,7 +214,6 @@ export default function DataScienceCardScreen() {
                   highlightThreshold={80}
                   onBarPress={(index, value) => setTooltip({ index, value })}
                 />
-
                 {tooltip && (
                   <View style={styles.tooltipCard}>
                     <Text style={styles.tooltipCardText}>
@@ -209,7 +221,6 @@ export default function DataScienceCardScreen() {
                     </Text>
                   </View>
                 )}
-
                 <View style={{ flexDirection: 'row', marginTop: 16 }}>
                   <TouchableOpacity
                     style={[styles.cmdBtn, { backgroundColor: '#4CAF50' }]}
@@ -227,6 +238,7 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
+            {/* Página 2 - Histórico geral */}
             {page === 2 && Object.keys(history).length > 0 && (
               <View>
                 <Text
@@ -261,6 +273,14 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
+            {/* Página 3 - WebView */}
+            {page === 3 && (
+              <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
+                <WebView source={{ uri: VERCEL_URL }} style={{ flex: 1 }} />
+              </View>
+            )}
+
+            {/* Navegação entre páginas */}
             <View
               style={{
                 flexDirection: 'row',
@@ -282,7 +302,7 @@ export default function DataScienceCardScreen() {
                 marginTop: 8,
               }}
             >
-              Página {page + 1} de 3
+              Página {page + 1} de 4
             </Text>
           </>
         ) : (
