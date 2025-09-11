@@ -3,18 +3,21 @@
   "compilerOptions": {
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "typeRoots": ["./src/types", "./node_modules/@types"],
+    "typeRoots": [
+      "./src/types",
+      "./node_modules/@types"
+    ],
     "strict": true,
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
     "src",
     "victory-native.d.ts",
     "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "**/*.tsx"
   ]
 }
