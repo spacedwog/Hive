@@ -1,6 +1,6 @@
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
-import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 // IPs do ESP32
@@ -28,7 +28,7 @@ export default function StreamScreen() {
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
-  const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
+  const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function StreamScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📡 HIVE STREAM</Text>
+      <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
 
       {/* Botões de paginação */}
       <View style={styles.pageButtons}>
@@ -131,15 +131,6 @@ export default function StreamScreen() {
                   color="#facc15"
                 />
               </View>
-            </View>
-
-            <Text style={[styles.text, { marginTop: 20 }]}>📷 Stream ESP32:</Text>
-            <View style={styles.streamBox}>
-              <Image
-                style={{ width: "100%", height: "100%" }}
-                source={{ uri: frameUrl }}
-                resizeMode="cover"
-              />
             </View>
 
             <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
