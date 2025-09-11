@@ -49,7 +49,7 @@ const SparkBar: React.FC<SparkBarProps> = ({
       <View style={styles.chartAxis} />
       <View style={styles.chartBarsRow}>
         {data.map((v, i) => {
-          const clamped = Math.max(0, Math.min(100, v));
+          const clamped = Math.max(0, Math.min(100, v ?? 0));
           const h = Math.max(2, Math.round((clamped / 100) * (height - 16)));
           const isAnomaly = clamped >= highlightThreshold;
 
@@ -89,12 +89,11 @@ export default function DataScienceCardScreen() {
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
-  const VERCEL_URL = 'https://seu-projeto.vercel.app';
+  const VERCEL_URL = 'https://hive-h1tklyklc-spacedwogs-projects.vercel.app';
 
-  // --- Função para enviar dados para a API ---
   const sendSensorData = async (data: SensorData) => {
     try {
-      await fetch(`${VERCEL_URL}/api/sensor`, {
+      await fetch(`${VERCEL_URL}/api/sensor?info=sensor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -104,7 +103,6 @@ export default function DataScienceCardScreen() {
     }
   };
 
-  // --- Fetch sensor data ---
   useEffect(() => {
     let isMounted = true;
 
@@ -116,14 +114,14 @@ export default function DataScienceCardScreen() {
           const next = { ...prev };
           const key = data.sta_ip || data.server_ip;
           const values = next[key] ?? [];
-          const newArr = [...values, data.sensor_db];
+          const newArr = [...values, data.sensor_db ?? 0];
           if (newArr.length > 60) newArr.splice(0, newArr.length - 60);
           next[key] = newArr;
           return next;
         });
 
         if (data.anomaly?.detected) {
-          setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value})`);
+          setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value?.toFixed(1) ?? '--'})`);
           Animated.sequence([
             Animated.timing(alertAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
             Animated.timing(alertAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
@@ -140,10 +138,7 @@ export default function DataScienceCardScreen() {
         const data: SensorData = await response.json();
         setNode(data);
         updateHistory(data);
-
-        // --- Envia dados atualizados para sensor.js ---
         sendSensorData(data);
-
       } catch (error) {
         console.log('Erro ao obter dados da API Vercel:', error);
 
@@ -162,8 +157,6 @@ export default function DataScienceCardScreen() {
         };
         setNode(mock);
         updateHistory(mock);
-
-        // Envia dados mock para sensor.js
         sendSensorData(mock);
       }
     };
@@ -176,25 +169,24 @@ export default function DataScienceCardScreen() {
     };
   }, [alertAnim]);
 
-  // --- Fetch Vercel server info ---
-  const fetchVercelData = async () => {
-    try {
-      const response = await fetch(`${VERCEL_URL}/api/sensor?info=server`);
-      const text = await response.text();
+  useEffect(() => {
+    const fetchVercelData = async () => {
       try {
-        const json = JSON.parse(text);
-        setVercelData(json);
-        setVercelHTML(null);
-      } catch {
-        setVercelHTML(text);
-        setVercelData(null);
+        const response = await fetch(`${VERCEL_URL}/api/sensor?info=sensor`);
+        const text = await response.text();
+        try {
+          setVercelData(JSON.parse(text));
+          setVercelHTML(null);
+        } catch {
+          setVercelHTML(text);
+          setVercelData(null);
+        }
+      } catch (err) {
+        console.error('Erro ao acessar Vercel:', err);
       }
-    } catch (err) {
-      console.error('Erro ao acessar Vercel:', err);
-    }
-  };
-
-  useEffect(() => { fetchVercelData(); }, []);
+    };
+    fetchVercelData();
+  }, []);
 
   const nextPage = () => setPage((prev) => (prev + 1) % 4);
   const prevPage = () => setPage((prev) => (prev - 1 + 4) % 4);
@@ -211,7 +203,9 @@ export default function DataScienceCardScreen() {
                 <Text style={styles.description}>📡 IP AP: {node.server_ip}</Text>
                 <Text style={styles.description}>🌐 IP STA: {node.sta_ip}</Text>
                 <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw}</Text>
-                <Text style={styles.description}>📈 Som (dB): {node.sensor_db.toFixed(1)}</Text>
+                <Text style={styles.description}>
+                  📈 Som (dB): {node.sensor_db !== undefined && node.sensor_db !== null ? node.sensor_db.toFixed(1) : '--'}
+                </Text>
                 <Text style={styles.description}>
                   ⚠️ Anomalia: {node.anomaly?.detected ? node.anomaly.message : 'Normal'}
                 </Text>
@@ -228,15 +222,17 @@ export default function DataScienceCardScreen() {
               <View>
                 <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
                 <SparkBar
-                  data={history[node.sta_ip]}
+                  data={history[node.sta_ip] ?? []}
                   width={graphWidth}
                   height={120}
                   highlightThreshold={80}
                   onBarPress={(index, value) => setTooltip({ index, value })}
                 />
-                {tooltip && (
+                {tooltip && tooltip.value !== undefined && tooltip.value !== null && (
                   <View style={styles.tooltipCard}>
-                    <Text style={styles.tooltipCardText}>Ponto {tooltip.index + 1}: {tooltip.value.toFixed(1)}%</Text>
+                    <Text style={styles.tooltipCardText}>
+                      Ponto {tooltip.index + 1}: {tooltip.value.toFixed(1)}%
+                    </Text>
                   </View>
                 )}
               </View>
@@ -247,8 +243,10 @@ export default function DataScienceCardScreen() {
                 <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>📦 Histórico Geral</Text>
                 {Object.entries(history).map(([serverIp, values]) => (
                   <View key={serverIp} style={{ marginBottom: 12 }}>
-                    <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>🌐 {serverIp} — Últimos {values.length} pontos</Text>
-                    <SparkBar data={values} width={graphWidth} height={80} highlightThreshold={80} />
+                    <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>
+                      🌐 {serverIp} — Últimos {values.length} pontos
+                    </Text>
+                    <SparkBar data={values ?? []} width={graphWidth} height={80} highlightThreshold={80} />
                   </View>
                 ))}
               </View>
