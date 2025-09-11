@@ -155,7 +155,7 @@ export default function DataScienceCardScreen() {
       };
 
       try {
-        const response = await fetch(`${VERCEL_URL}/api/status`);
+        const response = await fetch(`${VERCEL_URL}/api/status?info=server`);
         if (!response.ok) throw new Error(`API offline (${response.status})`);
 
         const contentType = response.headers.get('content-type');
