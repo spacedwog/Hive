@@ -128,6 +128,7 @@ export default function HiveScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [githubUsers, setGithubUsers] = useState<GithubUser[]>([]);
   const [selectedUserIndex, setSelectedUserIndex] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0); // 0: Mapa, 1: Status, 2: GitHub
 
   const { width: winWidth } = useWindowDimensions();
   const githubManager = useMemo(() => new GithubEmailManager(), []);
@@ -276,7 +277,7 @@ export default function HiveScreen() {
   const selectedUser = githubUsers[selectedUserIndex] ?? null;
 
   // ==================================
-  // Render
+  // Renderização condicional por página
   // ==================================
   return (
     <View style={styles.container}>
@@ -324,69 +325,78 @@ export default function HiveScreen() {
         />
       </View>
 
-      <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* CARD UNÍSSONO */}
-        <View style={styles.unisonCard}>
-          <Text style={styles.unisonTitle}>🧠 Hive Prime 🧠</Text>
+      {/* PAGINAÇÃO SOBRE O MAPA */}
+      <View style={styles.pagePagination}>
+        <Button title="Mapa" onPress={() => setCurrentPage(0)} />
+        <Button title="Status Vespa" onPress={() => setCurrentPage(1)} />
+        <Button title="GitHub" onPress={() => setCurrentPage(2)} />
+      </View>
 
-          {/* SERVIDORES */}
-          {onlineStatus.map((s, idx) => {
-            const serverKey = s.server ?? "unknown";
-            const hist = history[serverKey] ?? [];
-            return (
-              <View key={idx} style={styles.nodeBox}>
-                <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
-                {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
-                {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
-                {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
-                {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
-                {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
+      {/* CONTEÚDO POR PÁGINA */}
+      {currentPage !== 0 && (
+        <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 140 }}>
+          <View style={styles.unisonCard}>
+            {currentPage === 1 && (
+              <>
+                {onlineStatus.map((s, idx) => {
+                  const serverKey = s.server ?? "unknown";
+                  const hist = history[serverKey] ?? [];
+                  return (
+                    <View key={idx} style={styles.nodeBox}>
+                      <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+                      <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
+                      {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
+                      {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
+                      {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
+                      {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
+                      {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
 
-                <View style={styles.buttonRow}>
-                  <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
-                  <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
-                  <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
-                </View>
+                      <View style={styles.buttonRow}>
+                        <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
+                        <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
+                        <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
+                      </View>
 
-                <View style={styles.chartCard}>
-                  <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
-                  <SparkBar data={hist} width={graphWidth} />
-                </View>
+                      <View style={styles.chartCard}>
+                        <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
+                        <SparkBar data={hist} width={graphWidth} />
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+
+            {currentPage === 2 && selectedUser && (
+              <View style={styles.githubUserBox}>
+                <Image source={{ uri: selectedUser.avatar_url }} style={styles.githubAvatar} />
+                <Text style={styles.githubText}>🆔 ID: {selectedUser.id}</Text>
+                <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
+                <Text style={styles.githubText}>🔗 URL: {selectedUser.html_url}</Text>
+                <Text style={styles.githubText}>📧 Email: {selectedUser.email ?? "Não disponível"}</Text>
+
+                <Button
+                  title="✉️ Enviar E-mail"
+                  onPress={() => githubManager.sendEmail(selectedUser.login, "Projeto - HIVE", "Seja bem-vindo ao projeto - HIVE!")}
+                  disabled={!selectedUser.email}
+                />
+
+                {/* SLIDER HORIZONTAL */}
+                <Slider
+                  style={styles.sliderHorizontal}
+                  minimumValue={0}
+                  maximumValue={githubUsers.length > 0 ? githubUsers.length - 1 : 0}
+                  step={1}
+                  value={selectedUserIndex}
+                  onValueChange={(val) => setSelectedUserIndex(Math.round(val))}
+                />
               </View>
-            );
-          })}
+            )}
 
-          {/* GITHUB */}
-          {selectedUser ? (
-            <View style={styles.githubUserBox}>
-              <Image source={{ uri: selectedUser.avatar_url }} style={styles.githubAvatar} />
-              <Text style={styles.githubText}>🆔 ID: {selectedUser.id}</Text>
-              <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
-              <Text style={styles.githubText}>🔗 URL: {selectedUser.html_url}</Text>
-              <Text style={styles.githubText}>📧 Email: {selectedUser.email ?? "Não disponível"}</Text>
-
-              <Button
-                title="✉️ Enviar E-mail"
-                onPress={() => githubManager.sendEmail(selectedUser.login, "Projeto - HIVE", "Seja bem-vindo ao projeto - HIVE!")}
-                disabled={!selectedUser.email}
-              />
-            </View>
-          ) : (
-            <Text style={styles.githubText}>Carregando usuários...</Text>
-          )}
-
-          {/* SLIDER HORIZONTAL */}
-          <Slider
-            style={styles.sliderHorizontal}
-            minimumValue={0}
-            maximumValue={githubUsers.length > 0 ? githubUsers.length - 1 : 0}
-            step={1}
-            value={selectedUserIndex}
-            onValueChange={(val) => setSelectedUserIndex(Math.round(val))}
-          />
-        </View>
-      </ScrollView>
+            {currentPage === 2 && !selectedUser && <Text style={styles.githubText}>Carregando usuários...</Text>}
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -398,7 +408,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
   sliderBox: { padding: 8, backgroundColor: "#eee" },
-  overlayScroll: { position: "absolute", top: 20, left: 0, right: 0 },
+  overlayScroll: { position: "absolute", top: 150, left: 0, right: 0 },
 
   unisonCard: {
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -426,4 +436,17 @@ const styles = StyleSheet.create({
   githubText: { color: "#fff", marginBottom: 4 },
   githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 8 },
   sliderHorizontal: { width: "90%", alignSelf: "center", marginTop: 10 },
+
+  pagePagination: {
+    position: "absolute",
+    top: 50,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingVertical: 8,
+    backgroundColor: "rgba(17,17,17,0.8)",
+    borderRadius: 8,
+    marginHorizontal: 20,
+  },
 });

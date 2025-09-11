@@ -1,3 +1,4 @@
+import axios from 'axios';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
@@ -11,20 +12,30 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+// -------------------------
+// 📡 Map de NodeMCU
+// -------------------------
+const nodes = [
+  { name: 'NODEMCU', ip: '192.168.4.1', sta_ip: '192.168.15.138' },
+];
+
 interface SensorData {
-  device: string;
-  server_ip: string;
-  sta_ip: string;
-  sensor_raw: number;
-  sensor_db: number;
-  status: string;
-  anomaly: {
+  device?: string;
+  server_ip?: string;
+  sta_ip?: string;
+  sensor_raw?: number;
+  sensor_db?: number;
+  status?: string;
+  anomaly?: {
     detected: boolean;
     message: string;
     current_value: number;
   };
 }
 
+// -------------------------
+// 🔹 Componente SparkBar
+// -------------------------
 interface SparkBarProps {
   data: number[];
   width: number;
@@ -79,6 +90,9 @@ const SparkBar: React.FC<SparkBarProps> = ({
   );
 };
 
+// -------------------------
+// 📊 DataScienceCardScreen
+// -------------------------
 export default function DataScienceCardScreen() {
   const { width: winWidth } = useWindowDimensions();
   const [node, setNode] = useState<SensorData | null>(null);
@@ -93,90 +107,66 @@ export default function DataScienceCardScreen() {
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
   const VERCEL_URL = 'https://hive-h1tklyklc-spacedwogs-projects.vercel.app';
 
-  const sendSensorData = async (data: SensorData) => {
-    try {
-      await fetch(`${VERCEL_URL}/api/sensor?info=sensor`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-    } catch (err) {
-      console.error('Erro ao enviar dados para API:', err);
-    }
-  };
-
-  // Fetch sensor data a cada 2 segundos
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchData = async () => {
-      if (!isMounted) return;
-
-      const updateHistory = (data: SensorData) => {
-        setHistory(prev => {
-          const next = { ...prev };
-          const key = data.sta_ip || data.server_ip;
-          const values = next[key] ?? [];
-          const newArr = [...values, data.sensor_db ?? 0];
-          if (newArr.length > 60) newArr.splice(0, newArr.length - 60);
-          next[key] = newArr;
-          return next;
-        });
-
-        if (data.anomaly?.detected) {
-          setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value?.toFixed(1) ?? '--'})`);
-          Animated.sequence([
-            Animated.timing(alertAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-            Animated.timing(alertAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
-          ]).start();
-        } else {
-          setAlert(null);
-        }
-      };
+  // -------------------------
+  // 🔄 Fetch NodeMCU
+  // -------------------------
+  const fetchNodeMCU = React.useCallback(async () => {
+    for (const n of nodes) {
+      let data: SensorData | null = null;
 
       try {
-        const response = await fetch(`${VERCEL_URL}/api/sensor?info=sensor`);
-        if (!response.ok) throw new Error(`API offline (${response.status})`);
+        const res = await axios.get(`http://${n.sta_ip}/status`, { timeout: 3000 });
+        data = res.data;
+      } catch {}
 
-        const data: SensorData = await response.json();
-        setNode(data);
-        updateHistory(data);
-        sendSensorData(data);
-      } catch {
-        // Mock sensor data
-        const mock: SensorData = {
-          device: 'ESP32 MOCK',
-          server_ip: '192.168.4.1',
-          sta_ip: '192.168.0.99',
+      if (!data) {
+        try {
+          const res = await axios.get(`http://${n.ip}/status`, { timeout: 3000 });
+          data = res.data;
+        } catch {}
+      }
+
+      if (!data) {
+        // fallback mock
+        data = {
+          device: 'NODEMCU MOCK',
+          server_ip: n.ip,
+          sta_ip: n.sta_ip,
           sensor_raw: Math.floor(Math.random() * 500),
           sensor_db: Math.random() * 100,
-          status: 'online',
-          anomaly: {
-            detected: Math.random() > 0.8,
-            message: 'Ruído alto detectado',
-            current_value: Math.random() * 100,
-          },
+          status: 'offline',
+          anomaly: { detected: Math.random() > 0.8, message: 'Ruído alto', current_value: Math.random() * 100 },
         };
-        setNode(mock);
-        updateHistory(mock);
-        sendSensorData(mock);
       }
-    };
 
-    fetchData();
-    const interval = setInterval(fetchData, 2000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+      setNode(data);
+      setHistory(prev => {
+        const key = data!.sta_ip || data!.server_ip!;
+        const arr = [...(prev[key] ?? []), data!.sensor_db ?? 0].slice(-60);
+        return { ...prev, [key]: arr };
+      });
+
+      // Alertas
+      if (data.anomaly?.detected) {
+        setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value?.toFixed(1) ?? '--'})`);
+        Animated.sequence([
+          Animated.timing(alertAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(alertAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]).start();
+      } else {
+        setAlert(null);
+      }
+    }
   }, [alertAnim]);
 
-  // Fetch Vercel server data
+  // -------------------------
+  // 🔄 Fetch Vercel
+  // -------------------------
   useEffect(() => {
     const fetchVercelData = async () => {
       try {
-        const response = await fetch(`${VERCEL_URL}/api/sensor?info=server`);
-        const text = await response.text();
+        const res = await fetch(`${VERCEL_URL}/api/sensor?info=sensor`);
+        const text = await res.text();
         try {
           setVercelData(JSON.parse(text));
           setVercelHTML(null);
@@ -191,16 +181,38 @@ export default function DataScienceCardScreen() {
     fetchVercelData();
   }, []);
 
+  // -------------------------
+  // 🔄 Intervalo NodeMCU
+  // -------------------------
+  useEffect(() => {
+    let mounted = true;
+    fetchNodeMCU();
+    const interval = setInterval(() => {
+      if (mounted) fetchNodeMCU();
+    }, 2000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [fetchNodeMCU]);
+
+  // -------------------------
+  // 🔹 Paginação
+  // -------------------------
   const nextPage = () => setPage(prev => (prev + 1) % 4);
   const prevPage = () => setPage(prev => (prev - 1 + 4) % 4);
 
+  // -------------------------
+  // 🔹 Render
+  // -------------------------
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📊 Data Science Dashboard</Text>
       <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
         {node ? (
           <>
-            {/* Página 0: Dados do Sensor */}
+            {/* Página 0: Dados NodeMCU */}
             {page === 0 && (
               <View>
                 <Text style={styles.description}>🖥 Dispositivo: {node.device ?? '--'}</Text>
@@ -208,7 +220,7 @@ export default function DataScienceCardScreen() {
                 <Text style={styles.description}>🌐 IP STA: {node.sta_ip ?? '--'}</Text>
                 <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw ?? '--'}</Text>
                 <Text style={styles.description}>
-                  📈 Som (dB): {node.sensor_db !== undefined && node.sensor_db !== null ? node.sensor_db.toFixed(1) : '--'}
+                  📈 Som (dB): {node.sensor_db?.toFixed(1) ?? '--'}
                 </Text>
                 <Text style={styles.description}>
                   ⚠️ Anomalia: {node.anomaly?.detected ? node.anomaly.message : 'Normal'}
@@ -227,14 +239,13 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
-            {/* Página 1: Histórico do Sensor */}
-            {page === 1 && history[node.sta_ip]?.length > 0 && (
+            {/* Página 1: Histórico NodeMCU */}
+            {page === 1 && node.sta_ip && history[node.sta_ip]?.length > 0 && (
               <View>
                 <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
                 <SparkBar
                   data={history[node.sta_ip] ?? []}
                   width={graphWidth}
-                  height={120}
                   highlightThreshold={80}
                   onBarPress={(index, value) => setTooltip(index === -1 ? null : { index, value })}
                 />
@@ -263,7 +274,7 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
-            {/* Página 3: Dados do Servidor Vercel */}
+            {/* Página 3: Vercel */}
             {page === 3 && (
               <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
                 {vercelData ? (
@@ -276,7 +287,7 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
-            {/* Navegação de Páginas */}
+            {/* Navegação */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
               <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
                 <Text style={styles.pageBtnText}>⬅ Anterior</Text>
@@ -288,13 +299,16 @@ export default function DataScienceCardScreen() {
             <Text style={{ color: '#a8dadc', textAlign: 'center', marginTop: 8 }}>Página {page + 1} de 4</Text>
           </>
         ) : (
-          <Text style={{ color: '#facc15', textAlign: 'center' }}>Conecte-se ao nó via API da Vercel...</Text>
+          <Text style={{ color: '#facc15', textAlign: 'center' }}>Conecte-se ao NodeMCU...</Text>
         )}
       </View>
     </ScrollView>
   );
 }
 
+// -------------------------
+// 📐 Estilos
+// -------------------------
 const styles = StyleSheet.create({
   container: { padding: 24, backgroundColor: '#0f172a', alignItems: 'center' },
   title: { fontSize: 28, color: '#facc15', fontWeight: 'bold', marginBottom: 20 },
