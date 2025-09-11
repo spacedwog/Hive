@@ -93,7 +93,7 @@ export default function DataScienceCardScreen() {
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
   // Endpoint Vercel
-  const VERCEL_URL = 'https://hive-jxyx72f9m-spacedwogs-projects.vercel.app';
+  const VERCEL_URL = 'https://hive-4lgjl7mq4-spacedwogs-projects.vercel.app';
 
   const sendCommand = async (cmd: 'on' | 'off') => {
     if (!node) return;
