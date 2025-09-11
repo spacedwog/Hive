@@ -93,7 +93,7 @@ export default function DataScienceCardScreen() {
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
-  const VERCEL_URL = 'https://hive-i726krkih-spacedwogs-projects.vercel.app';
+  const VERCEL_URL = 'https://hive-l0ev5klfm-spacedwogs-projects.vercel.app';
 
   // --- Fetch sensor data ---
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function DataScienceCardScreen() {
       };
 
       try {
-        const response = await fetch(`${VERCEL_URL}/api/sensor?info=server`);
+        const response = await fetch(`${VERCEL_URL}/api/sensor?info=sensor`);
         if (!response.ok) throw new Error(`API offline (${response.status})`);
 
         const data: SensorData = await response.json();

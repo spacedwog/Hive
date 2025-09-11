@@ -53,7 +53,9 @@ function detectServerAnomaly(memoryUsedMB, memoryTotalMB, loadAverage) {
 function getServerInfo() {
   const memoryUsedMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
   const memoryTotalMB = Math.round(os.totalmem() / 1024 / 1024);
-  const loadAverage = os.loadavg()[0]; // 1 minuto
+
+  // Fallback seguro para Windows (loadavg pode ser [0,0,0] ou não suportado)
+  const loadAverage = (os.loadavg && os.loadavg()[0]) ? os.loadavg()[0] : 0;
 
   return {
     currentTime: new Date().toISOString(),
