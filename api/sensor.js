@@ -1,3 +1,7 @@
+// --- API Vercel: /api/sensor.js ---
+// Projeto: HIVE
+// Função: Retornar dados do sensor do ESP32/NodeMCU + dados reais do servidor
+
 import os from "os";
 
 // --- Funções utilitárias ---
@@ -17,79 +21,106 @@ function successResponse(message, data = {}) {
 function errorResponse(code, error, details = null) {
   return {
     success: false,
-    error: {
-      code: code,
-      message: error,
-      details: details,
-    },
+    error: { code, message: error, details },
     timestamp: Date.now(),
   };
 }
 
+// --- Funções de anomalia do servidor ---
+function detectServerAnomaly(memoryUsedMB, memoryTotalMB, loadAverage) {
+  const memThreshold = 0.8;
+  const memRatio = memoryUsedMB / memoryTotalMB;
+  if (memRatio > memThreshold) {
+    return {
+      detected: true,
+      message: "Uso de memória acima do limite",
+      current_value: Math.round(memRatio * 100),
+    };
+  }
+
+  if (loadAverage > 1.0) {
+    return {
+      detected: true,
+      message: "Carga da CPU alta",
+      current_value: Math.round(loadAverage * 100),
+    };
+  }
+
+  return { detected: false, message: "Normal", current_value: 0 };
+}
+
 // --- Informações do servidor ---
 function getServerInfo() {
-  const now = new Date();
-  const formattedDate = `${String(now.getDate()).padStart(2, "0")}/${String(
-    now.getMonth() + 1
-  ).padStart(2, "0")}/${now.getFullYear()} ${String(now.getHours()).padStart(
-    2,
-    "0"
-  )}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(
-    2,
-    "0"
-  )}`;
+  const memoryUsedMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+  const memoryTotalMB = Math.round(os.totalmem() / 1024 / 1024);
+  const loadAverage = os.loadavg()[0]; // 1 minuto
 
-  return successResponse("Informações do servidor", {
-    currentTime: formattedDate,
-    uptime: `${Math.floor(process.uptime())} segundos`,
+  return {
+    currentTime: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
     memory: {
-      usedMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-      totalMB: Math.round(os.totalmem() / 1024 / 1024),
+      usedMB: memoryUsedMB,
+      totalMB: memoryTotalMB,
       freeMB: Math.round(os.freemem() / 1024 / 1024),
     },
     platform: os.platform(),
     cpuModel: os.cpus()[0].model,
-  });
+    loadAverage: loadAverage.toFixed(2),
+    anomaly: detectServerAnomaly(memoryUsedMB, memoryTotalMB, loadAverage),
+  };
+}
+
+// --- Dados do sensor ESP32/NodeMCU ---
+function getSensorData() {
+  const sensor_db = Math.random() * 100;
+  const anomalyDetected = sensor_db > 80;
+
+  return {
+    device: "ESP32 NODE",
+    server_ip: "192.168.4.1",
+    sta_ip: "192.168.0.101",
+    sensor_raw: Math.floor(Math.random() * 500),
+    sensor_db: sensor_db,
+    status: "online",
+    anomaly: {
+      detected: anomalyDetected,
+      message: anomalyDetected ? "Ruído alto detectado" : "",
+      current_value: sensor_db,
+    },
+  };
 }
 
 // --- Handler principal ---
 export default function handler(req, res) {
   logRequest(req);
-
-  // Força JSON sempre
   res.setHeader("Content-Type", "application/json");
 
   try {
-    // Verifica método
     if (req.method !== "GET") {
       return res
         .status(405)
-        .json(
-          errorResponse("METHOD_NOT_ALLOWED", "Método não permitido. Use GET.")
-        );
+        .json(errorResponse("METHOD_NOT_ALLOWED", "Use apenas GET neste endpoint."));
     }
 
-    // Verifica query
-    if (!req.query.info) {
-      return res
-        .status(400)
-        .json(
-          errorResponse("MISSING_PARAM", "Parâmetro 'info' ausente na URL.")
-        );
+    const info = req.query.info || "sensor";
+
+    if (info === "sensor") {
+      const sensorData = getSensorData();
+      return res.status(200).json(successResponse("Dados do sensor", sensorData));
     }
 
-    if (req.query.info === "server") {
-      return res.status(200).json(getServerInfo());
+    if (info === "server") {
+      const serverData = getServerInfo();
+      return res.status(200).json(successResponse("Dados do servidor", serverData));
     }
 
-    // Valor inválido de "info"
     return res
       .status(400)
       .json(
         errorResponse(
           "INVALID_PARAM",
-          `Valor inválido para 'info': ${req.query.info}`,
-          { acceptedValues: ["server"] }
+          `Valor inválido para 'info': ${info}`,
+          { acceptedValues: ["sensor", "server"] }
         )
       );
   } catch (err) {
@@ -97,7 +128,7 @@ export default function handler(req, res) {
     return res
       .status(500)
       .json(
-        errorResponse("INTERNAL_ERROR", "Erro interno no servidor.", {
+        errorResponse("INTERNAL_ERROR", "Erro interno no servidor", {
           message: err.message,
           stack: err.stack,
         })
