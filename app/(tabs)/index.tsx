@@ -45,35 +45,37 @@ const SparkBar: React.FC<SparkBarProps> = ({
   const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
 
   return (
-    <View style={[styles.chartBox, { width, height }]}>
-      <View style={styles.chartAxis} />
-      <View style={styles.chartBarsRow}>
-        {data.map((v, i) => {
-          const clamped = Math.max(0, Math.min(100, v ?? 0));
-          const h = Math.max(2, Math.round((clamped / 100) * (height - 16)));
-          const isAnomaly = clamped >= highlightThreshold;
+    <Pressable onPress={() => onBarPress && onBarPress(-1, 0)} style={{ width, height }}>
+      <View style={[styles.chartBox, { width, height }]}>
+        <View style={styles.chartAxis} />
+        <View style={styles.chartBarsRow}>
+          {data.map((v, i) => {
+            const clamped = Math.max(0, Math.min(100, v ?? 0));
+            const h = Math.max(2, Math.round((clamped / 100) * (height - 16)));
+            const isAnomaly = clamped >= highlightThreshold;
 
-          return (
-            <Pressable
-              key={`${i}-${v}`}
-              onPress={() => onBarPress && onBarPress(i, clamped)}
-              style={{ marginRight: i === n - 1 ? 0 : barGap }}
-            >
-              <View
-                style={[
-                  styles.chartBar,
-                  { width: barWidth, height: h, backgroundColor: isAnomaly ? '#ff5555' : '#50fa7b' },
-                ]}
-              />
-            </Pressable>
-          );
-        })}
+            return (
+              <Pressable
+                key={`${i}-${v}`}
+                onPress={() => onBarPress && onBarPress(i, clamped)}
+                style={{ marginRight: i === n - 1 ? 0 : barGap }}
+              >
+                <View
+                  style={[
+                    styles.chartBar,
+                    { width: barWidth, height: h, backgroundColor: isAnomaly ? '#ff5555' : '#50fa7b' },
+                  ]}
+                />
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={styles.chartLabels}>
+          <Text style={styles.chartLabelText}>0%</Text>
+          <Text style={styles.chartLabelText}>100%</Text>
+        </View>
       </View>
-      <View style={styles.chartLabels}>
-        <Text style={styles.chartLabelText}>0%</Text>
-        <Text style={styles.chartLabelText}>100%</Text>
-      </View>
-    </View>
+    </Pressable>
   );
 };
 
@@ -103,6 +105,7 @@ export default function DataScienceCardScreen() {
     }
   };
 
+  // Fetch sensor data a cada 2 segundos
   useEffect(() => {
     let isMounted = true;
 
@@ -110,7 +113,7 @@ export default function DataScienceCardScreen() {
       if (!isMounted) return;
 
       const updateHistory = (data: SensorData) => {
-        setHistory((prev) => {
+        setHistory(prev => {
           const next = { ...prev };
           const key = data.sta_ip || data.server_ip;
           const values = next[key] ?? [];
@@ -139,9 +142,8 @@ export default function DataScienceCardScreen() {
         setNode(data);
         updateHistory(data);
         sendSensorData(data);
-      } catch (error) {
-        console.log('Erro ao obter dados da API Vercel:', error);
-
+      } catch {
+        // Mock sensor data
         const mock: SensorData = {
           device: 'ESP32 MOCK',
           server_ip: '192.168.4.1',
@@ -169,10 +171,11 @@ export default function DataScienceCardScreen() {
     };
   }, [alertAnim]);
 
+  // Fetch Vercel server data
   useEffect(() => {
     const fetchVercelData = async () => {
       try {
-        const response = await fetch(`${VERCEL_URL}/api/sensor?info=sensor`);
+        const response = await fetch(`${VERCEL_URL}/api/sensor?info=server`);
         const text = await response.text();
         try {
           setVercelData(JSON.parse(text));
@@ -188,8 +191,8 @@ export default function DataScienceCardScreen() {
     fetchVercelData();
   }, []);
 
-  const nextPage = () => setPage((prev) => (prev + 1) % 4);
-  const prevPage = () => setPage((prev) => (prev - 1 + 4) % 4);
+  const nextPage = () => setPage(prev => (prev + 1) % 4);
+  const prevPage = () => setPage(prev => (prev - 1 + 4) % 4);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -197,28 +200,35 @@ export default function DataScienceCardScreen() {
       <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
         {node ? (
           <>
+            {/* Página 0: Dados do Sensor */}
             {page === 0 && (
               <View>
-                <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
-                <Text style={styles.description}>📡 IP AP: {node.server_ip}</Text>
-                <Text style={styles.description}>🌐 IP STA: {node.sta_ip}</Text>
-                <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw}</Text>
+                <Text style={styles.description}>🖥 Dispositivo: {node.device ?? '--'}</Text>
+                <Text style={styles.description}>📡 IP AP: {node.server_ip ?? '--'}</Text>
+                <Text style={styles.description}>🌐 IP STA: {node.sta_ip ?? '--'}</Text>
+                <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw ?? '--'}</Text>
                 <Text style={styles.description}>
                   📈 Som (dB): {node.sensor_db !== undefined && node.sensor_db !== null ? node.sensor_db.toFixed(1) : '--'}
                 </Text>
                 <Text style={styles.description}>
                   ⚠️ Anomalia: {node.anomaly?.detected ? node.anomaly.message : 'Normal'}
                 </Text>
+                {node.anomaly?.detected && (
+                  <Text style={styles.description}>
+                    Valor Atual: {node.anomaly.current_value?.toFixed(1) ?? '--'}
+                  </Text>
+                )}
                 {alert && (
                   <Animated.Text style={{ color: '#ff5555', fontWeight: 'bold', marginTop: 8, fontSize: 16, opacity: alertAnim }}>
                     {alert}
                   </Animated.Text>
                 )}
-                <Text style={styles.description}>🔌 Status: {node.status}</Text>
+                <Text style={styles.description}>🔌 Status: {node.status ?? '--'}</Text>
               </View>
             )}
 
-            {page === 1 && history[node.sta_ip] && history[node.sta_ip].length > 0 && (
+            {/* Página 1: Histórico do Sensor */}
+            {page === 1 && history[node.sta_ip]?.length > 0 && (
               <View>
                 <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
                 <SparkBar
@@ -226,9 +236,9 @@ export default function DataScienceCardScreen() {
                   width={graphWidth}
                   height={120}
                   highlightThreshold={80}
-                  onBarPress={(index, value) => setTooltip({ index, value })}
+                  onBarPress={(index, value) => setTooltip(index === -1 ? null : { index, value })}
                 />
-                {tooltip && tooltip.value !== undefined && tooltip.value !== null && (
+                {tooltip && (
                   <View style={styles.tooltipCard}>
                     <Text style={styles.tooltipCardText}>
                       Ponto {tooltip.index + 1}: {tooltip.value.toFixed(1)}%
@@ -238,6 +248,7 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
+            {/* Página 2: Histórico Geral */}
             {page === 2 && Object.keys(history).length > 0 && (
               <View>
                 <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>📦 Histórico Geral</Text>
@@ -252,6 +263,7 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
+            {/* Página 3: Dados do Servidor Vercel */}
             {page === 3 && (
               <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
                 {vercelData ? (
@@ -264,6 +276,7 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
+            {/* Navegação de Páginas */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
               <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
                 <Text style={styles.pageBtnText}>⬅ Anterior</Text>
