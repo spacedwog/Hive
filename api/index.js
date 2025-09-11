@@ -52,8 +52,8 @@ function getProjectInfo() {
     ],
     contact: {
       author: "Felipe Santos",
-      email: "felipe@example.com",
-      github: "https://github.com/yourusername",
+      email: "felipersantos1988@gmail.com",
+      github: "https://github.com/spacedwog",
     },
     currentTime: formattedDate,
     server: {

@@ -8,7 +8,7 @@ const SOFTAP_IP = "http://192.168.4.1";
 const STA_IP = "http://192.168.15.188";
 
 // Endpoint Vercel
-const VERCEL_URL = "https://hive-8h1qk15to-spacedwogs-projects.vercel.app";
+const VERCEL_URL = "https://hive-jxyx72f9m-spacedwogs-projects.vercel.app";
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -49,7 +49,7 @@ export default function StreamScreen() {
   // Busca dados do Vercel
   const fetchVercelData = async () => {
     try {
-      const response = await fetch(`${VERCEL_URL}`);
+      const response = await fetch(`${VERCEL_URL}/api`);
       const text = await response.text();
       try {
         const json = JSON.parse(text);
