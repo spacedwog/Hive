@@ -9,8 +9,16 @@ function successResponse(message, data = {}) {
   return { success: true, message, data, timestamp: Date.now() };
 }
 
-function errorResponse(error) {
-  return { success: false, error, timestamp: Date.now() };
+function errorResponse(code, error, details = null) {
+  return {
+    success: false,
+    error: {
+      code,
+      message: error,
+      details,
+    },
+    timestamp: Date.now(),
+  };
 }
 
 // --- Informações do servidor ---
@@ -32,9 +40,45 @@ function getServerInfo() {
 export default function handler(req, res) {
   logRequest(req);
 
-  if (req.method === "GET" && req.query.info === "server") {
-    return res.status(200).json(getServerInfo());
-  }
+  // Força JSON sempre
+  res.setHeader("Content-Type", "application/json");
 
-  return res.status(405).json(errorResponse("Método não permitido"));
+  try {
+    // Verifica método
+    if (req.method !== "GET") {
+      return res
+        .status(405)
+        .json(errorResponse("METHOD_NOT_ALLOWED", "Método não permitido. Use GET."));
+    }
+
+    // Verifica query
+    if (!req.query.info) {
+      return res
+        .status(400)
+        .json(errorResponse("MISSING_PARAM", "Parâmetro 'info' ausente na URL."));
+    }
+
+    if (req.query.info === "server") {
+      return res.status(200).json(getServerInfo());
+    }
+
+    // Valor inválido de "info"
+    return res
+      .status(400)
+      .json(
+        errorResponse("INVALID_PARAM", `Valor inválido para 'info': ${req.query.info}`, {
+          acceptedValues: ["server"],
+        })
+      );
+  } catch (err) {
+    console.error("Erro interno:", err);
+    return res
+      .status(500)
+      .json(
+        errorResponse("INTERNAL_ERROR", "Erro interno no servidor.", {
+          message: err.message,
+          stack: err.stack,
+        })
+      );
+  }
 }
