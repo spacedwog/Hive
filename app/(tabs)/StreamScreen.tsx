@@ -1,6 +1,6 @@
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
-import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 // IPs do ESP32
@@ -8,7 +8,7 @@ const SOFTAP_IP = "http://192.168.4.1";
 const STA_IP = "http://192.168.15.188";
 
 // Endpoint Vercel
-const VERCEL_URL = "https://hive-p8afadbcn-spacedwogs-projects.vercel.app/api/status";
+const VERCEL_URL = "https://hive-25qc5eczq-spacedwogs-projects.vercel.app/api";
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -24,11 +24,11 @@ export default function StreamScreen() {
   });
   const [vercelData, setVercelData] = useState<any>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
-  const [page, setPage] = useState<"camera" | "webview" | "vercelResponse">("camera");
+  const [page, setPage] = useState<"camera" | "vercel">("camera");
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
-  const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
+  const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function StreamScreen() {
   // Busca dados do Vercel
   const fetchVercelData = async () => {
     try {
-      const response = await fetch(VERCEL_URL);
+      const response = await fetch(VERCEL_URL+'/status');
       const text = await response.text();
       try {
         const json = JSON.parse(text);
@@ -91,28 +91,6 @@ export default function StreamScreen() {
     setStatus((prev) => ({ ...prev, ip: newIP }));
   };
 
-  // Cria item no Vercel via POST e exibe resposta em WebView
-  const createVercelItem = async () => {
-    const newItem = { nome: "Felipe", email: "felipe@example.com" }; // exemplo
-    try {
-      const response = await fetch(VERCEL_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newItem),
-      });
-
-      const text = await response.text(); // pega como texto
-      setVercelHTML(text); // exibe no WebView
-      setVercelData(null);
-      setPage("vercelResponse"); // muda automaticamente para a aba da resposta
-    } catch (err) {
-      console.error("Erro ao criar item:", err);
-      setVercelHTML(`<p style="color:red">Erro ao criar item: ${err}</p>`);
-      setVercelData(null);
-      setPage("vercelResponse");
-    }
-  };
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM</Text>
@@ -120,8 +98,7 @@ export default function StreamScreen() {
       {/* Botões de paginação */}
       <View style={styles.pageButtons}>
         <Button title="📱 Câmera" onPress={() => setPage("camera")} />
-        <Button title="🌐 WebView" onPress={() => setPage("webview")} />
-        <Button title="📝 Vercel Response" onPress={() => setPage("vercelResponse")} />
+        <Button title="🌐 Vercel" onPress={() => { fetchVercelData(); setPage("vercel"); }} />
       </View>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
@@ -154,9 +131,15 @@ export default function StreamScreen() {
                   color="#facc15"
                 />
               </View>
-              <View style={{ marginTop: 10 }}>
-                <Button title="➕ Criar Item" onPress={createVercelItem} color="#0f0" />
-              </View>
+            </View>
+
+            <Text style={[styles.text, { marginTop: 20 }]}>📷 Stream ESP32:</Text>
+            <View style={styles.streamBox}>
+              <Image
+                style={{ width: "100%", height: "100%" }}
+                source={{ uri: frameUrl }}
+                resizeMode="cover"
+              />
             </View>
 
             <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
@@ -177,10 +160,10 @@ export default function StreamScreen() {
           </>
         )}
 
-        {/* Página WebView Vercel */}
-        {page === "webview" && (
+        {/* Página Vercel */}
+        {page === "vercel" && (
           <>
-            <Text style={[styles.text, { marginTop: 20 }]}>🌐 WebView Vercel:</Text>
+            <Text style={[styles.text, { marginTop: 20 }]}>🌐 Dados do Vercel:</Text>
             <View style={[styles.nativeCamera, { backgroundColor: "#111", alignSelf: "center" }]}>
               {vercelHTML ? (
                 <WebView originWhitelist={['*']} source={{ html: vercelHTML }} style={{ flex: 1 }} />
@@ -190,20 +173,6 @@ export default function StreamScreen() {
                 </ScrollView>
               ) : (
                 <Text style={{ color: "red", textAlign: "center", marginTop: 20 }}>Carregando...</Text>
-              )}
-            </View>
-          </>
-        )}
-
-        {/* Página Vercel Response */}
-        {page === "vercelResponse" && (
-          <>
-            <Text style={[styles.text, { marginTop: 20 }]}>📝 Resposta do Vercel:</Text>
-            <View style={[styles.nativeCamera, { backgroundColor: "#111", alignSelf: "center" }]}>
-              {vercelHTML ? (
-                <WebView originWhitelist={['*']} source={{ html: vercelHTML }} style={{ flex: 1 }} />
-              ) : (
-                <Text style={{ color: "red", textAlign: "center", marginTop: 20 }}>Sem resposta ainda</Text>
               )}
             </View>
           </>
@@ -240,6 +209,17 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginTop: 10,
     backgroundColor: "black",
+  },
+  streamBox: {
+    width: 320,
+    height: 240,
+    borderWidth: 2,
+    borderColor: "#0af",
+    borderRadius: 10,
+    overflow: "hidden",
+    alignSelf: "center",
+    marginTop: 10,
+    backgroundColor: "#000",
   },
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
