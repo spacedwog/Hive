@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
@@ -85,6 +86,7 @@ export default function DataScienceCardScreen() {
   const { width: winWidth } = useWindowDimensions();
   const [node, setNode] = useState<SensorData | null>(null);
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
+  const [alertsLog, setAlertsLog] = useState<string[]>([]);
   const [page, setPage] = useState<number>(0);
   const [alert, setAlert] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ index: number; value: number } | null>(null);
@@ -92,12 +94,32 @@ export default function DataScienceCardScreen() {
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
-  const VERCEL_URL = 'https://hive-gejfhoma9-spacedwogs-projects.vercel.app';
+  const VERCEL_URL = 'https://hive-r51ke301q-spacedwogs-projects.vercel.app';
 
   const sendCommand = async (cmd: 'on' | 'off') => {
-    // Se você quiser comandos, crie um endpoint /api/control.js
     console.log('Comando enviado:', cmd);
   };
+
+  const saveHistory = async (newHistory: { [key: string]: number[] }) => {
+    try {
+      await AsyncStorage.setItem('@sensor_history', JSON.stringify(newHistory));
+    } catch (err) {
+      console.error('Erro ao salvar histórico:', err);
+    }
+  };
+
+  const loadHistory = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('@sensor_history');
+      if (stored) setHistory(JSON.parse(stored));
+    } catch (err) {
+      console.error('Erro ao carregar histórico:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -113,11 +135,16 @@ export default function DataScienceCardScreen() {
           const newArr = [...values, data.sensor_db];
           if (newArr.length > 60) newArr.splice(0, newArr.length - 60);
           next[key] = newArr;
+
+          saveHistory(next);
           return next;
         });
 
         if (data.anomaly.detected) {
-          setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value})`);
+          const alertMessage = `⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value.toFixed(1)})`;
+          setAlert(alertMessage);
+          setAlertsLog((prev) => [alertMessage, ...prev.slice(0, 19)]);
+
           Animated.sequence([
             Animated.timing(alertAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
             Animated.timing(alertAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
@@ -140,7 +167,6 @@ export default function DataScienceCardScreen() {
       } catch (error) {
         console.log('Erro ao obter dados da API Vercel:', error);
 
-        // Mock local caso a API esteja offline
         const mock: SensorData = {
           device: 'ESP32 MOCK',
           server_ip: '192.168.4.1',
@@ -168,8 +194,8 @@ export default function DataScienceCardScreen() {
     };
   }, [alertAnim]);
 
-  const nextPage = () => setPage((prev) => (prev + 1) % 4);
-  const prevPage = () => setPage((prev) => (prev - 1 + 4) % 4);
+  const nextPage = () => setPage((prev) => (prev + 1) % 5);
+  const prevPage = () => setPage((prev) => (prev - 1 + 5) % 5);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -206,7 +232,7 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
-            {/* Página 1 - Histórico do nó atual */}
+            {/* Página 1 - Histórico do nó */}
             {page === 1 && history[node.sta_ip] && history[node.sta_ip].length > 0 && (
               <View>
                 <Text style={{ color: '#fff', marginBottom: 8 }}>
@@ -267,12 +293,7 @@ export default function DataScienceCardScreen() {
                     >
                       🌐 {serverIp} — Últimos {values.length} pontos
                     </Text>
-                    <SparkBar
-                      data={values}
-                      width={graphWidth}
-                      height={80}
-                      highlightThreshold={80}
-                    />
+                    <SparkBar data={values} width={graphWidth} height={80} highlightThreshold={80} />
                   </View>
                 ))}
               </View>
@@ -289,14 +310,33 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
+            {/* Página 4 - Log de alertas */}
+            {page === 4 && (
+              <View>
+                <Text
+                  style={{
+                    color: '#f1faee',
+                    fontWeight: '600',
+                    marginBottom: 8,
+                    fontSize: 16,
+                  }}
+                >
+                  ⚠️ Alertas Detectados
+                </Text>
+                {alertsLog.length === 0 ? (
+                  <Text style={{ color: '#a8dadc' }}>Nenhum alerta detectado ainda.</Text>
+                ) : (
+                  alertsLog.map((msg, idx) => (
+                    <Text key={idx} style={{ color: '#ff5555', marginBottom: 4 }}>
+                      {msg}
+                    </Text>
+                  ))
+                )}
+              </View>
+            )}
+
             {/* Navegação entre páginas */}
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                marginTop: 16,
-              }}
-            >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
               <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
                 <Text style={styles.pageBtnText}>⬅ Anterior</Text>
               </TouchableOpacity>
@@ -304,14 +344,8 @@ export default function DataScienceCardScreen() {
                 <Text style={styles.pageBtnText}>Próximo ➡</Text>
               </TouchableOpacity>
             </View>
-            <Text
-              style={{
-                color: '#a8dadc',
-                textAlign: 'center',
-                marginTop: 8,
-              }}
-            >
-              Página {page + 1} de 4
+            <Text style={{ color: '#a8dadc', textAlign: 'center', marginTop: 8 }}>
+              Página {page + 1} de 5
             </Text>
           </>
         ) : (
