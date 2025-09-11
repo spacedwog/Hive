@@ -10,18 +10,23 @@ function logRequest(req) {
 }
 
 function successResponse(message, data = {}) {
-  return { success: true, message, data, timestamp: Date.now() };
+  return {
+    success: true,
+    message: message,
+    data: data,
+    timestamp: Date.now()
+  };
 }
 
 function errorResponse(code, error, details = null) {
   return {
     success: false,
     error: {
-      code,
+      code: code,
       message: error,
-      details,
+      details: details
     },
-    timestamp: Date.now(),
+    timestamp: Date.now()
   };
 }
 
@@ -48,12 +53,12 @@ function getProjectInfo() {
       "Visualização de câmera MJPEG e nativa",
       "Integração com Vercel e APIs REST",
       "Monitoramento de status do dispositivo e memória",
-      "Compatível com modo Soft-AP e STA",
+      "Compatível com modo Soft-AP e STA"
     ],
     contact: {
       author: "Felipe Santos",
       email: "felipersantos1988@gmail.com",
-      github: "https://github.com/spacedwog",
+      github: "https://github.com/spacedwog"
     },
     currentTime: formattedDate,
     server: {
@@ -62,10 +67,10 @@ function getProjectInfo() {
       memoryMB: {
         used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
         total: Math.round(os.totalmem() / 1024 / 1024),
-        free: Math.round(os.freemem() / 1024 / 1024),
+        free: Math.round(os.freemem() / 1024 / 1024)
       },
-      uptimeSeconds: Math.floor(process.uptime()),
-    },
+      uptimeSeconds: Math.floor(process.uptime())
+    }
   });
 }
 
@@ -81,7 +86,12 @@ export default function handler(req, res) {
     if (req.method !== "GET") {
       return res
         .status(405)
-        .json(errorResponse("METHOD_NOT_ALLOWED", "Método não permitido. Use GET."));
+        .json(
+          errorResponse(
+            "METHOD_NOT_ALLOWED",
+            "Método não permitido. Use GET."
+          )
+        );
     }
 
     // --- Parâmetro "info" ---
@@ -95,19 +105,22 @@ export default function handler(req, res) {
     return res
       .status(400)
       .json(
-        errorResponse("INVALID_PARAM", `Valor inválido para 'info': ${info}`, {
-          acceptedValues: ["project"],
-        })
+        errorResponse(
+          "INVALID_PARAM",
+          `Valor inválido para 'info': ${info}`,
+          { acceptedValues: ["project"] }
+        )
       );
   } catch (err) {
     console.error("Erro interno:", err);
     return res
       .status(500)
       .json(
-        errorResponse("INTERNAL_ERROR", "Erro interno no servidor.", {
-          message: err.message,
-          stack: err.stack,
-        })
+        errorResponse(
+          "INTERNAL_ERROR",
+          "Erro interno no servidor.",
+          { message: err.message, stack: err.stack }
+        )
       );
   }
 }
