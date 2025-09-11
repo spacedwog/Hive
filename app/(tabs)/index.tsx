@@ -156,6 +156,18 @@ export default function DataScienceCardScreen() {
       } else {
         setAlert(null);
       }
+
+      // -------------------------
+      // 📡 Enviar dados para Vercel
+      // -------------------------
+      try {
+        await axios.post(`${VERCEL_URL}/api/sensor`, data, {
+          headers: { 'Content-Type': 'application/json' },
+        });
+        console.log('Dados enviados para Vercel:', data);
+      } catch (err) {
+        console.error('Erro ao enviar para Vercel:', err);
+      }
     }
   }, [alertAnim]);
 
