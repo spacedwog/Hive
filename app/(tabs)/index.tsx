@@ -62,11 +62,7 @@ const SparkBar: React.FC<SparkBarProps> = ({
               <View
                 style={[
                   styles.chartBar,
-                  {
-                    width: barWidth,
-                    height: h,
-                    backgroundColor: isAnomaly ? '#ff5555' : '#50fa7b',
-                  },
+                  { width: barWidth, height: h, backgroundColor: isAnomaly ? '#ff5555' : '#50fa7b' },
                 ]}
               />
             </Pressable>
@@ -93,7 +89,20 @@ export default function DataScienceCardScreen() {
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
-  const VERCEL_URL = 'https://hive-l0ev5klfm-spacedwogs-projects.vercel.app';
+  const VERCEL_URL = 'https://seu-projeto.vercel.app';
+
+  // --- Função para enviar dados para a API ---
+  const sendSensorData = async (data: SensorData) => {
+    try {
+      await fetch(`${VERCEL_URL}/api/sensor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    } catch (err) {
+      console.error('Erro ao enviar dados para API:', err);
+    }
+  };
 
   // --- Fetch sensor data ---
   useEffect(() => {
@@ -131,6 +140,10 @@ export default function DataScienceCardScreen() {
         const data: SensorData = await response.json();
         setNode(data);
         updateHistory(data);
+
+        // --- Envia dados atualizados para sensor.js ---
+        sendSensorData(data);
+
       } catch (error) {
         console.log('Erro ao obter dados da API Vercel:', error);
 
@@ -149,6 +162,9 @@ export default function DataScienceCardScreen() {
         };
         setNode(mock);
         updateHistory(mock);
+
+        // Envia dados mock para sensor.js
+        sendSensorData(mock);
       }
     };
 
@@ -160,7 +176,7 @@ export default function DataScienceCardScreen() {
     };
   }, [alertAnim]);
 
-  // --- Nova lógica: fetchVercelData ---
+  // --- Fetch Vercel server info ---
   const fetchVercelData = async () => {
     try {
       const response = await fetch(`${VERCEL_URL}/api/sensor?info=server`);
@@ -178,9 +194,7 @@ export default function DataScienceCardScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchVercelData();
-  }, []);
+  useEffect(() => { fetchVercelData(); }, []);
 
   const nextPage = () => setPage((prev) => (prev + 1) % 4);
   const prevPage = () => setPage((prev) => (prev - 1 + 4) % 4);
@@ -188,11 +202,9 @@ export default function DataScienceCardScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📊 Data Science Dashboard</Text>
-
       <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
         {node ? (
           <>
-            {/* Página 0 */}
             {page === 0 && (
               <View>
                 <Text style={styles.description}>🖥 Dispositivo: {node.device}</Text>
@@ -204,15 +216,7 @@ export default function DataScienceCardScreen() {
                   ⚠️ Anomalia: {node.anomaly?.detected ? node.anomaly.message : 'Normal'}
                 </Text>
                 {alert && (
-                  <Animated.Text
-                    style={{
-                      color: '#ff5555',
-                      fontWeight: 'bold',
-                      marginTop: 8,
-                      fontSize: 16,
-                      opacity: alertAnim,
-                    }}
-                  >
+                  <Animated.Text style={{ color: '#ff5555', fontWeight: 'bold', marginTop: 8, fontSize: 16, opacity: alertAnim }}>
                     {alert}
                   </Animated.Text>
                 )}
@@ -220,12 +224,9 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
-            {/* Página 1 */}
             {page === 1 && history[node.sta_ip] && history[node.sta_ip].length > 0 && (
               <View>
-                <Text style={{ color: '#fff', marginBottom: 8 }}>
-                  📊 Histórico do Sensor ({node.sta_ip})
-                </Text>
+                <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
                 <SparkBar
                   data={history[node.sta_ip]}
                   width={graphWidth}
@@ -235,32 +236,24 @@ export default function DataScienceCardScreen() {
                 />
                 {tooltip && (
                   <View style={styles.tooltipCard}>
-                    <Text style={styles.tooltipCardText}>
-                      Ponto {tooltip.index + 1}: {tooltip.value.toFixed(1)}%
-                    </Text>
+                    <Text style={styles.tooltipCardText}>Ponto {tooltip.index + 1}: {tooltip.value.toFixed(1)}%</Text>
                   </View>
                 )}
               </View>
             )}
 
-            {/* Página 2 */}
             {page === 2 && Object.keys(history).length > 0 && (
               <View>
-                <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>
-                  📦 Histórico Geral
-                </Text>
+                <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>📦 Histórico Geral</Text>
                 {Object.entries(history).map(([serverIp, values]) => (
                   <View key={serverIp} style={{ marginBottom: 12 }}>
-                    <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>
-                      🌐 {serverIp} — Últimos {values.length} pontos
-                    </Text>
+                    <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>🌐 {serverIp} — Últimos {values.length} pontos</Text>
                     <SparkBar data={values} width={graphWidth} height={80} highlightThreshold={80} />
                   </View>
                 ))}
               </View>
             )}
 
-            {/* Página 3 - WebView */}
             {page === 3 && (
               <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
                 {vercelData ? (
@@ -268,14 +261,11 @@ export default function DataScienceCardScreen() {
                 ) : vercelHTML ? (
                   <WebView source={{ html: vercelHTML }} style={{ flex: 1 }} originWhitelist={['*']} />
                 ) : (
-                  <Text style={{ color: '#facc15', textAlign: 'center', marginTop: 16 }}>
-                    Carregando dados da Vercel...
-                  </Text>
+                  <Text style={{ color: '#facc15', textAlign: 'center', marginTop: 16 }}>Carregando dados da Vercel...</Text>
                 )}
               </View>
             )}
 
-            {/* Navegação */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
               <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
                 <Text style={styles.pageBtnText}>⬅ Anterior</Text>
@@ -284,9 +274,7 @@ export default function DataScienceCardScreen() {
                 <Text style={styles.pageBtnText}>Próximo ➡</Text>
               </TouchableOpacity>
             </View>
-            <Text style={{ color: '#a8dadc', textAlign: 'center', marginTop: 8 }}>
-              Página {page + 1} de 4
-            </Text>
+            <Text style={{ color: '#a8dadc', textAlign: 'center', marginTop: 8 }}>Página {page + 1} de 4</Text>
           </>
         ) : (
           <Text style={{ color: '#facc15', textAlign: 'center' }}>Conecte-se ao nó via API da Vercel...</Text>
@@ -301,8 +289,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, color: '#facc15', fontWeight: 'bold', marginBottom: 20 },
   card: { borderRadius: 16, padding: 20, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12, width: '100%' },
   description: { fontSize: 16, color: '#e2e8f0', lineHeight: 24 },
-  cmdBtn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
-  cmdBtnText: { color: '#fff', fontWeight: '600' },
   pageBtn: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#50fa7b', borderRadius: 8 },
   pageBtnText: { color: '#0f172a', fontWeight: '600' },
   chartBox: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, overflow: 'hidden', alignSelf: 'center', paddingTop: 8, paddingHorizontal: 8 },
