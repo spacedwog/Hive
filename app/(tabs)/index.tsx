@@ -85,21 +85,21 @@ export default function DataScienceCardScreen() {
   const [tooltip, setTooltip] = useState<{ index: number; value: number } | null>(null);
   const alertAnim = useMemo(() => new Animated.Value(0), []);
 
-  const STA_IP = '192.168.15.138';
-  const SOFTAP_IP = '192.168.4.1';
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
+
+  // Endpoint Vercel
+  const VERCEL_URL = "https://hive-jxyx72f9m-spacedwogs-projects.vercel.app";
 
   const sendCommand = async (cmd: 'on' | 'off') => {
     if (!node) return;
-    const ip = node.sta_ip !== 'desconectado' ? node.sta_ip : node.server_ip;
     try {
-      await fetch(`http://${ip}/command`, {
+      await fetch(`${VERCEL_URL}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: cmd }),
       });
     } catch (error) {
-      console.log(`Erro enviando comando para ${ip}:`, error);
+      console.log(`Erro enviando comando para API Vercel:`, error);
     }
   };
 
@@ -132,27 +132,19 @@ export default function DataScienceCardScreen() {
       };
 
       try {
-        let response = await fetch(`http://${STA_IP}/status`);
-        if (!response.ok) throw new Error('STA offline');
+        const response = await fetch('https://SEU-PROJETO.vercel.app/api/status');
+        if (!response.ok) throw new Error('API offline');
         const data: SensorData = await response.json();
         setNode(data);
         updateHistory(data);
-      } catch {
-        try {
-          let response = await fetch(`http://${SOFTAP_IP}/status`);
-          if (!response.ok) throw new Error('Soft-AP offline');
-          const data: SensorData = await response.json();
-          setNode(data);
-          updateHistory(data);
-        } catch (error) {
-          console.log('Erro ao obter dados do nó:', error);
-          setNode(null);
-        }
+      } catch (error) {
+        console.log('Erro ao obter dados da API Vercel:', error);
+        setNode(null);
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 1000);
+    const interval = setInterval(fetchData, 2000);
 
     return () => {
       isMounted = false;
@@ -167,7 +159,6 @@ export default function DataScienceCardScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📊 Data Science Dashboard</Text>
 
-      {/* Card principal */}
       <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
         {node ? (
           <>
@@ -200,7 +191,9 @@ export default function DataScienceCardScreen() {
 
             {page === 1 && history[node.sta_ip] && history[node.sta_ip].length > 0 && (
               <View>
-                <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
+                <Text style={{ color: '#fff', marginBottom: 8 }}>
+                  📊 Histórico do Sensor ({node.sta_ip})
+                </Text>
                 <SparkBar
                   data={history[node.sta_ip]}
                   width={graphWidth}
@@ -236,21 +229,45 @@ export default function DataScienceCardScreen() {
 
             {page === 2 && Object.keys(history).length > 0 && (
               <View>
-                <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>
+                <Text
+                  style={{
+                    color: '#f1faee',
+                    fontWeight: '600',
+                    marginBottom: 8,
+                    fontSize: 16,
+                  }}
+                >
                   📦 Histórico Geral
                 </Text>
                 {Object.entries(history).map(([serverIp, values]) => (
                   <View key={serverIp} style={{ marginBottom: 12 }}>
-                    <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>
+                    <Text
+                      style={{
+                        color: '#a8dadc',
+                        fontSize: 14,
+                        marginBottom: 4,
+                      }}
+                    >
                       🌐 {serverIp} — Últimos {values.length} pontos
                     </Text>
-                    <SparkBar data={values} width={graphWidth} height={80} highlightThreshold={80} />
+                    <SparkBar
+                      data={values}
+                      width={graphWidth}
+                      height={80}
+                      highlightThreshold={80}
+                    />
                   </View>
                 ))}
               </View>
             )}
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                marginTop: 16,
+              }}
+            >
               <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
                 <Text style={styles.pageBtnText}>⬅ Anterior</Text>
               </TouchableOpacity>
@@ -258,11 +275,19 @@ export default function DataScienceCardScreen() {
                 <Text style={styles.pageBtnText}>Próximo ➡</Text>
               </TouchableOpacity>
             </View>
-            <Text style={{ color: '#a8dadc', textAlign: 'center', marginTop: 8 }}>Página {page + 1} de 3</Text>
+            <Text
+              style={{
+                color: '#a8dadc',
+                textAlign: 'center',
+                marginTop: 8,
+              }}
+            >
+              Página {page + 1} de 3
+            </Text>
           </>
         ) : (
           <Text style={{ color: '#facc15', textAlign: 'center' }}>
-            Conecte-se ao nó via WiFi (STA ou Soft-AP)...
+            Conecte-se ao nó via API da Vercel...
           </Text>
         )}
       </View>
