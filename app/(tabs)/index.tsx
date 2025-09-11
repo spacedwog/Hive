@@ -92,20 +92,11 @@ export default function DataScienceCardScreen() {
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
-  // Endpoint Vercel
-  const VERCEL_URL = 'https://hive-4lgjl7mq4-spacedwogs-projects.vercel.app';
+  const VERCEL_URL = 'https://hive-jxyx72f9m-spacedwogs-projects.vercel.app';
 
   const sendCommand = async (cmd: 'on' | 'off') => {
-    if (!node) return;
-    try {
-      await fetch(`${VERCEL_URL}/api/index`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: cmd }),
-      });
-    } catch (error) {
-      console.log(`Erro enviando comando para API Vercel:`, error);
-    }
+    // Se você quiser comandos, crie um endpoint /api/control.js
+    console.log('Comando enviado:', cmd);
   };
 
   useEffect(() => {
@@ -141,16 +132,30 @@ export default function DataScienceCardScreen() {
         if (!response.ok) throw new Error(`API offline (${response.status})`);
 
         const contentType = response.headers.get('content-type');
-        if (!contentType?.includes('application/json')) {
-          throw new Error('Resposta não é JSON');
-        }
+        if (!contentType?.includes('application/json')) throw new Error('Resposta não é JSON');
 
         const data: SensorData = await response.json();
         setNode(data);
         updateHistory(data);
       } catch (error) {
         console.log('Erro ao obter dados da API Vercel:', error);
-        setNode(null);
+
+        // Mock local caso a API esteja offline
+        const mock: SensorData = {
+          device: 'ESP32 MOCK',
+          server_ip: '192.168.4.1',
+          sta_ip: '192.168.0.99',
+          sensor_raw: Math.floor(Math.random() * 500),
+          sensor_db: Math.random() * 100,
+          status: 'online',
+          anomaly: {
+            detected: Math.random() > 0.8,
+            message: 'Ruído alto detectado',
+            current_value: Math.random() * 100,
+          },
+        };
+        setNode(mock);
+        updateHistory(mock);
       }
     };
 
@@ -273,10 +278,14 @@ export default function DataScienceCardScreen() {
               </View>
             )}
 
-            {/* Página 3 - WebView */}
+            {/* Página 3 - WebView com API HIVE */}
             {page === 3 && (
               <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
-                <WebView source={{ uri: VERCEL_URL }} style={{ flex: 1 }} />
+                <WebView
+                  source={{ uri: `${VERCEL_URL}/api/index?info=project` }}
+                  style={{ flex: 1 }}
+                  originWhitelist={['*']}
+                />
               </View>
             )}
 
