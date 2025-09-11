@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
+import { WebView } from 'react-native-webview';
 
 // ==================================
 // Classe para gerenciamento de e-mail
@@ -128,7 +129,14 @@ export default function HiveScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [githubUsers, setGithubUsers] = useState<GithubUser[]>([]);
   const [selectedUserIndex, setSelectedUserIndex] = useState(0);
-  const [currentPage, setCurrentPage] = useState(0); // 0: Mapa, 1: Status, 2: GitHub
+  const [currentPage, setCurrentPage] = useState(0); // 0: Mapa, 1: Status, 2: GitHub, 3: Vercel
+
+  // ---------------------------
+  // 🔹 Estados para Vercel API
+  // ---------------------------
+  const [vercelData, setVercelData] = useState<any | null>(null);
+  const [vercelHTML, setVercelHTML] = useState<string | null>(null);
+  const VERCEL_URL = "https://hive-h7qa88acl-spacedwogs-projects.vercel.app";
 
   const { width: winWidth } = useWindowDimensions();
   const githubManager = useMemo(() => new GithubEmailManager(), []);
@@ -265,12 +273,38 @@ export default function HiveScreen() {
     }
   };
 
+  // =========================
+  // 🔹 Fetch Vercel API
+  // =========================
+  const fetchVercelData = React.useCallback(async () => {
+    try {
+      const res = await axios.get(`${VERCEL_URL}?info=project`);
+      const data = res.data;
+
+      if (typeof data === "object") {
+        setVercelData(data);
+        setVercelHTML(null);
+      } else {
+        setVercelHTML(String(data));
+        setVercelData(null);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar API Vercel:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStatus();
     fetchGithubUsersPage();
-    const interval = setInterval(fetchStatus, 5000);
+    fetchVercelData();
+
+    const interval = setInterval(() => {
+      fetchStatus();
+      fetchVercelData();
+    }, 5000);
+
     return () => clearInterval(interval);
-  }, [fetchGithubUsersPage, fetchStatus]);
+  }, [fetchGithubUsersPage, fetchStatus, fetchVercelData]);
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
   const onlineStatus = status.filter((s) => s.status !== "offline");
@@ -330,43 +364,43 @@ export default function HiveScreen() {
         <Button title="Mapa" onPress={() => setCurrentPage(0)} />
         <Button title="Status Vespa" onPress={() => setCurrentPage(1)} />
         <Button title="GitHub" onPress={() => setCurrentPage(2)} />
+        <Button title="Vercel" onPress={() => setCurrentPage(3)} />
       </View>
 
       {/* CONTEÚDO POR PÁGINA */}
       {currentPage !== 0 && (
         <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={styles.unisonCard}>
-            {currentPage === 1 && (
-              <>
-                {onlineStatus.map((s, idx) => {
-                  const serverKey = s.server ?? "unknown";
-                  const hist = history[serverKey] ?? [];
-                  return (
-                    <View key={idx} style={styles.nodeBox}>
-                      <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                      <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
-                      {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
-                      {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
-                      {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
-                      {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
-                      {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
+            {/* Página Status Vespa */}
+            {currentPage === 1 &&
+              onlineStatus.map((s, idx) => {
+                const serverKey = s.server ?? "unknown";
+                const hist = history[serverKey] ?? [];
+                return (
+                  <View key={idx} style={styles.nodeBox}>
+                    <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+                    <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
+                    {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
+                    {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
+                    {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
+                    {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
+                    {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
 
-                      <View style={styles.buttonRow}>
-                        <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
-                        <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
-                        <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
-                      </View>
-
-                      <View style={styles.chartCard}>
-                        <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
-                        <SparkBar data={hist} width={graphWidth} />
-                      </View>
+                    <View style={styles.buttonRow}>
+                      <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
+                      <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
+                      <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
                     </View>
-                  );
-                })}
-              </>
-            )}
 
+                    <View style={styles.chartCard}>
+                      <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
+                      <SparkBar data={hist} width={graphWidth} />
+                    </View>
+                  </View>
+                );
+              })}
+
+            {/* Página GitHub */}
             {currentPage === 2 && selectedUser && (
               <View style={styles.githubUserBox}>
                 <Image source={{ uri: selectedUser.avatar_url }} style={styles.githubAvatar} />
@@ -394,6 +428,25 @@ export default function HiveScreen() {
             )}
 
             {currentPage === 2 && !selectedUser && <Text style={styles.githubText}>Carregando usuários...</Text>}
+
+            {/* Página Vercel */}
+            {currentPage === 3 && (
+              <View style={{ width: "100%", alignItems: "center", marginTop: 12 }}>
+                {vercelData ? (
+                  <Text style={{ color: "#fff", fontFamily: "monospace" }}>
+                    {JSON.stringify(vercelData, null, 2)}
+                  </Text>
+                ) : vercelHTML ? (
+                  <WebView
+                    originWhitelist={["*"]}
+                    source={{ html: vercelHTML }}
+                    style={{ width: "95%", height: 400, borderRadius: 12 }}
+                  />
+                ) : (
+                  <Text style={{ color: "#facc15", marginTop: 12 }}>Carregando dados Vercel...</Text>
+                )}
+              </View>
+            )}
           </View>
         </ScrollView>
       )}
@@ -411,42 +464,29 @@ const styles = StyleSheet.create({
   overlayScroll: { position: "absolute", top: 150, left: 0, right: 0 },
 
   unisonCard: {
-    backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 16,
-    marginHorizontal: 20,
-    borderRadius: 16,
-    alignItems: "center",
+    backgroundColor: "#333",
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 12,
   },
-  unisonTitle: { fontSize: 18, fontWeight: "bold", color: "#fff", marginBottom: 12 },
+  nodeBox: { backgroundColor: "#444", borderRadius: 12, padding: 12, marginBottom: 12 },
+  nodeText: { fontSize: 18, color: "#fff" },
+  statusText: { color: "#ccc", marginTop: 2 },
+  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginVertical: 8 },
+  chartCard: { backgroundColor: "#222", borderRadius: 8, padding: 8, marginTop: 8 },
+  chartTitle: { color: "#ff0", marginBottom: 4 },
 
-  nodeBox: { marginBottom: 16, width: "100%", alignItems: "center" },
-  nodeText: { fontSize: 16, fontWeight: "600", color: "#fff", textAlign: "center" },
-  statusText: { fontSize: 14, color: "#fff", marginTop: 4, textAlign: "center" },
-  buttonRow: { flexDirection: "row", justifyContent: "space-around", width: "100%", marginTop: 10 },
-  chartCard: { width: "95%", borderRadius: 12, padding: 12, marginTop: 12, backgroundColor: "#222" },
-  chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
-  chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
-  chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
-  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
-  chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
-  chartLabels: { position: "absolute", top: 4, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between" },
-  chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
+  chartBox: { backgroundColor: "#000", borderRadius: 4, padding: 4 },
+  chartAxis: { height: 1, backgroundColor: "#555", marginBottom: 4 },
+  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "flex-start" },
+  chartBar: { backgroundColor: "#0f0", borderRadius: 2 },
+  chartLabels: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
+  chartLabelText: { color: "#fff", fontSize: 10 },
 
-  githubUserBox: { padding: 10, backgroundColor: "#333", borderRadius: 8, width: "100%", alignItems: "center", marginTop: 12 },
+  pagePagination: { position: "absolute", bottom: 16, left: 16, right: 16, flexDirection: "row", justifyContent: "space-around" },
+
+  githubUserBox: { alignItems: "center", marginTop: 12 },
+  githubAvatar: { width: 120, height: 120, borderRadius: 60, marginBottom: 12 },
   githubText: { color: "#fff", marginBottom: 4 },
-  githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 8 },
-  sliderHorizontal: { width: "90%", alignSelf: "center", marginTop: 10 },
-
-  pagePagination: {
-    position: "absolute",
-    top: 50,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingVertical: 8,
-    backgroundColor: "rgba(17,17,17,0.8)",
-    borderRadius: 8,
-    marginHorizontal: 20,
-  },
+  sliderHorizontal: { width: "90%", marginTop: 12 },
 });
