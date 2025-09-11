@@ -23,8 +23,19 @@ function errorResponse(code, error, details = null) {
 
 // --- Informações do servidor ---
 function getServerInfo() {
+  const now = new Date();
+  const formattedDate = `${String(now.getDate()).padStart(2, "0")}/${String(
+    now.getMonth() + 1
+  ).padStart(2, "0")}/${now.getFullYear()} ${String(now.getHours()).padStart(
+    2,
+    "0"
+  )}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(
+    2,
+    "0"
+  )}`;
+
   return successResponse("Informações do servidor", {
-    currentTime: new Date().toLocaleString(),
+    currentTime: formattedDate,
     uptime: `${Math.floor(process.uptime())} segundos`,
     memory: {
       usedMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),

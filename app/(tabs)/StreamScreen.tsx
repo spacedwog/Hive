@@ -1,6 +1,6 @@
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
-import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 // IPs do ESP32
@@ -8,7 +8,7 @@ const SOFTAP_IP = "http://192.168.4.1";
 const STA_IP = "http://192.168.15.188";
 
 // Endpoint Vercel
-const VERCEL_URL = "https://hive-74zipvrgj-spacedwogs-projects.vercel.app/api";
+const VERCEL_URL = "https://hive-b5wwlxoxf-spacedwogs-projects.vercel.app/api";
 
 type StatusResponse = {
   led_builtin: "on" | "off";
@@ -28,7 +28,7 @@ export default function StreamScreen() {
   const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
-  const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
+  const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function StreamScreen() {
   // Busca dados do Vercel
   const fetchVercelData = async () => {
     try {
-      const response = await fetch(VERCEL_URL+"/status");
+      const response = await fetch(`${VERCEL_URL}/status?info=server`);
       const text = await response.text();
       try {
         const json = JSON.parse(text);
@@ -131,6 +131,15 @@ export default function StreamScreen() {
                   color="#facc15"
                 />
               </View>
+            </View>
+
+            <Text style={[styles.text, { marginTop: 20 }]}>📷 Stream ESP32:</Text>
+            <View style={styles.streamBox}>
+              <Image
+                style={{ width: "100%", height: "100%" }}
+                source={{ uri: frameUrl }}
+                resizeMode="cover"
+              />
             </View>
 
             <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
