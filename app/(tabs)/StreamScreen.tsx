@@ -49,7 +49,7 @@ export default function StreamScreen() {
   // Busca dados do Vercel
   const fetchVercelData = async () => {
     try {
-      const response = await fetch(`${VERCEL_URL}/api`);
+      const response = await fetch(`${VERCEL_URL}/api/status?info=server`);
       const text = await response.text();
       try {
         const json = JSON.parse(text);
