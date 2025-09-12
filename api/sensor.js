@@ -70,6 +70,9 @@ function getSensorData(body = null) {
   };
 }
 
+// --- ARMAZENAMENTO GLOBAL (memória do servidor) ---
+let lastSensorData = null;
+
 // --- Handler principal ---
 export default async function handler(req, res) {
   logRequest(req);
@@ -79,8 +82,11 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       const info = req.query.info || "sensor";
 
-      if (info === "sensor") 
-        return res.status(200).json(successResponse("Dados do sensor", getSensorData()));
+      if (info === "sensor") {
+        // Retorna o último sensor enviado via POST ou gera novo
+        const data = lastSensorData || getSensorData();
+        return res.status(200).json(successResponse("Dados do sensor", data));
+      }
 
       if (info === "server") 
         return res.status(200).json(successResponse("Dados do servidor", getServerInfo()));
@@ -91,6 +97,9 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const data = req.body || {};
       const sensorData = getSensorData(data);
+
+      // Armazena no const global
+      lastSensorData = sensorData;
 
       return res.status(200).json(successResponse("Sensor atualizado", sensorData));
     }
