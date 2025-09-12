@@ -105,7 +105,7 @@ export default function DataScienceCardScreen() {
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
-  const VERCEL_URL = 'https://hive-i2hmqnyqw-spacedwogs-projects.vercel.app';
+  const VERCEL_URL = 'https://hive-n98ghny6k-spacedwogs-projects.vercel.app';
 
   // -------------------------
   // 🔄 Fetch NodeMCU
