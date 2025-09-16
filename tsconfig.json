@@ -15,7 +15,8 @@
     }
   },
   "include": [
-    "src",
+    "app",
+    "env.d.ts",
     "victory-native.d.ts",
     "**/*.ts",
     "**/*.tsx"
