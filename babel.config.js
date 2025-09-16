@@ -14,6 +14,7 @@ module.exports = function (api) {
           allowUndefined: true,
         },
       ],
+      'react-native-worklets/plugin', // ✅ plugin novo do Reanimated
     ],
   };
 };
