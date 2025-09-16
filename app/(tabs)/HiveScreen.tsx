@@ -1,5 +1,5 @@
 // eslint-disable-next-line import/no-unresolved
-import { AUTH_PASSWORD, AUTH_USERNAME, GITHUB_TOKEN } from "@env";
+import { AUTH_PASSWORD, AUTH_USERNAME, GITHUB_TOKEN } from '@env';
 import Slider from "@react-native-community/slider";
 import axios from "axios";
 import * as Location from "expo-location";
@@ -18,7 +18,7 @@ import {
 import MapView, { Callout, Marker } from "react-native-maps";
 
 // ==================================
-// Tipos para GitHub Users
+// Tipos e classe GitHub
 // ==================================
 type GithubUser = {
   login: string;
@@ -28,9 +28,6 @@ type GithubUser = {
   avatar_url: string;
 };
 
-// ==================================
-// Tipos para GitHub Orgs (empresas)
-// ==================================
 type GithubOrg = {
   login: string;
   id: number;
@@ -39,14 +36,11 @@ type GithubOrg = {
   html_url: string;
 };
 
-// ==================================
-// Classe para gerenciamento de e-mail
-// ==================================
 class GithubEmailManager {
   private usersWithEmail: GithubUser[] = [];
 
   public setUsers(users: GithubUser[]) {
-    this.usersWithEmail = users.filter((u) => u.email);
+    this.usersWithEmail = users.filter(u => u.email);
   }
 
   public getUsers(): GithubUser[] {
@@ -54,19 +48,18 @@ class GithubEmailManager {
   }
 
   public sendEmail(userLogin: string, subject: string, body: string) {
-    const user = this.usersWithEmail.find((u) => u.login === userLogin);
+    const user = this.usersWithEmail.find(u => u.login === userLogin);
     if (!user || !user.email) {
       console.warn(`Usuário ${userLogin} não possui e-mail disponível.`);
       return;
     }
-
     const url = `mailto:${user.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     Linking.canOpenURL(url)
-      .then((supported) => {
+      .then(supported => {
         if (!supported) console.warn("Não foi possível abrir o app de e-mail.");
         else return Linking.openURL(url);
       })
-      .catch((err) => console.error("Erro ao abrir o app de e-mail:", err));
+      .catch(err => console.error("Erro ao abrir o app de e-mail:", err));
   }
 }
 
@@ -87,6 +80,11 @@ type NodeStatus = {
   latitude?: number;
   longitude?: number;
   clients?: any[];
+  anomaly?: {
+    detected: boolean;
+    message: string;
+    current_value: number;
+  };
 };
 
 const MAX_POINTS = 60;
@@ -94,13 +92,9 @@ const FALLBACK_LAT = -23.5505;
 const FALLBACK_LON = -46.6333;
 
 // ==================================
-// Componente de gráfico de barras
+// Componente gráfico de barras
 // ==================================
-const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({
-  data,
-  width,
-  height = 120,
-}) => {
+const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({ data, width, height = 120 }) => {
   const n = Math.max(data.length, 1);
   const barGap = 2;
   const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
@@ -140,11 +134,15 @@ export default function HiveScreen() {
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [zoom, setZoom] = useState(0.05);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
   const [githubUsers, setGithubUsers] = useState<GithubUser[]>([]);
   const [selectedUserIndex, setSelectedUserIndex] = useState(0);
+
   const [githubOrgs, setGithubOrgs] = useState<GithubOrg[]>([]);
   const [selectedOrgIndex, setSelectedOrgIndex] = useState(0);
+
   const [currentPage, setCurrentPage] = useState(0); // 0: Mapa, 1: Status, 2: GitHub
+  const [githubPage, setGithubPage] = useState<"user" | "org">("user"); // toggle interno
 
   const { width: winWidth } = useWindowDimensions();
   const githubManager = useMemo(() => new GithubEmailManager(), []);
@@ -152,7 +150,9 @@ export default function HiveScreen() {
   // =========================
   // Autenticação GitHub
   // =========================
-  const githubAuthHeader = useMemo(() => ({ headers: { Authorization: `token ${GITHUB_TOKEN}` } }), []);
+  const githubAuthHeader = useMemo(() => ({
+    headers: { Authorization: `token ${GITHUB_TOKEN}` },
+  }), []);
 
   // =========================
   // Buscar usuários GitHub + detalhes (e-mail)
@@ -162,7 +162,6 @@ export default function HiveScreen() {
       const url = "https://api.github.com/users?per_page=100";
       const res = await axios.get(url, githubAuthHeader);
       const users = res.data;
-
       const detailedUsers = await Promise.all(
         users.map(async (user: any) => {
           try {
@@ -173,7 +172,6 @@ export default function HiveScreen() {
           }
         })
       );
-
       setGithubUsers(detailedUsers);
       githubManager.setUsers(detailedUsers);
     } catch (err) {
@@ -182,7 +180,7 @@ export default function HiveScreen() {
   }, [githubAuthHeader, githubManager]);
 
   // =========================
-  // Buscar organizações GitHub
+  // Buscar organizações do GitHub
   // =========================
   const fetchGithubOrgs = React.useCallback(async () => {
     try {
@@ -225,7 +223,7 @@ export default function HiveScreen() {
   // =========================
   // Status servidores
   // =========================
-  const authHeader = "Basic " + Buffer.from(`${AUTH_USERNAME}:${AUTH_PASSWORD}`).toString("base64");
+  const authHeader = "Basic " + btoa(`${AUTH_USERNAME}:${AUTH_PASSWORD}`);
 
   const fetchStatus = React.useCallback(async () => {
     try {
@@ -240,8 +238,8 @@ export default function HiveScreen() {
 
             const latitude = res.data.location?.latitude ?? FALLBACK_LAT;
             const longitude = res.data.location?.longitude ?? FALLBACK_LON;
-
             let clients: any[] = [];
+
             try {
               const clientsRes = await axios.get(`http://${server}/clients`, {
                 timeout: 8000,
@@ -250,25 +248,36 @@ export default function HiveScreen() {
               clients = clientsRes.data?.clients ?? [];
             } catch {}
 
-            return { ...res.data, server, latitude, longitude, clients };
+            const node: NodeStatus = { ...res.data, server, latitude, longitude, clients };
+
+            // Verificar anomalia
+            if (node.ultrassonico_m !== undefined && node.ultrassonico_m < 0.1) {
+              node.anomaly = {
+                detected: true,
+                message: "Distância ultrassônica muito baixa!",
+                current_value: node.ultrassonico_m,
+              };
+              Vibration.vibrate(500);
+            } else {
+              node.anomaly = { detected: false, message: "", current_value: node.ultrassonico_m ?? 0 };
+            }
+
+            return node;
           } catch (err) {
             return {
               server,
-              status: "offline",
+              status: "offline" as const,
               error: String(err),
               latitude: FALLBACK_LAT,
               longitude: FALLBACK_LON,
               clients: [],
-            };
+              anomaly: { detected: false, message: "", current_value: 0 },
+            } as NodeStatus;
           }
         })
       );
 
       setStatus(responses);
-
-      responses.forEach((s) => {
-        if (s.ultrassonico_m !== undefined && s.ultrassonico_m < 0.1) Vibration.vibrate(500);
-      });
 
       setHistory((prev) => {
         const next = { ...prev };
@@ -295,11 +304,9 @@ export default function HiveScreen() {
         { command, ...payload },
         { headers: { Authorization: authHeader }, timeout: 5000 }
       );
-
       if (command === "ping" && res.data.analog_percent !== undefined) {
         setPingValues((prev) => ({ ...prev, [server]: res.data.analog_percent }));
       }
-
       fetchStatus();
     } catch (err) {
       console.error(`Erro ao enviar comando ${command} → ${server}:`, err);
@@ -348,6 +355,11 @@ export default function HiveScreen() {
                 {typeof s.umidade_pct === "number" && <Text>💧 {s.umidade_pct.toFixed(1)} %</Text>}
                 {s.presenca !== undefined && <Text>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
                 {s.ultrassonico_m !== undefined && <Text>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
+                {s.anomaly?.detected && (
+                  <Text style={{ color: "red", fontWeight: "bold" }}>
+                    ⚠️ Anomalia: {s.anomaly.message} (valor atual: {s.anomaly.current_value.toFixed(2)})
+                  </Text>
+                )}
               </View>
             </Callout>
           </Marker>
@@ -378,128 +390,110 @@ export default function HiveScreen() {
       {currentPage !== 0 && (
         <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={styles.unisonCard}>
-            {currentPage === 1 && (
-              <>
-                {onlineStatus.map((s, idx) => {
-                  const serverKey = s.server ?? "unknown";
-                  const hist = history[serverKey] ?? [];
-                  return (
-                    <View key={idx} style={styles.nodeBox}>
-                      <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                      <Text style={styles.statusText}>
-                        📡 {s.server ?? "-"} - {s.status ?? "-"}
+            {/* ========================= */}
+            {/* PÁGINA STATUS VESPA */}
+            {/* ========================= */}
+            {currentPage === 1 &&
+              onlineStatus.map((s, idx) => {
+                const serverKey = s.server ?? "unknown";
+                const hist = history[serverKey] ?? [];
+                return (
+                  <View key={idx} style={styles.nodeBox}>
+                    <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+                    <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
+                    {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
+                    {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
+                    {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
+                    {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
+                    {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
+                    {s.anomaly?.detected && (
+                      <Text style={[styles.statusText, { color: "red", fontWeight: "bold" }]}>
+                        ⚠️ Anomalia: {s.anomaly.message} (valor atual: {s.anomaly.current_value.toFixed(2)})
                       </Text>
-                      {s.analog_percent !== undefined && (
-                        <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>
-                      )}
-                      {typeof s.temperatura_C === "number" && (
-                        <Text style={styles.statusText}>
-                          🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C
-                        </Text>
-                      )}
-                      {typeof s.umidade_pct === "number" && (
-                        <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>
-                      )}
-                      {s.presenca !== undefined && (
-                        <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>
-                      )}
-                      {s.ultrassonico_m !== undefined && (
-                        <Text style={styles.statusText}>
-                          📏 Distância: {s.ultrassonico_m.toFixed(2)} m
-                        </Text>
-                      )}
+                    )}
 
-                      <View style={styles.buttonRow}>
-                        <Button
-                          title="Ativar"
-                          disabled={!s.server}
-                          onPress={() => s.server && sendCommand(s.server, "activate")}
-                        />
-                        <Button
-                          title="Desativar"
-                          disabled={!s.server}
-                          onPress={() => s.server && sendCommand(s.server, "deactivate")}
-                        />
-                        <Button
-                          title="Ping"
-                          disabled={!s.server}
-                          onPress={() => s.server && sendCommand(s.server, "ping")}
-                        />
-                      </View>
-
-                      <View style={styles.chartCard}>
-                        <Text style={styles.chartTitle}>
-                          📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s
-                        </Text>
-                        <SparkBar data={hist} width={graphWidth} />
-                      </View>
+                    <View style={styles.buttonRow}>
+                      <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
+                      <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
+                      <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
                     </View>
-                  );
-                })}
-              </>
-            )}
 
-            {currentPage === 2 && selectedUser && (
-              <View style={styles.githubUserBox}>
-                <Text style={styles.unisonTitle}>👤 Usuários do GitHub</Text>
-                <Image source={{ uri: selectedUser.avatar_url }} style={styles.githubAvatar} />
-                <Text style={styles.githubText}>🆔 ID: {selectedUser.id}</Text>
-                <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
-                <Text style={styles.githubText}>🔗 URL: {selectedUser.html_url}</Text>
-                <Text style={styles.githubText}>📧 Email: {selectedUser.email ?? "Não disponível"}</Text>
+                    <View style={styles.chartCard}>
+                      <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
+                      <SparkBar data={hist} width={graphWidth} />
+                    </View>
+                  </View>
+                );
+              })
+            }
 
-                <Button
-                  title="✉️ Enviar E-mail"
-                  onPress={() =>
-                    githubManager.sendEmail(
-                      selectedUser.login,
-                      "Projeto - HIVE",
-                      "Seja bem-vindo ao projeto - HIVE!"
-                    )
-                  }
-                  disabled={!selectedUser.email}
-                />
+            {/* ========================= */}
+            {/* PÁGINA GITHUB */}
+            {/* ========================= */}
+            {currentPage === 2 && (
+              <>
+                {/* Toggle Usuário / Empresa */}
+                <View style={{ flexDirection: "row", justifyContent: "center", marginBottom: 8 }}>
+                  <Button title="Usuários" onPress={() => setGithubPage("user")} />
+                  <Button title="Empresas" onPress={() => setGithubPage("org")} />
+                </View>
 
-                <Slider
-                  style={styles.sliderHorizontal}
-                  minimumValue={0}
-                  maximumValue={githubUsers.length > 0 ? githubUsers.length - 1 : 0}
-                  step={1}
-                  value={selectedUserIndex}
-                  onValueChange={(val) => setSelectedUserIndex(Math.round(val))}
-                />
-              </View>
-            )}
-
-            {currentPage === 2 && githubOrgs.length > 0 && (
-              <View style={styles.githubOrgBox}>
-                <Text style={styles.unisonTitle}>🏢 Empresas (Organizações)</Text>
-                <Image source={{ uri: githubOrgs[selectedOrgIndex].avatar_url }} style={styles.githubAvatar} />
-                <Text style={styles.githubText}>🆔 ID: {githubOrgs[selectedOrgIndex].id}</Text>
-                <Text style={styles.githubText}>🏢 Nome: {githubOrgs[selectedOrgIndex].login}</Text>
-                <Text style={styles.githubText}>🔗 URL: {githubOrgs[selectedOrgIndex].html_url}</Text>
-                <Text style={styles.githubText}>
-                  📄 Descrição: {githubOrgs[selectedOrgIndex].description ?? "Não informada"}
+                <Text style={styles.unisonTitle}>
+                  {githubPage === "user" ? "👤 Usuário GitHub" : "🏢 Empresa GitHub"}
                 </Text>
 
-                <Button
-                  title="🌐 Abrir no navegador"
-                  onPress={() => Linking.openURL(githubOrgs[selectedOrgIndex].html_url)}
-                />
+                {/* Usuário */}
+                {githubPage === "user" && selectedUser && (
+                  <View style={styles.githubUserBox}>
+                    <Image source={{ uri: selectedUser.avatar_url }} style={styles.githubAvatar} />
+                    <Text style={styles.githubText}>🆔 ID: {selectedUser.id}</Text>
+                    <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
+                    <Text style={styles.githubText}>🔗 URL: {selectedUser.html_url}</Text>
+                    <Text style={styles.githubText}>📧 Email: {selectedUser.email ?? "Não disponível"}</Text>
+                    <Button
+                      title="✉️ Enviar E-mail"
+                      onPress={() => githubManager.sendEmail(selectedUser.login, "Projeto - HIVE", "Seja bem-vindo ao projeto - HIVE!")}
+                      disabled={!selectedUser.email}
+                    />
 
-                <Slider
-                  style={styles.sliderHorizontal}
-                  minimumValue={0}
-                  maximumValue={githubOrgs.length - 1}
-                  step={1}
-                  value={selectedOrgIndex}
-                  onValueChange={(val) => setSelectedOrgIndex(Math.round(val))}
-                />
-              </View>
-            )}
+                    <Slider
+                      style={styles.sliderHorizontal}
+                      minimumValue={0}
+                      maximumValue={githubUsers.length > 0 ? githubUsers.length - 1 : 0}
+                      step={1}
+                      value={selectedUserIndex}
+                      onValueChange={(val) => setSelectedUserIndex(Math.round(val))}
+                    />
+                  </View>
+                )}
 
-            {currentPage === 2 && !selectedUser && (
-              <Text style={styles.statusText}>Carregando usuários...</Text>
+                {githubPage === "user" && !selectedUser && <Text style={styles.githubText}>Carregando usuários...</Text>}
+
+                {/* Empresa */}
+                {githubPage === "org" && githubOrgs.length > 0 && (
+                  <View style={styles.githubOrgBox}>
+                    <Image source={{ uri: githubOrgs[selectedOrgIndex].avatar_url }} style={styles.githubAvatar} />
+                    <Text style={styles.githubText}>🆔 ID: {githubOrgs[selectedOrgIndex].id}</Text>
+                    <Text style={styles.githubText}>🏢 Nome: {githubOrgs[selectedOrgIndex].login}</Text>
+                    <Text style={styles.githubText}>🔗 URL: {githubOrgs[selectedOrgIndex].html_url}</Text>
+                    <Text style={styles.githubText}>📄 Descrição: {githubOrgs[selectedOrgIndex].description ?? "Não informada"}</Text>
+
+                    <Button
+                      title="🌐 Abrir no navegador"
+                      onPress={() => Linking.openURL(githubOrgs[selectedOrgIndex].html_url)}
+                    />
+
+                    <Slider
+                      style={styles.sliderHorizontal}
+                      minimumValue={0}
+                      maximumValue={githubOrgs.length - 1}
+                      step={1}
+                      value={selectedOrgIndex}
+                      onValueChange={(val) => setSelectedOrgIndex(Math.round(val))}
+                    />
+                  </View>
+                )}
+              </>
             )}
           </View>
         </ScrollView>
@@ -509,71 +503,31 @@ export default function HiveScreen() {
 }
 
 // ==================================
-// Estilos
+// ESTILOS
 // ==================================
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
+  container: { flex: 1 },
   map: { flex: 1 },
-  sliderBox: { padding: 10, backgroundColor: "#111" },
-  pagePagination: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#111",
-    paddingVertical: 4,
-  },
-  overlayScroll: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    backgroundColor: "#000a",
-    maxHeight: "55%",
-  },
-  unisonCard: {
-    padding: 12,
-    backgroundColor: "#111",
-  },
-  unisonTitle: { fontSize: 18, fontWeight: "bold", color: "#fff", marginBottom: 8 },
-  nodeBox: { marginBottom: 16, backgroundColor: "#222", borderRadius: 8, padding: 10 },
-  nodeText: { color: "#fff", fontWeight: "bold", marginBottom: 4 },
-  statusText: { color: "#ccc" },
-  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginVertical: 6 },
-  chartCard: { backgroundColor: "#333", borderRadius: 8, padding: 8, marginTop: 8 },
-  chartTitle: { color: "#fff", marginBottom: 4 },
-  chartBox: {
-    backgroundColor: "#222",
-    borderRadius: 4,
-    padding: 4,
-    justifyContent: "flex-end",
-  },
-  chartAxis: { position: "absolute", bottom: 0, left: 0, right: 0, height: 2, backgroundColor: "#888" },
-  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", bottom: 2 },
-  chartBar: { backgroundColor: "#0f0", borderRadius: 2 },
-  chartLabels: {
-    position: "absolute",
-    top: 0,
-    left: 2,
-    right: 2,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  chartLabelText: { color: "#aaa", fontSize: 10 },
-  githubUserBox: {
-    padding: 10,
-    backgroundColor: "#222",
-    borderRadius: 8,
-    width: "100%",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  githubOrgBox: {
-    padding: 10,
-    backgroundColor: "#222",
-    borderRadius: 8,
-    width: "100%",
-    alignItems: "center",
-    marginTop: 20,
-  },
-  githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 10 },
-  githubText: { color: "#fff", marginVertical: 2 },
-  sliderHorizontal: { width: "90%", marginTop: 8 },
+  sliderBox: { padding: 8, backgroundColor: "#eee" },
+  overlayScroll: { position: "absolute", top: 150, left: 0, right: 0 },
+  unisonCard: { backgroundColor: "rgba(0,0,0,0.6)", padding: 16, marginHorizontal: 20, borderRadius: 16, alignItems: "center" },
+  unisonTitle: { fontSize: 18, fontWeight: "bold", color: "#fff", marginBottom: 12 },
+  nodeBox: { marginBottom: 16, width: "100%", alignItems: "center" },
+  nodeText: { fontSize: 16, fontWeight: "600", color: "#fff", textAlign: "center" },
+  statusText: { fontSize: 14, color: "#fff", marginTop: 4, textAlign: "center" },
+  buttonRow: { flexDirection: "row", justifyContent: "space-around", width: "100%", marginTop: 10 },
+  chartCard: { width: "95%", borderRadius: 12, padding: 12, marginTop: 12, backgroundColor: "#222" },
+  chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
+  chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
+  chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
+  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
+  chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  chartLabels: { position: "absolute", top: 4, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between" },
+  chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
+  githubUserBox: { padding: 10, backgroundColor: "#333", borderRadius: 8, width: "100%", alignItems: "center", marginTop: 12 },
+  githubOrgBox: { padding: 10, backgroundColor: "#222", borderRadius: 8, width: "100%", alignItems: "center", marginTop: 20 },
+  githubText: { color: "#fff", marginBottom: 4 },
+  githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 8 },
+  sliderHorizontal: { width: "90%", alignSelf: "center", marginTop: 10 },
+  pagePagination: { position: "absolute", top: 50, left: 0, right: 0, flexDirection: "row", justifyContent: "space-around", paddingVertical: 8, backgroundColor: "rgba(17,17,17,0.8)", borderRadius: 8, marginHorizontal: 20 },
 });
