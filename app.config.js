@@ -1,14 +1,25 @@
-import 'dotenv/config';
-
 export default {
-  expo: {
-    name: "Hive",
-    slug: "hive",
-    version: "1.0.0",
-    extra: {
-      githubToken: process.env.GITHUB_TOKEN,
-      authUsername: process.env.AUTH_USERNAME, // se quiser proteger também
-      authPassword: process.env.AUTH_PASSWORD, // se quiser proteger também
-    },
+  name: "Hive",
+  slug: "hive",
+  version: "1.0.0",
+  orientation: "portrait",
+  icon: "./assets/icon.png",
+  userInterfaceStyle: "light",
+  splash: {
+    image: "./assets/splash.png",
+    resizeMode: "contain",
+    backgroundColor: "#ffffff"
   },
+  ios: {
+    supportsTablet: true
+  },
+  android: {
+    adaptiveIcon: {
+      foregroundImage: "./assets/adaptive-icon.png",
+      backgroundColor: "#ffffff"
+    }
+  },
+  web: {
+    favicon: "./assets/favicon.png"
+  }
 };
