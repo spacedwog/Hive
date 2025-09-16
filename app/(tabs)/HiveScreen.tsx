@@ -1,5 +1,5 @@
 // eslint-disable-next-line import/no-unresolved
-import { AUTH_PASSWORD, AUTH_USERNAME, GITHUB_TOKEN } from '@env';
+import { AUTH_PASSWORD, AUTH_USERNAME, GITHUB_TOKEN } from "@env";
 import Slider from "@react-native-community/slider";
 import axios from "axios";
 import * as Location from "expo-location";
@@ -46,7 +46,7 @@ class GithubEmailManager {
   private usersWithEmail: GithubUser[] = [];
 
   public setUsers(users: GithubUser[]) {
-    this.usersWithEmail = users.filter(u => u.email);
+    this.usersWithEmail = users.filter((u) => u.email);
   }
 
   public getUsers(): GithubUser[] {
@@ -54,7 +54,7 @@ class GithubEmailManager {
   }
 
   public sendEmail(userLogin: string, subject: string, body: string) {
-    const user = this.usersWithEmail.find(u => u.login === userLogin);
+    const user = this.usersWithEmail.find((u) => u.login === userLogin);
     if (!user || !user.email) {
       console.warn(`Usuário ${userLogin} não possui e-mail disponível.`);
       return;
@@ -62,11 +62,11 @@ class GithubEmailManager {
 
     const url = `mailto:${user.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     Linking.canOpenURL(url)
-      .then(supported => {
+      .then((supported) => {
         if (!supported) console.warn("Não foi possível abrir o app de e-mail.");
         else return Linking.openURL(url);
       })
-      .catch(err => console.error("Erro ao abrir o app de e-mail:", err));
+      .catch((err) => console.error("Erro ao abrir o app de e-mail:", err));
   }
 }
 
@@ -225,7 +225,7 @@ export default function HiveScreen() {
   // =========================
   // Status servidores
   // =========================
-  const authHeader = "Basic " + btoa(`${AUTH_USERNAME}:${AUTH_PASSWORD}`);
+  const authHeader = "Basic " + Buffer.from(`${AUTH_USERNAME}:${AUTH_PASSWORD}`).toString("base64");
 
   const fetchStatus = React.useCallback(async () => {
     try {
@@ -386,21 +386,51 @@ export default function HiveScreen() {
                   return (
                     <View key={idx} style={styles.nodeBox}>
                       <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                      <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
-                      {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
-                      {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
-                      {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
-                      {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
-                      {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
+                      <Text style={styles.statusText}>
+                        📡 {s.server ?? "-"} - {s.status ?? "-"}
+                      </Text>
+                      {s.analog_percent !== undefined && (
+                        <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>
+                      )}
+                      {typeof s.temperatura_C === "number" && (
+                        <Text style={styles.statusText}>
+                          🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C
+                        </Text>
+                      )}
+                      {typeof s.umidade_pct === "number" && (
+                        <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>
+                      )}
+                      {s.presenca !== undefined && (
+                        <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>
+                      )}
+                      {s.ultrassonico_m !== undefined && (
+                        <Text style={styles.statusText}>
+                          📏 Distância: {s.ultrassonico_m.toFixed(2)} m
+                        </Text>
+                      )}
 
                       <View style={styles.buttonRow}>
-                        <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
-                        <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
-                        <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
+                        <Button
+                          title="Ativar"
+                          disabled={!s.server}
+                          onPress={() => s.server && sendCommand(s.server, "activate")}
+                        />
+                        <Button
+                          title="Desativar"
+                          disabled={!s.server}
+                          onPress={() => s.server && sendCommand(s.server, "deactivate")}
+                        />
+                        <Button
+                          title="Ping"
+                          disabled={!s.server}
+                          onPress={() => s.server && sendCommand(s.server, "ping")}
+                        />
                       </View>
 
                       <View style={styles.chartCard}>
-                        <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
+                        <Text style={styles.chartTitle}>
+                          📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s
+                        </Text>
                         <SparkBar data={hist} width={graphWidth} />
                       </View>
                     </View>
@@ -420,7 +450,13 @@ export default function HiveScreen() {
 
                 <Button
                   title="✉️ Enviar E-mail"
-                  onPress={() => githubManager.sendEmail(selectedUser.login, "Projeto - HIVE", "Seja bem-vindo ao projeto - HIVE!")}
+                  onPress={() =>
+                    githubManager.sendEmail(
+                      selectedUser.login,
+                      "Projeto - HIVE",
+                      "Seja bem-vindo ao projeto - HIVE!"
+                    )
+                  }
                   disabled={!selectedUser.email}
                 />
 
@@ -462,7 +498,9 @@ export default function HiveScreen() {
               </View>
             )}
 
-            {currentPage === 2 && !selectedUser && <Text style={styles.statusText}>Carregando usuários...</Text>}
+            {currentPage === 2 && !selectedUser && (
+              <Text style={styles.statusText}>Carregando usuários...</Text>
+            )}
           </View>
         </ScrollView>
       )}
