@@ -6,7 +6,7 @@ export default {
   icon: "./assets/images/icon.png",
   userInterfaceStyle: "light",
   splash: {
-    image: "./assets/splash.png",
+    image: "./assets/images/splash.png",
     resizeMode: "contain",
     backgroundColor: "#ffffff"
   },
@@ -15,11 +15,11 @@ export default {
   },
   android: {
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
+      foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#ffffff"
     }
   },
   web: {
-    favicon: "./assets/favicon.png"
+    favicon: "./assets/images/favicon.png"
   }
 };
