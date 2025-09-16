@@ -18,7 +18,7 @@ import {
 import MapView, { Callout, Marker } from "react-native-maps";
 
 // ==================================
-// Classe para gerenciamento de e-mail
+// Tipos para GitHub Users
 // ==================================
 type GithubUser = {
   login: string;
@@ -28,6 +28,20 @@ type GithubUser = {
   avatar_url: string;
 };
 
+// ==================================
+// Tipos para GitHub Orgs (empresas)
+// ==================================
+type GithubOrg = {
+  login: string;
+  id: number;
+  avatar_url: string;
+  description?: string | null;
+  html_url: string;
+};
+
+// ==================================
+// Classe para gerenciamento de e-mail
+// ==================================
 class GithubEmailManager {
   private usersWithEmail: GithubUser[] = [];
 
@@ -128,6 +142,8 @@ export default function HiveScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [githubUsers, setGithubUsers] = useState<GithubUser[]>([]);
   const [selectedUserIndex, setSelectedUserIndex] = useState(0);
+  const [githubOrgs, setGithubOrgs] = useState<GithubOrg[]>([]);
+  const [selectedOrgIndex, setSelectedOrgIndex] = useState(0);
   const [currentPage, setCurrentPage] = useState(0); // 0: Mapa, 1: Status, 2: GitHub
 
   const { width: winWidth } = useWindowDimensions();
@@ -164,6 +180,31 @@ export default function HiveScreen() {
       console.error("Erro ao buscar usuários do GitHub:", err);
     }
   }, [githubAuthHeader, githubManager]);
+
+  // =========================
+  // Buscar organizações GitHub
+  // =========================
+  const fetchGithubOrgs = React.useCallback(async () => {
+    try {
+      const res = await axios.get("https://api.github.com/organizations?per_page=50", githubAuthHeader);
+      const orgs = res.data;
+
+      const detailedOrgs = await Promise.all(
+        orgs.map(async (org: any) => {
+          try {
+            const orgRes = await axios.get(`https://api.github.com/orgs/${org.login}`, githubAuthHeader);
+            return orgRes.data;
+          } catch {
+            return org;
+          }
+        })
+      );
+
+      setGithubOrgs(detailedOrgs);
+    } catch (err) {
+      console.error("Erro ao buscar organizações do GitHub:", err);
+    }
+  }, [githubAuthHeader]);
 
   // =========================
   // Localização
@@ -268,9 +309,10 @@ export default function HiveScreen() {
   useEffect(() => {
     fetchStatus();
     fetchGithubUsersPage();
+    fetchGithubOrgs();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [fetchGithubUsersPage, fetchStatus]);
+  }, [fetchGithubUsersPage, fetchGithubOrgs, fetchStatus]);
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
   const onlineStatus = status.filter((s) => s.status !== "offline");
@@ -369,6 +411,7 @@ export default function HiveScreen() {
 
             {currentPage === 2 && selectedUser && (
               <View style={styles.githubUserBox}>
+                <Text style={styles.unisonTitle}>👤 Usuários do GitHub</Text>
                 <Image source={{ uri: selectedUser.avatar_url }} style={styles.githubAvatar} />
                 <Text style={styles.githubText}>🆔 ID: {selectedUser.id}</Text>
                 <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
@@ -381,7 +424,6 @@ export default function HiveScreen() {
                   disabled={!selectedUser.email}
                 />
 
-                {/* SLIDER HORIZONTAL */}
                 <Slider
                   style={styles.sliderHorizontal}
                   minimumValue={0}
@@ -393,7 +435,34 @@ export default function HiveScreen() {
               </View>
             )}
 
-            {currentPage === 2 && !selectedUser && <Text style={styles.githubText}>Carregando usuários...</Text>}
+            {currentPage === 2 && githubOrgs.length > 0 && (
+              <View style={styles.githubOrgBox}>
+                <Text style={styles.unisonTitle}>🏢 Empresas (Organizações)</Text>
+                <Image source={{ uri: githubOrgs[selectedOrgIndex].avatar_url }} style={styles.githubAvatar} />
+                <Text style={styles.githubText}>🆔 ID: {githubOrgs[selectedOrgIndex].id}</Text>
+                <Text style={styles.githubText}>🏢 Nome: {githubOrgs[selectedOrgIndex].login}</Text>
+                <Text style={styles.githubText}>🔗 URL: {githubOrgs[selectedOrgIndex].html_url}</Text>
+                <Text style={styles.githubText}>
+                  📄 Descrição: {githubOrgs[selectedOrgIndex].description ?? "Não informada"}
+                </Text>
+
+                <Button
+                  title="🌐 Abrir no navegador"
+                  onPress={() => Linking.openURL(githubOrgs[selectedOrgIndex].html_url)}
+                />
+
+                <Slider
+                  style={styles.sliderHorizontal}
+                  minimumValue={0}
+                  maximumValue={githubOrgs.length - 1}
+                  step={1}
+                  value={selectedOrgIndex}
+                  onValueChange={(val) => setSelectedOrgIndex(Math.round(val))}
+                />
+              </View>
+            )}
+
+            {currentPage === 2 && !selectedUser && <Text style={styles.statusText}>Carregando usuários...</Text>}
           </View>
         </ScrollView>
       )}
@@ -402,51 +471,71 @@ export default function HiveScreen() {
 }
 
 // ==================================
-// ESTILOS
+// Estilos
 // ==================================
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: "#000" },
   map: { flex: 1 },
-  sliderBox: { padding: 8, backgroundColor: "#eee" },
-  overlayScroll: { position: "absolute", top: 150, left: 0, right: 0 },
-
-  unisonCard: {
-    backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 16,
-    marginHorizontal: 20,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-  unisonTitle: { fontSize: 18, fontWeight: "bold", color: "#fff", marginBottom: 12 },
-
-  nodeBox: { marginBottom: 16, width: "100%", alignItems: "center" },
-  nodeText: { fontSize: 16, fontWeight: "600", color: "#fff", textAlign: "center" },
-  statusText: { fontSize: 14, color: "#fff", marginTop: 4, textAlign: "center" },
-  buttonRow: { flexDirection: "row", justifyContent: "space-around", width: "100%", marginTop: 10 },
-  chartCard: { width: "95%", borderRadius: 12, padding: 12, marginTop: 12, backgroundColor: "#222" },
-  chartTitle: { fontSize: 14, fontWeight: "600", color: "#eaeaea", textAlign: "center", marginBottom: 8 },
-  chartBox: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden", alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
-  chartAxis: { position: "absolute", bottom: 8, left: 8, right: 8, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
-  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "100%", paddingBottom: 8 },
-  chartBar: { backgroundColor: "#50fa7b", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
-  chartLabels: { position: "absolute", top: 4, left: 8, right: 8, flexDirection: "row", justifyContent: "space-between" },
-  chartLabelText: { fontSize: 10, color: "rgba(255,255,255,0.6)" },
-
-  githubUserBox: { padding: 10, backgroundColor: "#333", borderRadius: 8, width: "100%", alignItems: "center", marginTop: 12 },
-  githubText: { color: "#fff", marginBottom: 4 },
-  githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 8 },
-  sliderHorizontal: { width: "90%", alignSelf: "center", marginTop: 10 },
-
+  sliderBox: { padding: 10, backgroundColor: "#111" },
   pagePagination: {
-    position: "absolute",
-    top: 50,
-    left: 0,
-    right: 0,
     flexDirection: "row",
     justifyContent: "space-around",
-    paddingVertical: 8,
-    backgroundColor: "rgba(17,17,17,0.8)",
-    borderRadius: 8,
-    marginHorizontal: 20,
+    backgroundColor: "#111",
+    paddingVertical: 4,
   },
+  overlayScroll: {
+    position: "absolute",
+    bottom: 0,
+    width: "100%",
+    backgroundColor: "#000a",
+    maxHeight: "55%",
+  },
+  unisonCard: {
+    padding: 12,
+    backgroundColor: "#111",
+  },
+  unisonTitle: { fontSize: 18, fontWeight: "bold", color: "#fff", marginBottom: 8 },
+  nodeBox: { marginBottom: 16, backgroundColor: "#222", borderRadius: 8, padding: 10 },
+  nodeText: { color: "#fff", fontWeight: "bold", marginBottom: 4 },
+  statusText: { color: "#ccc" },
+  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginVertical: 6 },
+  chartCard: { backgroundColor: "#333", borderRadius: 8, padding: 8, marginTop: 8 },
+  chartTitle: { color: "#fff", marginBottom: 4 },
+  chartBox: {
+    backgroundColor: "#222",
+    borderRadius: 4,
+    padding: 4,
+    justifyContent: "flex-end",
+  },
+  chartAxis: { position: "absolute", bottom: 0, left: 0, right: 0, height: 2, backgroundColor: "#888" },
+  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", bottom: 2 },
+  chartBar: { backgroundColor: "#0f0", borderRadius: 2 },
+  chartLabels: {
+    position: "absolute",
+    top: 0,
+    left: 2,
+    right: 2,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  chartLabelText: { color: "#aaa", fontSize: 10 },
+  githubUserBox: {
+    padding: 10,
+    backgroundColor: "#222",
+    borderRadius: 8,
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  githubOrgBox: {
+    padding: 10,
+    backgroundColor: "#222",
+    borderRadius: 8,
+    width: "100%",
+    alignItems: "center",
+    marginTop: 20,
+  },
+  githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 10 },
+  githubText: { color: "#fff", marginVertical: 2 },
+  sliderHorizontal: { width: "90%", marginTop: 8 },
 });
