@@ -19,6 +19,7 @@
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
     "@shopify/react-native-skia": "2.2.12",
+    "@vercel/analytics": "^1.5.0",
     "axios": "^1.11.0",
     "base-64": "^1.0.0",
     "base64-js": "^1.5.1",
