@@ -26,7 +26,7 @@
     "basic-auth": "^2.0.1",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
-    "expo": "^54.0.7",
+    "expo": "^54.0.8",
     "expo-ads-admob": "^13.0.0",
     "expo-auth-session": "~7.0.8",
     "expo-av": "~16.0.7",
