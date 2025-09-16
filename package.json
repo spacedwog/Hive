@@ -26,8 +26,8 @@
     "basic-auth": "^2.0.1",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
-    "expo": "^54.0.8",
-    "expo-ads-admob": "^13.0.0",
+    "expo": "54.0.8",
+    "expo-ads-admob": "^8.4.0",
     "expo-auth-session": "~7.0.8",
     "expo-av": "~16.0.7",
     "expo-blur": "~15.0.7",
@@ -43,7 +43,7 @@
     "expo-linking": "~8.0.8",
     "expo-location": "~19.0.7",
     "expo-random": "^14.0.1",
-    "expo-router": "~6.0.5",
+    "expo-router": "~6.0.6",
     "expo-speech": "~14.0.7",
     "expo-splash-screen": "~31.0.10",
     "expo-status-bar": "~3.0.8",
@@ -76,14 +76,14 @@
     "@react-native-community/cli": "^10.1.0",
     "@types/base-64": "^1.0.2",
     "@types/crypto-js": "^4.2.2",
-    "@types/react": "~19.0.10",
+    "@types/react": "~19.1.10",
     "@types/react-native-dotenv": "^0.2.2",
     "eslint": "^9.25.0",
-    "eslint-config-expo": "~9.2.0",
+    "eslint-config-expo": "~10.0.0",
     "eslint-import-resolver-node": "^0.3.9",
     "expo-module-scripts": "^4.1.10",
     "react-native-dotenv": "^3.4.11",
-    "typescript": "~5.8.3"
+    "typescript": "~5.9.2"
   },
   "expo": {
     "doctor": {
