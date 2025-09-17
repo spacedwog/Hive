@@ -16,21 +16,15 @@ import { SensorData } from '../../hive_brain/hive_one/types';
 const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
 const vercelService = new VercelService(VERCEL_URL);
 
-
-
 // -------------------------
 // 📊 TelaPrincipal
 // -------------------------
 export default function TelaPrinc() {
   useWindowDimensions();
   const [node] = useState<SensorData | null>(null);const [alert] = useState<string | null>(null);
-  // eslint-disable-next-line no-empty-pattern
-  const [] = useState<{ index: number; value: number } | null>(null);
   const [vercelData, setVercelData] = useState<any | null>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
-  // eslint-disable-next-line no-empty-pattern
-  const [] = useState<number>(0); // Para forçar re-render do histórico
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
 
