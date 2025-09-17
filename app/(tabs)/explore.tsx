@@ -81,37 +81,39 @@ export default function ExploreScreen() {
     }
     const newStatus: Record<string, NodeStatus> = {};
 
-    for (let node of nodes) {
-      let fetched = false;
-
-      // Tenta STA primeiro
-      try {
-        const res = await axios.get(`http://${node.sta_ip}/status`, { timeout: 3000 });
-        newStatus[node.name] = res.data;
-        fetched = true;
-      } catch {}
-
-      // Se STA falhar, tenta SoftAP
-      if (!fetched) {
+    await Promise.all(
+      nodes.map(async (node) => {
+        let status: NodeStatus | undefined;
+        // Tenta STA primeiro
         try {
-          const res = await axios.get(`http://${node.ip}/status`, { timeout: 3000 });
-          newStatus[node.name] = res.data;
-        } catch {
-          newStatus[node.name] = { error: 'Offline ou inacessível' };
-        }
-      }
+          const res = await axios.get(`http://${node.sta_ip}/status`, { timeout: 3000 });
+          status = res.data;
+        } catch {}
 
-      // Atualiza histórico de sensor de som
-      if (newStatus[node.name]?.sensor_db !== undefined) {
-        setHistory((prev) => {
-          const prevData = prev[node.name] || [];
-          const newData = [...prevData, newStatus[node.name].sensor_db].filter(
-            (v): v is number => v !== undefined
-          ).slice(-30);
-          return { ...prev, [node.name]: newData };
-        });
-      }
-    }
+        // Se STA falhar, tenta SoftAP
+        if (!status) {
+          try {
+            const res = await axios.get(`http://${node.ip}/status`, { timeout: 3000 });
+            status = res.data;
+          } catch {
+            status = { error: 'Offline ou inacessível' };
+          }
+        }
+
+        newStatus[node.name] = status ?? { error: 'Offline ou inacessível' };
+
+        // Atualiza histórico de sensor de som
+        if (status?.sensor_db !== undefined) {
+          setHistory((prev) => {
+            const prevData = prev[node.name] || [];
+            const newData = [...prevData, status!.sensor_db].filter(
+              (v): v is number => v !== undefined
+            ).slice(-30);
+            return { ...prev, [node.name]: newData };
+          });
+        }
+      })
+    );
 if (showLoader) {
       setLoading(false);
     }

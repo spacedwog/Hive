@@ -151,20 +151,12 @@ void handleStatus() {
   doc["device"] = "ESP8266";
   doc["server_ip"] = WiFi.softAPIP().toString();
   doc["sta_ip"] = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "desconectado";
+  doc["ap_ssid"] = WiFi.SSID(); // SSID do STA (se conectado)
+  doc["ap_ip"] = WiFi.softAPIP().toString(); // IP do AP
+  doc["sta_ssid"] = WiFi.SSID(); // SSID do STA (se conectado)
   doc["sensor_raw"] = rawSoundValue;
   doc["sensor_db"] = soundDB;
   doc["status"] = activated ? "Ligado" : "Desligado";
-
-  JsonObject anomalyObj = doc.createNestedObject("anomaly");
-  anomalyObj["detected"] = soundAnomaly;
-  anomalyObj["message"] = soundAnomaly ? "Nível de som fora do intervalo" : "Normal";
-  anomalyObj["current_value"] = soundDB;
-  anomalyObj["expected_range"] = String(soundMinDB) + " - " + String(soundMaxDB);
-  anomalyObj["timestamp_ms"] = millis();
-
-  String json;
-  serializeJson(doc, json);
-  server.send(200, "application/json", json);
 }
 
 void sendCommandToPeers(const String& cmd) {
@@ -309,6 +301,19 @@ void setup() {
 void loop() {
   dnsServer.processNextRequest();
   server.handleClient();
+
+  // Tenta reconectar ao STA se desconectado
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.begin(sta_ssid, sta_password);
+    unsigned long startAttempt = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 5000) {
+      delay(200);
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nReconectado à rede STA");
+      Serial.print("IP STA: "); Serial.println(WiFi.localIP());
+    }
+  }
 
   readSoundSensor();
   displayStatusSerial();
