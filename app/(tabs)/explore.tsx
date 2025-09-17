@@ -274,7 +274,9 @@ if (showLoader) {
                         ) : (
                           sensorHistory.map((val, idx) => {
                             const isAnomalyBar = !!(s?.anomaly?.detected && val === s.anomaly?.current_value);
-                            const barColor = isAnomalyBar ? '#000000' : getBarColor(val, false);
+                            // Use a bright red color for anomaly bars to ensure visibility on all backgrounds
+                            const anomalyBarColor = '#FF3B30';
+                            const barColor = isAnomalyBar ? anomalyBarColor : getBarColor(val, false);
                             const height = (val / maxValue) * 100;
                             return (
                               <View key={idx} style={[styles.bar, { height: `${height}%`, backgroundColor: barColor }]} />
