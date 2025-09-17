@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { SensorData } from './types';
 
-export class VercelService {
+export class VespaService {
   url: string;
 
   constructor(url: string) {
@@ -14,7 +14,7 @@ export class VercelService {
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (err) {
-      console.error('Erro ao enviar para Vercel:', err);
+      console.error('Erro ao enviar para Vespa:', err);
     }
   }
 
@@ -28,12 +28,13 @@ export class VercelService {
         return { data: null, html: text };
       }
     } catch (err) {
-      console.error('Erro ao acessar Vercel:', err);
+      console.error('Erro ao acessar Vespa:', err);
       return { data: null, html: null };
     }
   }
-/**
-   * Busca os dados do sensor em formato XML da API do Vercel.
+
+  /**
+   * Busca os dados do sensor em formato XML da API do Vespa.
    * Retorna uma string XML ou null em caso de erro.
    */
   async fetchSensorInfoXML(): Promise<string | null> {
@@ -44,7 +45,7 @@ export class VercelService {
       }
       return await res.text();
     } catch (err) {
-      console.error('Erro ao acessar Vercel (XML):', err);
+      console.error('Erro ao acessar Vespa (XML):', err);
       return null;
     }
   }

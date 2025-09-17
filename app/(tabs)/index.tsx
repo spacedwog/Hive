@@ -9,12 +9,12 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { VercelService } from '../../hive_brain/hive_one/VercelService';
+import { VespaService } from '../../hive_brain/hive_one/VespaService';
 import { SensorData } from '../../hive_brain/hive_one/types';
 
 // Instâncias dos objetos orientados a objetos
-const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
-const vercelService = new VercelService(VERCEL_URL);
+const VESPA_URL = 'https://vespa.your-domain.com'; // Altere para a URL correta da sua API Vespa
+const vespaService = new VespaService(VESPA_URL);
 
 // -------------------------
 // 📊 TelaPrincipal
@@ -22,34 +22,34 @@ const vercelService = new VercelService(VERCEL_URL);
 export default function TelaPrinc() {
   useWindowDimensions();
   const [node] = useState<SensorData | null>(null);const [alert] = useState<string | null>(null);
-  const [vercelData, setVercelData] = useState<any | null>(null);
-  const [vercelHTML, setVercelHTML] = useState<string | null>(null);
-  const [vercelXML, setVercelXML] = useState<string | null>(null);
+  const [vespaData, setVespaData] = useState<any | null>(null);
+  const [vespaHTML, setVespaHTML] = useState<string | null>(null);
+  const [vespaXML, setVespaXML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
   const [displayMode, setDisplayMode] = useState<'json' | 'html' | 'xml'>('json');
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
 
-  // Buscar dados da API sensor do Vercel apenas
+  /// Buscar dados da API sensor do Vespa apenas
   useEffect(() => {
-    const fetchVercelData = async () => {
-      const { data, html } = await vercelService.fetchSensorInfo();
-      setVercelData(data);
-      setVercelHTML(html);
+    const fetchVespaData = async () => {
+      const { data, html } = await vespaService.fetchSensorInfo();
+      setVespaData(data);
+      setVespaHTML(html);
 
-      // Buscar XML da API do Vercel
+      // Buscar XML da API do Vespa
       try {
-        const xml = await vercelService.fetchSensorInfoXML?.();
+        const xml = await vespaService.fetchSensorInfoXML?.();
         if (xml) {
-          setVercelXML(xml);
+          setVespaXML(xml);
         }
       } catch (e) {
-        setVercelXML(null);
+        setVespaXML(null);
         console.error('Erro ao buscar XML:', e);
       }
     };
-    fetchVercelData();
-    const interval = setInterval(fetchVercelData, 2000);
+    fetchVespaData();
+    const interval = setInterval(fetchVespaData, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -95,23 +95,23 @@ export default function TelaPrinc() {
               )}
               <Text style={styles.description}>🔌 Status: {node.status ?? '--'}</Text>
             </>
-          ) : displayMode === 'json' && vercelData ? (
-            <Text style={styles.description}>{JSON.stringify(vercelData, null, 2)}</Text>
-          ) : displayMode === 'html' && vercelHTML ? (
+          ) : displayMode === 'json' && vespaData ? (
+            <Text style={styles.description}>{JSON.stringify(vespaData, null, 2)}</Text>
+          ) : displayMode === 'html' && vespaHTML ? (
             <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
               <WebView
                 key={webviewKey}
-                source={{ html: vercelHTML }}
+                source={{ html: vespaHTML }}
                 style={{ flex: 1 }}
                 originWhitelist={['*']}
               />
             </View>
-          ) : displayMode === 'xml' && vercelXML ? (
+          ) : displayMode === 'xml' && vespaXML ? (
             <ScrollView style={{ maxHeight: 400, backgroundColor: '#222', borderRadius: 8, padding: 8 }}>
-              <Text style={{ color: '#fff', fontFamily: 'monospace', fontSize: 13 }}>{vercelXML}</Text>
+              <Text style={{ color: '#fff', fontFamily: 'monospace', fontSize: 13 }}>{vespaXML}</Text>
             </ScrollView>
           ) : (
-            <Text style={styles.description}>Conecte-se ao NodeMCU ou aguarde dados da Vercel...</Text>
+            <Text style={styles.description}>Conecte-se ao NodeMCU ou aguarde dados da Vespa...</Text>
           )}
         </View>
       </View>
