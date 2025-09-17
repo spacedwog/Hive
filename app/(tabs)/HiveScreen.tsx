@@ -192,6 +192,19 @@ export default function HiveScreen() {
                 current_value: node.ultrassonico_m,
               };
               Vibration.vibrate(500);
+
+              // Enviar dados de anomalia para o Vercel
+              try {
+                await axios.post(`${VERCEL_URL}/api/anomalia`, {
+                  server: node.server,
+                  device: node.device,
+                  message: node.anomaly.message,
+                  current_value: node.anomaly.current_value,
+                  timestamp: new Date().toISOString(),
+                });
+              } catch (err) {
+                console.error("Erro ao enviar anomalia para Vercel:", err);
+              }
             } else {
               node.anomaly = { detected: false, message: "", current_value: node.ultrassonico_m ?? 0 };
             }
