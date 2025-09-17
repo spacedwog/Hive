@@ -20,5 +20,5 @@
     "victory-native.d.ts",
     "**/*.ts",
     "**/*.tsx"
-, "lib/sensor/SensorApiHandler.js"  ]
+, "api/lib/sensor/SensorApiHandler.js"  ]
 }
