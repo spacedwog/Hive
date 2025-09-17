@@ -9,22 +9,38 @@ class SensorApiHandler {
     res.setHeader("Content-Type", "application/json");
 
     try {
-      if (req.method !== "GET") {
-        return res
-          .status(405)
-          .json({ success: false, error: "Método não permitido. Use GET." });
+      if (req.method === "GET") {
+        // Exemplo de resposta simulada de sensor
+        return res.status(200).json({
+          success: true,
+          message: "Dados do sensor",
+          data: {
+            temperature: 22.5,
+            humidity: 60,
+          },
+          timestamp: Date.now(),
+        });
       }
 
-      // Exemplo de resposta simulada de sensor
-      return res.status(200).json({
-        success: true,
-        message: "Dados do sensor",
-        data: {
-          temperature: 22.5,
-          humidity: 60,
-        },
-        timestamp: Date.now(),
-      });
+      if (req.method === "POST") {
+        const { server, temperatura_C, timestamp } = req.body || {};
+
+        // Aqui você pode salvar os dados em um banco, arquivo, etc, se desejar
+
+        return res.status(201).json({
+          success: true,
+          message: "Dados do sensor recebidos com sucesso.",
+          data: {
+            server,
+            temperatura_C,
+            timestamp,
+          },
+        });
+      }
+
+      return res
+        .status(405)
+        .json({ success: false, error: "Método não permitido. Use GET ou POST." });
     } catch (err) {
       console.error("Erro interno:", err);
       return res
