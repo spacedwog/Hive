@@ -20,6 +20,9 @@ import MapView, { Callout, Marker } from "react-native-maps";
 import { FALLBACK_LAT, FALLBACK_LON, MAX_POINTS, NodeStatus } from "../../hive_brain/hive_prime/EspManager";
 import { GithubEmailManager, GithubOrg, GithubUser } from "../../hive_brain/hive_prime/GithubManager";
 
+
+const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
+
 // ==================================
 // Componente gráfico de barras
 // ==================================
@@ -209,6 +212,21 @@ export default function HiveScreen() {
       );
 
       setStatus(responses);
+
+      // Enviar dados de temperatura para a API sensor.js (Vercel)
+      responses.forEach(async (s) => {
+        if (typeof s.temperatura_C === "number") {
+          try {
+            await axios.post(`${VERCEL_URL}/api/sensor`, {
+              server: s.server,
+              temperatura_C: s.temperatura_C,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (err) {
+            console.error("Erro ao enviar temperatura para sensor.js (Vercel):", err);
+          }
+        }
+      });
 
       setHistory((prev) => {
         const next = { ...prev };
