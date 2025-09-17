@@ -1,4 +1,4 @@
-import SensorApiHandler from "../lib/sensor/SensorApiHandler";
+import SensorApiHandler from "./lib/sensor/SensorApiHandler";
 
 const handlerInstance = new SensorApiHandler();
 
