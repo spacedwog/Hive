@@ -53,7 +53,20 @@ const SparkBar: React.FC<SparkBarProps> = ({
 }) => {
   const n = Math.max(data.length, 1);
   const barGap = 2;
-  const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
+  // Calculate initial barWidth
+  let barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
+  // Ensure bars and gaps fit within the container
+  let totalBarsAndGaps = n * barWidth + (n - 1) * barGap;
+  if (totalBarsAndGaps > width) {
+    // Recalculate barWidth to fit exactly
+    barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
+    // If still overflowing, reduce barGap if possible
+    if (n * barWidth + (n - 1) * barGap > width && barGap > 0) {
+      const maxBarGap = Math.floor((width - n * barWidth) / (n - 1));
+      const adjustedBarGap = Math.max(0, maxBarGap);
+      barWidth = Math.max(2, Math.floor((width - (n - 1) * adjustedBarGap) / n));
+    }
+  }
 
   return (
     <Pressable onPress={() => onBarPress && onBarPress(-1, 0)} style={{ width, height }}>
