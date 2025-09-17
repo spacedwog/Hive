@@ -117,6 +117,11 @@ export default function TelaPrinc() {
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
 
+  // Reset tooltip when page changes to prevent stale tooltips
+  useEffect(() => {
+    setTooltip(null);
+  }, [page]);
+
   const alertAnim = useMemo(() => new Animated.Value(0), []);
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
   const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
@@ -214,8 +219,9 @@ export default function TelaPrinc() {
   // -------------------------
   // 🔹 Paginação
   // -------------------------
-  const nextPage = () => setPage(prev => (prev + 1) % 4);
-  const prevPage = () => setPage(prev => (prev - 1 + 4) % 4);
+  const PAGE_COUNT = 4;
+  const nextPage = () => setPage(prev => (prev + 1) % PAGE_COUNT);
+  const prevPage = () => setPage(prev => (prev - 1 + PAGE_COUNT) % PAGE_COUNT);
 
   // -------------------------
   // 🔹 Render
