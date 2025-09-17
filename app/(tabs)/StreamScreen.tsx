@@ -3,19 +3,6 @@ import React, { useEffect, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
-// IPs do ESP32
-const SOFTAP_IP = "http://192.168.4.1";
-const STA_IP = "http://192.168.15.188";
-
-// Endpoint Vercel
-const VERCEL_URL = "https://hive-chi-woad.vercel.app";
-
-type StatusResponse = {
-  led_builtin: "on" | "off";
-  led_opposite: "on" | "off";
-  ip: string;
-};
-
 export default function StreamScreen() {
   const [status, setStatus] = useState<StatusResponse>({
     led_builtin: "off",

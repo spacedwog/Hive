@@ -13,7 +13,7 @@ import { WebView } from 'react-native-webview';
 
 import { SensorHistory } from '../../hive_brain/SensorHistory';
 import { SensorNode } from '../../hive_brain/SensorNode';
-import { VercelService } from '../../hive_brain/VercelService';
+import { VercelService } from '../../hive_brain/hive_one/VercelService';
 import { SensorData } from '../../hive_brain/types';
 
 // Instâncias dos objetos orientados a objetos
