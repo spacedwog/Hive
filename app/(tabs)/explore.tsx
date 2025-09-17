@@ -34,6 +34,7 @@ type NodeStatus = {
   mesh?: boolean;
   timestamp?: number;
   error?: string;
+  wifi_ssid?: string; // <-- Adiciona campo para o SSID do Wi-Fi conectado
 };
 
 export default function ExploreScreen() {
@@ -127,23 +128,50 @@ if (showLoader) {
   // ⚡ Enviar comando para NodeMCU
   // -------------------------
   const sendCommand = async (node: string, action: string) => {
-    const ip = nodes.find(n => n.name === node)?.sta_ip || nodes.find(n => n.name === node)?.ip;
-    if (!ip) {
-      return;
+    // Tenta STA primeiro, se falhar tenta AP
+    let ip = nodes.find(n => n.name === node)?.sta_ip;
+    let triedSta = false;
+    let success = false;
+
+    if (ip) {
+      try {
+        const res = await axios.post(`http://${ip}/command`, { action }, { timeout: 3000 });
+        let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
+
+        if (action === 'ping' && res.data?.timestamp !== undefined) {
+          msg += ` Timestamp: ${res.data.timestamp} ms`;
+        }
+
+        Alert.alert('✅ Sucesso', msg);
+        fetchStatus();
+        success = true;
+      } catch {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        triedSta = true;
+      }
     }
 
-    try {
-      const res = await axios.post(`http://${ip}/command`, { action }, { timeout: 3000 });
-      let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
-
-      if (action === 'ping' && res.data?.timestamp !== undefined) {
-        msg += ` Timestamp: ${res.data.timestamp} ms`;
+    // Se STA falhar, tenta AP
+    if (!success) {
+      ip = nodes.find(n => n.name === node)?.ip;
+      if (!ip) {
+        return;
       }
+      try {
+        const res = await axios.post(`http://${ip}/command`, { action }, { timeout: 3000 });
+        let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
 
-      Alert.alert('✅ Sucesso', msg);
-      fetchStatus();
-    } catch {
-      Alert.alert('❌ Erro', `Falha ao enviar comando "${action}" para ${node}.`);
+        if (action === 'ping' && res.data?.timestamp !== undefined) {
+          msg += ` Timestamp: ${res.data.timestamp} ms`;
+        }
+
+        Alert.alert('✅ Sucesso', msg);
+        fetchStatus();
+        success = true;
+      } catch {
+        // Se falhar em ambos, mostra erro
+        Alert.alert('❌ Erro', `Falha ao enviar comando "${action}" para ${node}.`);
+      }
     }
   };
 
@@ -214,6 +242,10 @@ if (showLoader) {
                       <Text style={styles.subTitle}>📊 Status</Text>
                       <Text style={styles.statusText}>🖥️ Aparelho: {s.device}</Text>
                       <Text style={styles.statusText}>🗄️ Servidor: {s.server_ip}</Text>
+                      {/* Mostra o Wi-Fi conectado, se disponível */}
+                      {s.wifi_ssid && (
+                        <Text style={styles.statusText}>📶 Wi-Fi: {s.wifi_ssid}</Text>
+                      )}
                       <Text style={styles.statusText}>✅ Estado: {s.status}</Text>
                       <Text style={styles.statusText}>🔊 Sensor de som: {s.sensor_db?.toFixed(1)}</Text>
                       <Text style={styles.statusText}>🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}</Text>
