@@ -16,7 +16,7 @@ class SensorApiHandler {
         if (lastSensorData) {
           return res.status(200).json({
             success: true,
-            message: "Últimos dados recebidos do sensor",
+            message: "Dados do sensor de temperatura e umidade:",
             data: lastSensorData,
             timestamp: lastSensorData.timestamp || Date.now(),
           });
