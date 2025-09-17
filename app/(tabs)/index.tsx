@@ -13,7 +13,7 @@ import { VespaService } from '../../hive_brain/hive_one/VespaService';
 import { SensorData } from '../../hive_brain/hive_one/types';
 
 // Instâncias dos objetos orientados a objetos
-const VESPA_URL = 'https://vespa.your-domain.com'; // Altere para a URL correta da sua API Vespa
+const VESPA_URL = 'https://hive-chi-woad.vercel.app'; // Altere para a URL correta da sua API Vespa
 const vespaService = new VespaService(VESPA_URL);
 
 // -------------------------
@@ -111,7 +111,7 @@ export default function TelaPrinc() {
               <Text style={{ color: '#fff', fontFamily: 'monospace', fontSize: 13 }}>{vespaXML}</Text>
             </ScrollView>
           ) : (
-            <Text style={styles.description}>Conecte-se ao NodeMCU ou aguarde dados da Vespa...</Text>
+            <Text style={styles.description}>Conecte-se ao ESP32(VESPA) ou aguarde dados da Vespa...</Text>
           )}
         </View>
       </View>
