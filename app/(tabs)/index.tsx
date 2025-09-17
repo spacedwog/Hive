@@ -1,4 +1,3 @@
-import axios from 'axios';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
@@ -12,26 +11,18 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-// -------------------------
-// 📡 Map de NodeMCU
-// -------------------------
-const nodes = [
-  { name: 'NODEMCU', ip: '192.168.4.1', sta_ip: '192.168.15.138' },
-];
+import { SensorHistory } from '../../hive_brain/SensorHistory';
+import { SensorNode } from '../../hive_brain/SensorNode';
+import { VercelService } from '../../hive_brain/VercelService';
+import { SensorData } from '../../hive_brain/types';
 
-interface SensorData {
-  device?: string;
-  server_ip?: string;
-  sta_ip?: string;
-  sensor_raw?: number;
-  sensor_db?: number;
-  status?: string;
-  anomaly?: {
-    detected: boolean;
-    message: string;
-    current_value: number;
-  };
-}
+// Instâncias dos objetos orientados a objetos
+const nodes = [
+  new SensorNode('NODEMCU', '192.168.4.1', '192.168.15.138'),
+];
+const sensorHistory = new SensorHistory();
+const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
+const vercelService = new VercelService(VERCEL_URL);
 
 // -------------------------
 // 🔹 Componente SparkBar
@@ -53,14 +44,10 @@ const SparkBar: React.FC<SparkBarProps> = ({
 }) => {
   const n = Math.max(data.length, 1);
   const barGap = 2;
-  // Calculate initial barWidth
   let barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
-  // Ensure bars and gaps fit within the container
   let totalBarsAndGaps = n * barWidth + (n - 1) * barGap;
   if (totalBarsAndGaps > width) {
-    // Recalculate barWidth to fit exactly
     barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
-    // If still overflowing, reduce barGap if possible
     if (n * barWidth + (n - 1) * barGap > width && barGap > 0) {
       const maxBarGap = Math.floor((width - n * barWidth) / (n - 1));
       const adjustedBarGap = Math.max(0, maxBarGap);
@@ -109,49 +96,30 @@ const SparkBar: React.FC<SparkBarProps> = ({
 export default function TelaPrinc() {
   const { width: winWidth } = useWindowDimensions();
   const [node, setNode] = useState<SensorData | null>(null);
-  const [history, setHistory] = useState<{ [key: string]: number[] }>({});
   const [page, setPage] = useState<number>(0);
   const [alert, setAlert] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ index: number; value: number } | null>(null);
   const [vercelData, setVercelData] = useState<any | null>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
+  const [, setHistoryVersion] = useState<number>(0); // Para forçar re-render do histórico
 
-  // Reset tooltip when page changes to prevent stale tooltips
   useEffect(() => {
     setTooltip(null);
   }, [page]);
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
-  const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
 
-  // -------------------------
-  // 🔄 Fetch NodeMCU
-  // -------------------------
+  // Fetch NodeMCU usando classe
   const fetchNodeMCU = React.useCallback(async () => {
     for (const n of nodes) {
-      let data: SensorData | null = null;
-
-      try {
-        const res = await axios.get(`http://${n.sta_ip}/status`, { timeout: 3000 });
-        data = res.data;
-      } catch {}
-
-      if (!data) {
-        try {
-          const res = await axios.get(`http://${n.ip}/status`, { timeout: 3000 });
-          data = res.data;
-        } catch {}
-      }
-
+      const data = await n.fetchStatus();
       if (data) {
         setNode(data);
-        setHistory(prev => {
-          const key = data!.sta_ip || data!.server_ip!;
-          const arr = [...(prev[key] ?? []), data!.sensor_db ?? 0].slice(-60);
-          return { ...prev, [key]: arr };
-        });
+        const key = data.sta_ip || data.server_ip!;
+        sensorHistory.add(key, data.sensor_db ?? 0);
+        setHistoryVersion(v => v + 1);
 
         // Alertas
         if (data.anomaly?.detected) {
@@ -165,42 +133,21 @@ export default function TelaPrinc() {
         }
 
         // Enviar dados para Vercel
-        try {
-          await axios.post(`${VERCEL_URL}/api/sensor`, data, {
-            headers: { 'Content-Type': 'application/json' },
-          });
-        } catch (err) {
-          console.error('Erro ao enviar para Vercel:', err);
-        }
+        await vercelService.sendSensorData(data);
       }
     }
   }, [alertAnim]);
 
-  // -------------------------
-  // 🔄 Fetch Vercel
-  // -------------------------
+  // Fetch Vercel usando classe
   useEffect(() => {
     const fetchVercelData = async () => {
-      try {
-        const res = await fetch(`${VERCEL_URL}/api/sensor?info=sensor`);
-        const text = await res.text();
-        try {
-          setVercelData(JSON.parse(text));
-          setVercelHTML(null);
-        } catch {
-          setVercelHTML(text);
-          setVercelData(null);
-        }
-      } catch (err) {
-        console.error('Erro ao acessar Vercel:', err);
-      }
+      const { data, html } = await vercelService.fetchSensorInfo();
+      setVercelData(data);
+      setVercelHTML(html);
     };
     fetchVercelData();
   }, []);
 
-  // -------------------------
-  // 🔄 Intervalo NodeMCU
-  // -------------------------
   useEffect(() => {
     let mounted = true;
     fetchNodeMCU();
@@ -216,16 +163,13 @@ export default function TelaPrinc() {
     };
   }, [fetchNodeMCU]);
 
-  // -------------------------
-  // 🔹 Paginação
-  // -------------------------
   const PAGE_COUNT = 4;
   const nextPage = () => setPage(prev => (prev + 1) % PAGE_COUNT);
   const prevPage = () => setPage(prev => (prev - 1 + PAGE_COUNT) % PAGE_COUNT);
 
-  // -------------------------
-  // 🔹 Render
-  // -------------------------
+  // Render
+  const history = sensorHistory.getAll();
+
   return (
     <ScrollView
       contentContainerStyle={styles.container}
