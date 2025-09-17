@@ -1,5 +1,5 @@
-import ApiResponse from "./apiResponse.js";
-import ProjectInfo from "./projectInfo.js";
+import ProjectInfo from "../project/projectInfo.js";
+import ApiResponse from "../response/apiResponse.js";
 
 class IndexApiHandler {
   static logRequest(req) {

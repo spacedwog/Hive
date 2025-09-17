@@ -1,5 +1,5 @@
 import os from "os";
-import ApiResponse from "./apiResponse.js";
+import ApiResponse from "../response/apiResponse.js";
 
 class ProjectInfo {
   static get() {
