@@ -10,9 +10,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Node } from '../../hive_brain/Node';
-import { NodeManager } from '../../hive_brain/NodeManager';
-import { NodeStatus } from '../../hive_brain/NodeStatus';
+import { Node } from '../../hive_brain/hive_finder/Node';
+import { NodeManager } from '../../hive_brain/hive_finder/NodeManager';
+import { NodeStatus } from '../../hive_brain/hive_finder/NodeStatus';
 
 const nodeList = [
   new Node('NODEMCU', '192.168.4.1', '192.168.15.138'),
