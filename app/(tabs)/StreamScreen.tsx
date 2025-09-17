@@ -27,7 +27,7 @@ export default function StreamScreen() {
   useEffect(() => {
     const interval = setInterval(() => {
       setFrameUrl(`${status.ip}/stream?${Date.now()}`);
-    }, 200);
+    }, 2000);
     return () => clearInterval(interval);
   }, [status.ip]);
 
