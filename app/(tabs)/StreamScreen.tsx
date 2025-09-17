@@ -2,22 +2,21 @@ import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
+import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service";
+import VercelService from "../../hive_brain/hive_stream/VercelService";
 
 export default function StreamScreen() {
-  const [status, setStatus] = useState<StatusResponse>({
-    led_builtin: "off",
-    led_opposite: "on",
-    ip: SOFTAP_IP,
-  });
+  const [esp32Service] = useState(() => new Esp32Service());
+  const [vercelService] = useState(() => new VercelService());
+  const [status, setStatus] = useState<Esp32Status>({ ...esp32Service.status });
+  const [mode, setMode] = useState<"Soft-AP" | "STA">(esp32Service.mode);
   const [vercelData, setVercelData] = useState<any>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [page, setPage] = useState<"camera" | "vercel">("camera");
-  const [mode, setMode] = useState<"Soft-AP" | "STA">("Soft-AP");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
   const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
 
-  // Solicita permissão para câmera
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
@@ -25,7 +24,6 @@ export default function StreamScreen() {
     })();
   }, []);
 
-  // Atualiza frame MJPEG do ESP32
   useEffect(() => {
     const interval = setInterval(() => {
       setFrameUrl(`${status.ip}/stream?${Date.now()}`);
@@ -33,63 +31,42 @@ export default function StreamScreen() {
     return () => clearInterval(interval);
   }, [status.ip]);
 
-  // Busca dados do Vercel
   const fetchVercelData = async () => {
-    try {
-      const response = await fetch(`${VERCEL_URL}/api/status?info=server`);
-      const text = await response.text();
-      try {
-        const json = JSON.parse(text);
-        setVercelData(json);
-        setVercelHTML(null);
-      } catch {
-        setVercelHTML(text);
-        setVercelData(null);
-      }
-    } catch (err) {
-      console.error("Erro ao acessar Vercel:", err);
-    }
+    const { data, html } = await vercelService.fetchData();
+    setVercelData(data);
+    setVercelHTML(html);
   };
 
   useEffect(() => {
     fetchVercelData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Alterna LED do ESP32
   const toggleLed = async () => {
     try {
-      const newState = status.led_builtin === "on" ? "L" : "H";
-      await fetch(`${status.ip}/${newState}`);
-      setStatus({
-        ...status,
-        led_builtin: status.led_builtin === "on" ? "off" : "on",
-        led_opposite: status.led_opposite === "on" ? "off" : "on",
-      });
+      await esp32Service.toggleLed();
+      setStatus({ ...esp32Service.status });
     } catch (error) {
       console.error("Erro ao acessar ESP32:", error);
     }
   };
 
-  // Alterna entre Soft-AP e STA
   const switchMode = () => {
-    const newMode = mode === "Soft-AP" ? "STA" : "Soft-AP";
-    const newIP = newMode === "Soft-AP" ? SOFTAP_IP : STA_IP;
-    setMode(newMode);
-    setStatus((prev) => ({ ...prev, ip: newIP }));
+    esp32Service.switchMode();
+    setMode(esp32Service.mode);
+    setStatus({ ...esp32Service.status });
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
 
-      {/* Botões de paginação */}
       <View style={styles.pageButtons}>
         <Button title="📱 Câmera" onPress={() => setPage("camera")} />
         <Button title="🌐 Vercel" onPress={() => { fetchVercelData(); setPage("vercel"); }} />
       </View>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
-        {/* Página Câmera */}
         {page === "camera" && (
           <>
             <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
@@ -138,7 +115,6 @@ export default function StreamScreen() {
           </>
         )}
 
-        {/* Página Vercel */}
         {page === "vercel" && (
           <>
             <Text style={[styles.text, { marginTop: 20 }]}>🌐 Dados do Vercel:</Text>
