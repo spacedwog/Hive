@@ -17,8 +17,8 @@ import {
 } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
 
-import { FALLBACK_LAT, FALLBACK_LON, MAX_POINTS, NodeStatus } from "../../hive_brain/EspManager";
-import { GithubEmailManager, GithubOrg, GithubUser } from "../../hive_brain/GithubManager";
+import { FALLBACK_LAT, FALLBACK_LON, MAX_POINTS, NodeStatus } from "../../hive_brain/hive_prime/EspManager";
+import { GithubEmailManager, GithubOrg, GithubUser } from "../../hive_brain/hive_prime/GithubManager";
 
 // ==================================
 // Componente gráfico de barras
