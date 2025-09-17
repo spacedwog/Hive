@@ -4,123 +4,126 @@
 
 import os from "os";
 
-// --- Funções utilitárias ---
-function logRequest(req) {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-}
+class ApiResponse {
+  static success(message, data = {}) {
+    return {
+      success: true,
+      message: message,
+      data: data,
+      timestamp: Date.now()
+    };
+  }
 
-function successResponse(message, data = {}) {
-  return {
-    success: true,
-    message: message,
-    data: data,
-    timestamp: Date.now()
-  };
-}
-
-function errorResponse(code, error, details = null) {
-  return {
-    success: false,
-    error: {
-      code: code,
-      message: error,
-      details: details
-    },
-    timestamp: Date.now()
-  };
-}
-
-// --- Informações do projeto HIVE ---
-function getProjectInfo() {
-  const now = new Date();
-  const formattedDate = `${String(now.getDate()).padStart(2, "0")}/${String(
-    now.getMonth() + 1
-  ).padStart(2, "0")}/${now.getFullYear()} ${String(now.getHours()).padStart(
-    2,
-    "0"
-  )}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(
-    2,
-    "0"
-  )}`;
-
-  return successResponse("Informações do projeto HIVE", {
-    projectName: "HIVE",
-    description:
-      "HIVE é um projeto de monitoramento e controle de dispositivos IoT, " +
-      "integrando ESP32, NodeMCU e sistemas web para visualização de status, controle de LEDs, câmeras e dados em tempo real.",
-    functionalities: [
-      "Controle de LEDs e periféricos do ESP32",
-      "Visualização de câmera MJPEG e nativa",
-      "Integração com Vercel e APIs REST",
-      "Monitoramento de status do dispositivo e memória",
-      "Compatível com modo Soft-AP e STA"
-    ],
-    contact: {
-      author: "Felipe Santos",
-      email: "felipersantos1988@gmail.com",
-      github: "https://github.com/spacedwog"
-    },
-    currentTime: formattedDate,
-    server: {
-      platform: os.platform(),
-      cpuModel: os.cpus()[0].model,
-      memoryMB: {
-        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-        total: Math.round(os.totalmem() / 1024 / 1024),
-        free: Math.round(os.freemem() / 1024 / 1024)
+  static error(code, error, details = null) {
+    return {
+      success: false,
+      error: {
+        code: code,
+        message: error,
+        details: details
       },
-      uptimeSeconds: Math.floor(process.uptime())
-    }
-  });
+      timestamp: Date.now()
+    };
+  }
 }
 
-// --- Handler principal ---
-export default function handler(req, res) {
-  logRequest(req);
+class ProjectInfo {
+  static getInfo() {
+    const now = new Date();
+    const formattedDate = `${String(now.getDate()).padStart(2, "0")}/${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}/${now.getFullYear()} ${String(now.getHours()).padStart(
+      2,
+      "0"
+    )}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(
+      2,
+      "0"
+    )}`;
 
-  // Força JSON sempre
-  res.setHeader("Content-Type", "application/json");
+    return ApiResponse.success("Informações do projeto HIVE", {
+      projectName: "HIVE",
+      description:
+        "HIVE é um projeto de monitoramento e controle de dispositivos IoT, " +
+        "integrando ESP32, NodeMCU e sistemas web para visualização de status, controle de LEDs, câmeras e dados em tempo real.",
+      functionalities: [
+        "Controle de LEDs e periféricos do ESP32",
+        "Visualização de câmera MJPEG e nativa",
+        "Integração com Vercel e APIs REST",
+        "Monitoramento de status do dispositivo e memória",
+        "Compatível com modo Soft-AP e STA"
+      ],
+      contact: {
+        author: "Felipe Santos",
+        email: "felipersantos1988@gmail.com",
+        github: "https://github.com/spacedwog"
+      },
+      currentTime: formattedDate,
+      server: {
+        platform: os.platform(),
+        cpuModel: os.cpus()[0].model,
+        memoryMB: {
+          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+          total: Math.round(os.totalmem() / 1024 / 1024),
+          free: Math.round(os.freemem() / 1024 / 1024)
+        },
+        uptimeSeconds: Math.floor(process.uptime())
+      }
+    });
+  }
+}
 
-  try {
-    // --- Verifica método ---
-    if (req.method !== "GET") {
+class HiveApiHandler {
+  static logRequest(req) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  }
+
+  static handle(req, res) {
+    HiveApiHandler.logRequest(req);
+
+    res.setHeader("Content-Type", "application/json");
+
+    try {
+      if (req.method !== "GET") {
+        return res
+          .status(405)
+          .json(
+            ApiResponse.error(
+              "METHOD_NOT_ALLOWED",
+              "Método não permitido. Use GET."
+            )
+          );
+      }
+
+      const info = req.query.info || "project";
+
+      if (info === "project") {
+        return res.status(200).json(ProjectInfo.getInfo());
+      }
+
       return res
-        .status(405)
+        .status(400)
         .json(
-          errorResponse(
-            "METHOD_NOT_ALLOWED",
-            "Método não permitido. Use GET."
+          ApiResponse.error(
+            "INVALID_PARAM",
+            `Valor inválido para 'info': ${info}`,
+            { acceptedValues: ["project"] }
+          )
+        );
+    } catch (err) {
+      console.error("Erro interno:", err);
+      return res
+        .status(500)
+        .json(
+          ApiResponse.error(
+            "INTERNAL_ERROR",
+            "Erro interno no servidor.",
+            { message: err.message, stack: err.stack }
           )
         );
     }
-
-    // --- Parâmetro "info" ---
-    const info = req.query.info || "project"; // padrão project se não informado
-
-    if (info === "project") {
-      return res.status(200).json(getProjectInfo());
-    }
-
-    // Valor inválido
-    return res
-      .status(400)
-      .json(
-        errorResponse(
-          "INVALID_PARAM",
-          `Valor inválido para 'info': ${info}`,
-          { acceptedValues: ["project"] }
-        )
-      );
-  } catch (err) {
-    console.error("Erro interno:", err);
-    return res
-      .status(500)
-      .json(
-        errorResponse(
-          "INTERNAL_ERROR",
-          "Erro interno no servidor.",
-          { message: err.message, stack: err.stack }
-        )
-      );
   }
+}
+
+export default function handler(req, res) {
+  HiveApiHandler.handle(req, res);
 }
