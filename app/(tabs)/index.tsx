@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { SensorHistory } from '../../hive_brain/SensorHistory';
-import { SensorNode } from '../../hive_brain/SensorNode';
+import { SensorHistory } from '../../hive_brain/hive_one/SensorHistory';
+import { SensorNode } from '../../hive_brain/hive_one/SensorNode';
 import { VercelService } from '../../hive_brain/hive_one/VercelService';
-import { SensorData } from '../../hive_brain/types';
+import { SensorData } from '../../hive_brain/hive_one/types';
 
 // Instâncias dos objetos orientados a objetos
 const nodes = [
