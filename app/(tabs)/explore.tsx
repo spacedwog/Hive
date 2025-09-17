@@ -133,7 +133,10 @@ export default function ExploreScreen() {
           nodeManager.nodes.map((node) => {
             const s = status[node.name];
             const sensorHistory = history[node.name] || [];
-            const maxValue = Math.max(...sensorHistory, 1);
+            const maxValue =
+              sensorHistory.length > 0
+                ? Math.max(...sensorHistory)
+                : 0; // or undefined/null, depending on your chart's requirements
 
             return (
               <View key={node.name} style={styles.nodeCard}>
