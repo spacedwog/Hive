@@ -34,7 +34,6 @@ type NodeStatus = {
   mesh?: boolean;
   timestamp?: number;
   error?: string;
-  wifi_ssid?: string; // <-- Adiciona campo para o SSID do Wi-Fi conectado
 };
 
 export default function ExploreScreen() {
@@ -81,42 +80,38 @@ export default function ExploreScreen() {
     }
     const newStatus: Record<string, NodeStatus> = {};
 
-    await Promise.all(
-      nodes.map(async (node) => {
-        let status: NodeStatus | undefined;
-        // Tenta STA primeiro
+    for (let node of nodes) {
+      let fetched = false;
+
+      // Tenta STA primeiro
+      try {
+        const res = await axios.get(`http://${node.sta_ip}/status`, { timeout: 3000 });
+        newStatus[node.name] = res.data;
+        fetched = true;
+      } catch {}
+
+      // Se STA falhar, tenta SoftAP
+      if (!fetched) {
         try {
-          const res = await axios.get(`http://${node.sta_ip}/status`, { timeout: 3000 });
-          status = res.data;
-        } catch {}
-
-        // Se STA falhar, tenta SoftAP
-        if (!status) {
-          try {
-            const res = await axios.get(`http://${node.ip}/status`, { timeout: 3000 });
-            status = res.data;
-          } catch {
-            status = { error: 'Offline ou inacessível' };
-          }
+          const res = await axios.get(`http://${node.ip}/status`, { timeout: 3000 });
+          newStatus[node.name] = res.data;
+        } catch {
+          newStatus[node.name] = { error: 'Offline ou inacessível' };
         }
+      }
 
-        newStatus[node.name] = status ?? { error: 'Offline ou inacessível' };
-
-        // Atualiza histórico de sensor de som
-        if (status?.sensor_db !== undefined) {
-          setHistory((prev) => {
-            const prevData = prev[node.name] || [];
-            const newData = [...prevData, status!.sensor_db].filter(
-              (v): v is number => v !== undefined
-            ).slice(-30);
-            return { ...prev, [node.name]: newData };
-          });
-        }
-      })
-    );
-if (showLoader) {
-      setLoading(false);
+      // Atualiza histórico de sensor de som
+      if (newStatus[node.name]?.sensor_db !== undefined) {
+        setHistory((prev) => {
+          const prevData = prev[node.name] || [];
+          const newData = [...prevData, newStatus[node.name].sensor_db].filter(
+            (v): v is number => v !== undefined
+          ).slice(-30);
+          return { ...prev, [node.name]: newData };
+        });
+      }
     }
+
     setStatus(newStatus);
     if (showLoader) {
       setLoading(false);
@@ -130,50 +125,23 @@ if (showLoader) {
   // ⚡ Enviar comando para NodeMCU
   // -------------------------
   const sendCommand = async (node: string, action: string) => {
-    // Tenta STA primeiro, se falhar tenta AP
-    let ip = nodes.find(n => n.name === node)?.sta_ip;
-    let triedSta = false;
-    let success = false;
-
-    if (ip) {
-      try {
-        const res = await axios.post(`http://${ip}/command`, { action }, { timeout: 3000 });
-        let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
-
-        if (action === 'ping' && res.data?.timestamp !== undefined) {
-          msg += ` Timestamp: ${res.data.timestamp} ms`;
-        }
-
-        Alert.alert('✅ Sucesso', msg);
-        fetchStatus();
-        success = true;
-      } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        triedSta = true;
-      }
+    const ip = nodes.find(n => n.name === node)?.sta_ip || nodes.find(n => n.name === node)?.ip;
+    if (!ip) {
+      return;
     }
 
-    // Se STA falhar, tenta AP
-    if (!success) {
-      ip = nodes.find(n => n.name === node)?.ip;
-      if (!ip) {
-        return;
-      }
-      try {
-        const res = await axios.post(`http://${ip}/command`, { action }, { timeout: 3000 });
-        let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
+    try {
+      const res = await axios.post(`http://${ip}/command`, { action }, { timeout: 3000 });
+      let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
 
-        if (action === 'ping' && res.data?.timestamp !== undefined) {
-          msg += ` Timestamp: ${res.data.timestamp} ms`;
-        }
-
-        Alert.alert('✅ Sucesso', msg);
-        fetchStatus();
-        success = true;
-      } catch {
-        // Se falhar em ambos, mostra erro
-        Alert.alert('❌ Erro', `Falha ao enviar comando "${action}" para ${node}.`);
+      if (action === 'ping' && res.data?.timestamp !== undefined) {
+        msg += ` Timestamp: ${res.data.timestamp} ms`;
       }
+
+      Alert.alert('✅ Sucesso', msg);
+      fetchStatus();
+    } catch {
+      Alert.alert('❌ Erro', `Falha ao enviar comando "${action}" para ${node}.`);
     }
   };
 
@@ -244,10 +212,6 @@ if (showLoader) {
                       <Text style={styles.subTitle}>📊 Status</Text>
                       <Text style={styles.statusText}>🖥️ Aparelho: {s.device}</Text>
                       <Text style={styles.statusText}>🗄️ Servidor: {s.server_ip}</Text>
-                      {/* Mostra o Wi-Fi conectado, se disponível */}
-                      {s.wifi_ssid && (
-                        <Text style={styles.statusText}>📶 Wi-Fi: {s.wifi_ssid}</Text>
-                      )}
                       <Text style={styles.statusText}>✅ Estado: {s.status}</Text>
                       <Text style={styles.statusText}>🔊 Sensor de som: {s.sensor_db?.toFixed(1)}</Text>
                       <Text style={styles.statusText}>🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}</Text>
@@ -274,9 +238,7 @@ if (showLoader) {
                         ) : (
                           sensorHistory.map((val, idx) => {
                             const isAnomalyBar = !!(s?.anomaly?.detected && val === s.anomaly?.current_value);
-                            // Use a bright red color for anomaly bars to ensure visibility on all backgrounds
-                            const anomalyBarColor = '#FF3B30';
-                            const barColor = isAnomalyBar ? anomalyBarColor : getBarColor(val, false);
+                            const barColor = isAnomalyBar ? '#000000' : getBarColor(val, false);
                             const height = (val / maxValue) * 100;
                             return (
                               <View key={idx} style={[styles.bar, { height: `${height}%`, backgroundColor: barColor }]} />
