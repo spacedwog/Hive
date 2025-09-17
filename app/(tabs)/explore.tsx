@@ -1,4 +1,3 @@
-import axios from 'axios';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,30 +10,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Node } from '../../hive_brain/Node';
+import { NodeManager } from '../../hive_brain/NodeManager';
+import { NodeStatus } from '../../hive_brain/NodeStatus';
 
-// -------------------------
-// 📡 Mapa de IPs dos dispositivos conectados
-// -------------------------
-const nodes = [
-  { name: 'NODEMCU', ip: '192.168.4.1', sta_ip: '192.168.15.138' }, // SoftAP + STA
+const nodeList = [
+  new Node('NODEMCU', '192.168.4.1', '192.168.15.138'),
 ];
-
-type NodeStatus = {
-  device?: string;
-  server_ip?: string;
-  status?: string;
-  sensor_db?: number;
-  anomaly?: {
-    detected: boolean;
-    message: string;
-    expected_range?: string;
-    current_value?: number;
-    timestamp_ms?: number;
-  };
-  mesh?: boolean;
-  timestamp?: number;
-  error?: string;
-};
+const nodeManager = new NodeManager(nodeList);
 
 export default function ExploreScreen() {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
@@ -43,20 +26,17 @@ export default function ExploreScreen() {
   const [customCommands, setCustomCommands] = useState<Record<string, string>>({});
   const [history, setHistory] = useState<Record<string, number[]>>({});
 
-  // -------------------------
-  // 🔹 Função para calcular cor do gráfico
-  // -------------------------
+  // Função para calcular cor do gráfico
   const getBarColor = (value: number, anomaly: boolean) => {
     if (anomaly) {
       return '#ef4444';
-    } // vermelho para anomalia
+    }
     if (value <= 30) {
       return '#22c55e';
-    } // verde
+    }
     if (value >= 55) {
       return '#ef4444';
-    } // vermelho
-
+    }
     const ratio = (value - 30) / (55 - 30);
     if (ratio < 0.5) {
       const r = Math.round(34 + (250 - 34) * (ratio * 2));
@@ -71,46 +51,24 @@ export default function ExploreScreen() {
     }
   };
 
-  // -------------------------
-  // 🔄 Buscar status do NodeMCU (STA -> SoftAP)
-  // -------------------------
+  // Buscar status de todos os nodes
   const fetchStatus = useCallback(async (showLoader = false) => {
     if (showLoader) {
       setLoading(true);
     }
-    const newStatus: Record<string, NodeStatus> = {};
+    const newStatus = await nodeManager.fetchAllStatus();
 
-    for (let node of nodes) {
-      let fetched = false;
-
-      // Tenta STA primeiro
-      try {
-        const res = await axios.get(`http://${node.sta_ip}/status`, { timeout: 3000 });
-        newStatus[node.name] = res.data;
-        fetched = true;
-      } catch {}
-
-      // Se STA falhar, tenta SoftAP
-      if (!fetched) {
-        try {
-          const res = await axios.get(`http://${node.ip}/status`, { timeout: 3000 });
-          newStatus[node.name] = res.data;
-        } catch {
-          newStatus[node.name] = { error: 'Offline ou inacessível' };
-        }
-      }
-
-      // Atualiza histórico de sensor de som
-      if (newStatus[node.name]?.sensor_db !== undefined) {
+    Object.entries(newStatus).forEach(([nodeName, s]) => {
+      if (s?.sensor_db !== undefined) {
         setHistory((prev) => {
-          const prevData = prev[node.name] || [];
-          const newData = [...prevData, newStatus[node.name].sensor_db].filter(
+          const prevData = prev[nodeName] || [];
+          const newData = [...prevData, s.sensor_db].filter(
             (v): v is number => v !== undefined
           ).slice(-30);
-          return { ...prev, [node.name]: newData };
+          return { ...prev, [nodeName]: newData };
         });
       }
-    }
+    });
 
     setStatus(newStatus);
     if (showLoader) {
@@ -121,42 +79,32 @@ export default function ExploreScreen() {
     }
   }, [refreshing]);
 
-  // -------------------------
-  // ⚡ Enviar comando para NodeMCU
-  // -------------------------
-  const sendCommand = async (node: string, action: string) => {
-    const ip = nodes.find(n => n.name === node)?.sta_ip || nodes.find(n => n.name === node)?.ip;
-    if (!ip) {
+  // Enviar comando para um node
+  const sendCommand = async (nodeName: string, action: string) => {
+    const node = nodeManager.getNodeByName(nodeName);
+    if (!node) {
       return;
     }
-
     try {
-      const res = await axios.post(`http://${ip}/command`, { action }, { timeout: 3000 });
-      let msg = `Comando "${action}" enviado com sucesso para ${node}.`;
-
-      if (action === 'ping' && res.data?.timestamp !== undefined) {
-        msg += ` Timestamp: ${res.data.timestamp} ms`;
+      const res = await node.sendCommand(action);
+      let msg = `Comando "${action}" enviado com sucesso para ${nodeName}.`;
+      if (action === 'ping' && res?.timestamp !== undefined) {
+        msg += ` Timestamp: ${res.timestamp} ms`;
       }
-
       Alert.alert('✅ Sucesso', msg);
       fetchStatus();
-    } catch {
-      Alert.alert('❌ Erro', `Falha ao enviar comando "${action}" para ${node}.`);
+    } catch (e: any) {
+      Alert.alert('❌ Erro', e.message);
     }
   };
 
-  // -------------------------
-  // ⏱ Inicializa e atualiza automaticamente
-  // -------------------------
+  // Inicializa e atualiza automaticamente
   useEffect(() => {
     fetchStatus(true);
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  // -------------------------
-  // 🔹 Render
-  // -------------------------
   return (
     <View style={styles.wrapper}>
       <ScrollView
@@ -182,7 +130,7 @@ export default function ExploreScreen() {
         {loading ? (
           <ActivityIndicator size="large" color="#facc15" style={{ marginTop: 20 }} />
         ) : (
-          nodes.map((node) => {
+          nodeManager.nodes.map((node) => {
             const s = status[node.name];
             const sensorHistory = history[node.name] || [];
             const maxValue = Math.max(...sensorHistory, 1);
@@ -288,9 +236,6 @@ export default function ExploreScreen() {
   );
 }
 
-// -------------------------
-// 📐 Estilos
-// -------------------------
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: '#0f172a' },
   container: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 16 },
