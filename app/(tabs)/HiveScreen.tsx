@@ -56,8 +56,11 @@ class GithubEmailManager {
     const url = `mailto:${user.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     Linking.canOpenURL(url)
       .then(supported => {
-        if (!supported) console.warn("Não foi possível abrir o app de e-mail.");
-        else return Linking.openURL(url);
+        if (!supported) {
+          console.warn("Não foi possível abrir o app de e-mail.");
+        } else {
+          return Linking.openURL(url);
+        }
       })
       .catch(err => console.error("Erro ao abrir o app de e-mail:", err));
   }
@@ -211,7 +214,9 @@ export default function HiveScreen() {
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") return;
+        if (status !== "granted") {
+          return;
+        }
         const location = await Location.getCurrentPositionAsync({});
         setUserLocation({ latitude: location.coords.latitude, longitude: location.coords.longitude });
       } catch (err) {
@@ -286,9 +291,13 @@ export default function HiveScreen() {
           const prevArr = next[key] ?? [];
           if (typeof s.analog_percent === "number") {
             const newArr = [...prevArr, s.analog_percent];
-            if (newArr.length > MAX_POINTS) newArr.splice(0, newArr.length - MAX_POINTS);
+            if (newArr.length > MAX_POINTS) {
+              newArr.splice(0, newArr.length - MAX_POINTS);
+            }
             next[key] = newArr;
-          } else if (!next[key]) next[key] = [];
+          } else if (!next[key]) {
+                   next[key] = [];
+                 }
         });
         return next;
       });

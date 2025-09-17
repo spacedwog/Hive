@@ -47,9 +47,15 @@ export default function ExploreScreen() {
   // 🔹 Função para calcular cor do gráfico
   // -------------------------
   const getBarColor = (value: number, anomaly: boolean) => {
-    if (anomaly) return '#ef4444'; // vermelho para anomalia
-    if (value <= 30) return '#22c55e'; // verde
-    if (value >= 55) return '#ef4444'; // vermelho
+    if (anomaly) {
+      return '#ef4444';
+    } // vermelho para anomalia
+    if (value <= 30) {
+      return '#22c55e';
+    } // verde
+    if (value >= 55) {
+      return '#ef4444';
+    } // vermelho
 
     const ratio = (value - 30) / (55 - 30);
     if (ratio < 0.5) {
@@ -69,7 +75,9 @@ export default function ExploreScreen() {
   // 🔄 Buscar status do NodeMCU (STA -> SoftAP)
   // -------------------------
   const fetchStatus = useCallback(async (showLoader = false) => {
-    if (showLoader) setLoading(true);
+    if (showLoader) {
+      setLoading(true);
+    }
     const newStatus: Record<string, NodeStatus> = {};
 
     for (let node of nodes) {
@@ -103,10 +111,16 @@ export default function ExploreScreen() {
         });
       }
     }
-
+if (showLoader) {
+      setLoading(false);
+    }
     setStatus(newStatus);
-    if (showLoader) setLoading(false);
-    if (refreshing) setRefreshing(false);
+    if (showLoader) {
+      setLoading(false);
+    }
+    if (refreshing) {
+      setRefreshing(false);
+    }
   }, [refreshing]);
 
   // -------------------------
@@ -114,7 +128,9 @@ export default function ExploreScreen() {
   // -------------------------
   const sendCommand = async (node: string, action: string) => {
     const ip = nodes.find(n => n.name === node)?.sta_ip || nodes.find(n => n.name === node)?.ip;
-    if (!ip) return;
+    if (!ip) {
+      return;
+    }
 
     try {
       const res = await axios.post(`http://${ip}/command`, { action }, { timeout: 3000 });
