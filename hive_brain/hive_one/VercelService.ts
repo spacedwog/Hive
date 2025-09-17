@@ -20,7 +20,7 @@ export class VercelService {
 
   async fetchSensorInfo(): Promise<{ data: any | null; html: string | null }> {
     try {
-      const res = await fetch(`${this.url}/api/sensor?info=sensor`);
+      const res = await fetch(`${this.url}/api/sensor_dth22?info=sensor`);
       const text = await res.text();
       try {
         return { data: JSON.parse(text), html: null };
