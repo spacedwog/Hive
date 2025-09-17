@@ -213,18 +213,18 @@ export default function HiveScreen() {
 
       setStatus(responses);
 
-      // Enviar dados de temperatura para a API sensor.js (Vercel)
+      // Enviar dados de temperatura para a API sensor_dth22.js (Vercel)
       responses.forEach(async (s) => {
         if (typeof s.temperatura_C === "number") {
           try {
-            await axios.post(`${VERCEL_URL}/api/sensor`, {
+            await axios.post(`${VERCEL_URL}/api/sensor_dth22`, {
               server: s.server,
               temperatura_C: s.temperatura_C,
               umidade_pct: s.umidade_pct,
               timestamp: new Date().toISOString(),
             });
           } catch (err) {
-            console.error("Erro ao enviar temperatura para sensor.js (Vercel):", err);
+            console.error("Erro ao enviar temperatura para sensor_dth22.js (Vercel):", err);
           }
         }
       });
