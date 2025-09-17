@@ -24,7 +24,9 @@ export default function TelaPrinc() {
   const [node] = useState<SensorData | null>(null);const [alert] = useState<string | null>(null);
   const [vercelData, setVercelData] = useState<any | null>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
+  const [vercelXML, setVercelXML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
+  const [displayMode, setDisplayMode] = useState<'json' | 'html' | 'xml'>('json');
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
 
@@ -34,6 +36,17 @@ export default function TelaPrinc() {
       const { data, html } = await vercelService.fetchSensorInfo();
       setVercelData(data);
       setVercelHTML(html);
+
+      // Buscar XML da API do Vercel
+      try {
+        const xml = await vercelService.fetchSensorInfoXML?.();
+        if (xml) {
+          setVercelXML(xml);
+        }
+      } catch (e) {
+        setVercelXML(null);
+        console.error('Erro ao buscar XML:', e);
+      }
     };
     fetchVercelData();
     const interval = setInterval(fetchVercelData, 2000);
@@ -52,6 +65,12 @@ export default function TelaPrinc() {
       <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
         {/* Apenas Card 0 */}
         <View>
+          {/* Botões para alternar entre JSON, HTML e XML */}
+          <View style={{ flexDirection: 'row', marginBottom: 12, gap: 8 }}>
+            <Text style={[styles.pageBtn, { backgroundColor: displayMode === 'json' ? '#facc15' : '#50fa7b' }]} onPress={() => setDisplayMode('json')}>JSON</Text>
+            <Text style={[styles.pageBtn, { backgroundColor: displayMode === 'html' ? '#facc15' : '#50fa7b' }]} onPress={() => setDisplayMode('html')}>HTML</Text>
+            <Text style={[styles.pageBtn, { backgroundColor: displayMode === 'xml' ? '#facc15' : '#50fa7b' }]} onPress={() => setDisplayMode('xml')}>XML</Text>
+          </View>
           {node ? (
             <>
               <Text style={styles.description}>🖥 Dispositivo: {node.device ?? '--'}</Text>
@@ -76,9 +95,9 @@ export default function TelaPrinc() {
               )}
               <Text style={styles.description}>🔌 Status: {node.status ?? '--'}</Text>
             </>
-          ) : vercelData ? (
+          ) : displayMode === 'json' && vercelData ? (
             <Text style={styles.description}>{JSON.stringify(vercelData, null, 2)}</Text>
-          ) : vercelHTML ? (
+          ) : displayMode === 'html' && vercelHTML ? (
             <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
               <WebView
                 key={webviewKey}
@@ -87,6 +106,10 @@ export default function TelaPrinc() {
                 originWhitelist={['*']}
               />
             </View>
+          ) : displayMode === 'xml' && vercelXML ? (
+            <ScrollView style={{ maxHeight: 400, backgroundColor: '#222', borderRadius: 8, padding: 8 }}>
+              <Text style={{ color: '#fff', fontFamily: 'monospace', fontSize: 13 }}>{vercelXML}</Text>
+            </ScrollView>
           ) : (
             <Text style={styles.description}>Conecte-se ao NodeMCU ou aguarde dados da Vercel...</Text>
           )}

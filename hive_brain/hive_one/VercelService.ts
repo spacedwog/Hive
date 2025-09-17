@@ -32,4 +32,20 @@ export class VercelService {
       return { data: null, html: null };
     }
   }
+/**
+   * Busca os dados do sensor em formato XML da API do Vercel.
+   * Retorna uma string XML ou null em caso de erro.
+   */
+  async fetchSensorInfoXML(): Promise<string | null> {
+    try {
+      const res = await fetch(`${this.url}/api/sensor_dth22?info=sensor&format=xml`);
+      if (!res.ok) {
+        throw new Error('Resposta não OK');
+      }
+      return await res.text();
+    } catch (err) {
+      console.error('Erro ao acessar Vercel (XML):', err);
+      return null;
+    }
+  }
 }
