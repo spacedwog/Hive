@@ -17,82 +17,8 @@ import {
 } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
 
-// ==================================
-// Tipos e classe GitHub
-// ==================================
-type GithubUser = {
-  login: string;
-  id: number;
-  email?: string | null;
-  html_url: string;
-  avatar_url: string;
-};
-
-type GithubOrg = {
-  login: string;
-  id: number;
-  avatar_url: string;
-  description?: string | null;
-  html_url: string;
-};
-
-class GithubEmailManager {
-  private usersWithEmail: GithubUser[] = [];
-
-  public setUsers(users: GithubUser[]) {
-    this.usersWithEmail = users.filter(u => u.email);
-  }
-
-  public getUsers(): GithubUser[] {
-    return this.usersWithEmail;
-  }
-
-  public sendEmail(userLogin: string, subject: string, body: string) {
-    const user = this.usersWithEmail.find(u => u.login === userLogin);
-    if (!user || !user.email) {
-      console.warn(`Usuário ${userLogin} não possui e-mail disponível.`);
-      return;
-    }
-    const url = `mailto:${user.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    Linking.canOpenURL(url)
-      .then(supported => {
-        if (!supported) {
-          console.warn("Não foi possível abrir o app de e-mail.");
-        } else {
-          return Linking.openURL(url);
-        }
-      })
-      .catch(err => console.error("Erro ao abrir o app de e-mail:", err));
-  }
-}
-
-// ==================================
-// Tipos para servidores e sensores
-// ==================================
-type NodeStatus = {
-  device?: string;
-  server?: string;
-  status?: "ativo" | "parado" | "offline";
-  ultrassonico_m?: number;
-  analog_percent?: number;
-  presenca?: boolean;
-  temperatura_C?: number | null;
-  umidade_pct?: number | null;
-  timestamp?: string;
-  error?: string;
-  latitude?: number;
-  longitude?: number;
-  clients?: any[];
-  anomaly?: {
-    detected: boolean;
-    message: string;
-    current_value: number;
-  };
-};
-
-const MAX_POINTS = 60;
-const FALLBACK_LAT = -23.5505;
-const FALLBACK_LON = -46.6333;
+import { FALLBACK_LAT, FALLBACK_LON, MAX_POINTS, NodeStatus } from "../../hive_brain/EspManager";
+import { GithubEmailManager, GithubOrg, GithubUser } from "../../hive_brain/GithubManager";
 
 // ==================================
 // Componente gráfico de barras
