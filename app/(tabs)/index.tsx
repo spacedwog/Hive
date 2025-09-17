@@ -12,14 +12,10 @@ import {
 import { WebView } from 'react-native-webview';
 
 import { SensorHistory } from '../../hive_brain/hive_one/SensorHistory';
-import { SensorNode } from '../../hive_brain/hive_one/SensorNode';
 import { VercelService } from '../../hive_brain/hive_one/VercelService';
 import { SensorData } from '../../hive_brain/hive_one/types';
 
 // Instâncias dos objetos orientados a objetos
-const nodes = [
-  new SensorNode('NODEMCU', '192.168.4.1', '192.168.15.138'),
-];
 const sensorHistory = new SensorHistory();
 const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
 const vercelService = new VercelService(VERCEL_URL);
@@ -95,14 +91,15 @@ const SparkBar: React.FC<SparkBarProps> = ({
 // -------------------------
 export default function TelaPrinc() {
   const { width: winWidth } = useWindowDimensions();
-  const [node, setNode] = useState<SensorData | null>(null);
+  const [node] = useState<SensorData | null>(null);
   const [page, setPage] = useState<number>(0);
-  const [alert, setAlert] = useState<string | null>(null);
+  const [alert] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ index: number; value: number } | null>(null);
   const [vercelData, setVercelData] = useState<any | null>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
-  const [, setHistoryVersion] = useState<number>(0); // Para forçar re-render do histórico
+  // eslint-disable-next-line no-empty-pattern
+  const [] = useState<number>(0); // Para forçar re-render do histórico
 
   useEffect(() => {
     setTooltip(null);
@@ -111,34 +108,7 @@ export default function TelaPrinc() {
   const alertAnim = useMemo(() => new Animated.Value(0), []);
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
 
-  // Fetch NodeMCU usando classe
-  const fetchNodeMCU = React.useCallback(async () => {
-    for (const n of nodes) {
-      const data = await n.fetchStatus();
-      if (data) {
-        setNode(data);
-        const key = data.sta_ip || data.server_ip!;
-        sensorHistory.add(key, data.sensor_db ?? 0);
-        setHistoryVersion(v => v + 1);
-
-        // Alertas
-        if (data.anomaly?.detected) {
-          setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value?.toFixed(1) ?? '--'})`);
-          Animated.sequence([
-            Animated.timing(alertAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-            Animated.timing(alertAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
-          ]).start();
-        } else {
-          setAlert(null);
-        }
-
-        // Enviar dados para Vercel
-        await vercelService.sendSensorData(data);
-      }
-    }
-  }, [alertAnim]);
-
-  // Fetch Vercel usando classe
+  // Buscar dados da API sensor do Vercel apenas
   useEffect(() => {
     const fetchVercelData = async () => {
       const { data, html } = await vercelService.fetchSensorInfo();
@@ -146,22 +116,9 @@ export default function TelaPrinc() {
       setVercelHTML(html);
     };
     fetchVercelData();
+    const interval = setInterval(fetchVercelData, 2000);
+    return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    fetchNodeMCU();
-    const interval = setInterval(() => {
-      if (mounted) {
-        fetchNodeMCU();
-      }
-    }, 2000);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [fetchNodeMCU]);
 
   const PAGE_COUNT = 4;
   const nextPage = () => setPage(prev => (prev + 1) % PAGE_COUNT);
