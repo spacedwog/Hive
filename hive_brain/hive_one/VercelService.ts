@@ -10,7 +10,7 @@ export class VercelService {
 
   async sendSensorData(data: SensorData) {
     try {
-      await axios.post(`${this.url}/api/sensor`, data, {
+      await axios.post(`${this.url}/api/sensor_dth22`, data, {
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (err) {
