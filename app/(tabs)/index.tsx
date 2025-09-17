@@ -187,7 +187,9 @@ export default function TelaPrinc() {
     let mounted = true;
     fetchNodeMCU();
     const interval = setInterval(() => {
-      if (mounted) fetchNodeMCU();
+      if (mounted) {
+        fetchNodeMCU();
+      }
     }, 2000);
 
     return () => {
