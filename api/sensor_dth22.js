@@ -17,7 +17,15 @@ class SensorApiHandler {
           return res.status(200).json({
             success: true,
             message: "Dados do sensor de temperatura e umidade:",
-            data: lastSensorData,
+            data: {
+              ip: lastSensorData.server,
+              sensor: lastSensorData.sensor,
+              temperature: lastSensorData.temperatura_C,
+              humidity: lastSensorData.umidade_pct,
+              presenca: lastSensorData.presenca,
+              distancia: lastSensorData.distancia,
+              server: lastSensorData.server,
+            },
             timestamp: lastSensorData.timestamp || Date.now(),
           });
         }
@@ -34,13 +42,16 @@ class SensorApiHandler {
       }
 
       if (req.method === "POST") {
-        const { server, temperatura_C, umidade_pct, timestamp } = req.body || {};
+        const { server, sensor, temperatura_C, umidade_pct, presenca, distancia, timestamp } = req.body || {};
 
         // Salva os dados recebidos em memória
         lastSensorData = {
           server,
+          sensor,
           temperatura_C,
           umidade_pct,
+          presenca,
+          distancia,
           timestamp: timestamp || Date.now(),
         };
 

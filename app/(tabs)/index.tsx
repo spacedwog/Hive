@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Animated,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,50 +21,30 @@ const vespaService = new VespaService(VESPA_URL);
 export default function TelaPrinc() {
   useWindowDimensions();
   const [node, setNode] = useState<SensorData | null>(null);
-  const [alert, setAlert] = useState<string | null>(null);
   const [vespaData, setVespaData] = useState<any | null>(null);
   const [vespaHTML, setVespaHTML] = useState<string | null>(null);
   const [vespaXML, setVespaXML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
   const [displayMode, setDisplayMode] = useState<'json' | 'html' | 'xml'>('json');
-
-  const alertAnim = useMemo(() => new Animated.Value(0), []);
-
   /// Buscar dados da API sensor do Vespa apenas
   useEffect(() => {
     const fetchVespaData = async () => {
+      const { data, html } = await vespaService.fetchSensorInfo();
+      setVespaData(data);
+      setVespaHTML(html);
+
+      // Atualiza node para exibir os mesmos dados que HiveScreen.tsx
+      setNode(data);
+
+      // Buscar XML da API do Vespa
       try {
-        const { data, html } = await vespaService.fetchSensorInfo();
-        setVespaData(data);
-        setVespaHTML(html);
-
-        // Atualiza o node se houver dados válidos
-        // Atualiza o node se houver dados válidos
-        if (data) {
-          // Extrai apenas as informações relevantes da API para o node
-          const nodeData: SensorData = {
-            device: data.device ?? null,
-            server_ip: data.server_ip ?? null,
-            sta_ip: data.sta_ip ?? null,
-            sensor_raw: data.sensor_raw ?? null,
-            sensor_db: data.sensor_db ?? null,
-            anomaly: data.anomaly ?? null,
-            status: data.status ?? null,
-          };
-          setNode(nodeData);
-        }
-
-        // Buscar XML da API do Vespa
-        if (vespaService.fetchSensorInfoXML) {
-          const xml = await vespaService.fetchSensorInfoXML();
-          if (xml) {
-            setVespaXML(xml);
-          }
+        const xml = await vespaService.fetchSensorInfoXML?.();
+        if (xml) {
+          setVespaXML(xml);
         }
       } catch (e) {
         setVespaXML(null);
-        setAlert('Erro ao conectar com a Vespa!');
-        console.error('Erro ao buscar dados da Vespa:', e);
+        console.error('Erro ao buscar XML:', e);
       }
     };
     fetchVespaData();
@@ -94,26 +73,11 @@ export default function TelaPrinc() {
           {node ? (
             <>
               <Text style={styles.description}>🖥 Dispositivo: {node.device ?? '--'}</Text>
-              <Text style={styles.description}>📡 IP AP: {node.server_ip ?? '--'}</Text>
-              <Text style={styles.description}>🌐 IP STA: {node.sta_ip ?? '--'}</Text>
-              <Text style={styles.description}>🔊 Som (raw): {node.sensor_raw ?? '--'}</Text>
-              <Text style={styles.description}>
-                📈 Som (dB): {node.sensor_db?.toFixed(1) ?? '--'}
-              </Text>
-              <Text style={styles.description}>
-                ⚠️ Anomalia: {node.anomaly?.detected ? node.anomaly.message : 'Normal'}
-              </Text>
-              {node.anomaly?.detected && (
-                <Text style={styles.description}>
-                  Valor Atual: {node.anomaly.current_value?.toFixed(1) ?? '--'}
-                </Text>
-              )}
-              {alert && (
-                <Animated.Text style={{ color: '#ff5555', fontWeight: 'bold', marginTop: 8, fontSize: 16, opacity: alertAnim }}>
-                  {alert}
-                </Animated.Text>
-              )}
-              <Text style={styles.description}>🔌 Status: {node.status ?? '--'}</Text>
+              <Text style={styles.description}>📡 IP: {node.server_ip ?? '--'}</Text>r
+              <Text style={styles.description}>🌡️ Temperatura: {node.temperatura ?? '--'}</Text>
+              <Text style={styles.description}>💧 Umidade: {node.umidade ?? '--'}</Text>
+              <Text style={styles.description}>🚪 Presença: {node.presenca ?? '--'}</Text>
+              <Text style={styles.description}>📏 Distância: {node.distancia ?? '--'}</Text>
             </>
           ) : displayMode === 'json' && vespaData ? (
             <Text style={styles.description}>{JSON.stringify(vespaData, null, 2)}</Text>

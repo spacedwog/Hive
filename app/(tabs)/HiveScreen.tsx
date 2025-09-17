@@ -219,8 +219,11 @@ export default function HiveScreen() {
           try {
             await axios.post(`${VERCEL_URL}/api/sensor_dth22`, {
               server: s.server,
+              sensor: s.analog_percent !== undefined ? `Analog-${s.analog_percent.toFixed(1)}` : "Unknown",
               temperatura_C: s.temperatura_C,
               umidade_pct: s.umidade_pct,
+              presenca: s.presenca,
+              distancia: s.ultrassonico_m,
               timestamp: new Date().toISOString(),
             });
           } catch (err) {
