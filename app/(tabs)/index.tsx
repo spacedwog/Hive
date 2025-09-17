@@ -21,7 +21,8 @@ const vespaService = new VespaService(VESPA_URL);
 // -------------------------
 export default function TelaPrinc() {
   useWindowDimensions();
-  const [node] = useState<SensorData | null>(null);const [alert] = useState<string | null>(null);
+  const [node, setNode] = useState<SensorData | null>(null);
+  const [alert, setAlert] = useState<string | null>(null);
   const [vespaData, setVespaData] = useState<any | null>(null);
   const [vespaHTML, setVespaHTML] = useState<string | null>(null);
   const [vespaXML, setVespaXML] = useState<string | null>(null);
@@ -33,19 +34,38 @@ export default function TelaPrinc() {
   /// Buscar dados da API sensor do Vespa apenas
   useEffect(() => {
     const fetchVespaData = async () => {
-      const { data, html } = await vespaService.fetchSensorInfo();
-      setVespaData(data);
-      setVespaHTML(html);
-
-      // Buscar XML da API do Vespa
       try {
-        const xml = await vespaService.fetchSensorInfoXML?.();
-        if (xml) {
-          setVespaXML(xml);
+        const { data, html } = await vespaService.fetchSensorInfo();
+        setVespaData(data);
+        setVespaHTML(html);
+
+        // Atualiza o node se houver dados válidos
+        // Atualiza o node se houver dados válidos
+        if (data) {
+          // Extrai apenas as informações relevantes da API para o node
+          const nodeData: SensorData = {
+            device: data.device ?? null,
+            server_ip: data.server_ip ?? null,
+            sta_ip: data.sta_ip ?? null,
+            sensor_raw: data.sensor_raw ?? null,
+            sensor_db: data.sensor_db ?? null,
+            anomaly: data.anomaly ?? null,
+            status: data.status ?? null,
+          };
+          setNode(nodeData);
+        }
+
+        // Buscar XML da API do Vespa
+        if (vespaService.fetchSensorInfoXML) {
+          const xml = await vespaService.fetchSensorInfoXML();
+          if (xml) {
+            setVespaXML(xml);
+          }
         }
       } catch (e) {
         setVespaXML(null);
-        console.error('Erro ao buscar XML:', e);
+        setAlert('Erro ao conectar com a Vespa!');
+        console.error('Erro ao buscar dados da Vespa:', e);
       }
     };
     fetchVespaData();
