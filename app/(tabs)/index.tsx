@@ -91,9 +91,9 @@ const SparkBar: React.FC<SparkBarProps> = ({
 };
 
 // -------------------------
-// 📊 DataScienceCardScreen
+// 📊 TelaPrincipal
 // -------------------------
-export default function DataScienceCardScreen() {
+export default function TelaPrinc() {
   const { width: winWidth } = useWindowDimensions();
   const [node, setNode] = useState<SensorData | null>(null);
   const [history, setHistory] = useState<{ [key: string]: number[] }>({});
@@ -102,6 +102,7 @@ export default function DataScienceCardScreen() {
   const [tooltip, setTooltip] = useState<{ index: number; value: number } | null>(null);
   const [vercelData, setVercelData] = useState<any | null>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
+  const [webviewKey, setWebviewKey] = useState<number>(0);
 
   const alertAnim = useMemo(() => new Animated.Value(0), []);
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
@@ -126,47 +127,33 @@ export default function DataScienceCardScreen() {
         } catch {}
       }
 
-      if (!data) {
-        // fallback mock
-        data = {
-          device: 'NODEMCU MOCK',
-          server_ip: n.ip,
-          sta_ip: n.sta_ip,
-          sensor_raw: Math.floor(Math.random() * 500),
-          sensor_db: Math.random() * 100,
-          status: 'offline',
-          anomaly: { detected: Math.random() > 0.8, message: 'Ruído alto', current_value: Math.random() * 100 },
-        };
-      }
-
-      setNode(data);
-      setHistory(prev => {
-        const key = data!.sta_ip || data!.server_ip!;
-        const arr = [...(prev[key] ?? []), data!.sensor_db ?? 0].slice(-60);
-        return { ...prev, [key]: arr };
-      });
-
-      // Alertas
-      if (data.anomaly?.detected) {
-        setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value?.toFixed(1) ?? '--'})`);
-        Animated.sequence([
-          Animated.timing(alertAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-          Animated.timing(alertAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
-        ]).start();
-      } else {
-        setAlert(null);
-      }
-
-      // -------------------------
-      // 📡 Enviar dados para Vercel
-      // -------------------------
-      try {
-        await axios.post(`${VERCEL_URL}/api/sensor`, data, {
-          headers: { 'Content-Type': 'application/json' },
+      if (data) {
+        setNode(data);
+        setHistory(prev => {
+          const key = data!.sta_ip || data!.server_ip!;
+          const arr = [...(prev[key] ?? []), data!.sensor_db ?? 0].slice(-60);
+          return { ...prev, [key]: arr };
         });
-        console.log('Dados enviados para Vercel:', data);
-      } catch (err) {
-        console.error('Erro ao enviar para Vercel:', err);
+
+        // Alertas
+        if (data.anomaly?.detected) {
+          setAlert(`⚠️ ${data.anomaly.message} (Valor: ${data.anomaly.current_value?.toFixed(1) ?? '--'})`);
+          Animated.sequence([
+            Animated.timing(alertAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+            Animated.timing(alertAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+          ]).start();
+        } else {
+          setAlert(null);
+        }
+
+        // Enviar dados para Vercel
+        try {
+          await axios.post(`${VERCEL_URL}/api/sensor`, data, {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } catch (err) {
+          console.error('Erro ao enviar para Vercel:', err);
+        }
       }
     }
   }, [alertAnim]);
@@ -219,14 +206,18 @@ export default function DataScienceCardScreen() {
   // 🔹 Render
   // -------------------------
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      onScroll={() => setWebviewKey(prev => prev + 1)}
+      scrollEventThrottle={400}
+    >
       <Text style={styles.title}>📊 Data Science Dashboard</Text>
       <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
-        {node ? (
-          <>
-            {/* Página 0: Dados NodeMCU */}
-            {page === 0 && (
-              <View>
+        {/* Página 0: NodeMCU ou fallback Vercel */}
+        {page === 0 && (
+          <View>
+            {node ? (
+              <>
                 <Text style={styles.description}>🖥 Dispositivo: {node.device ?? '--'}</Text>
                 <Text style={styles.description}>📡 IP AP: {node.server_ip ?? '--'}</Text>
                 <Text style={styles.description}>🌐 IP STA: {node.sta_ip ?? '--'}</Text>
@@ -248,71 +239,87 @@ export default function DataScienceCardScreen() {
                   </Animated.Text>
                 )}
                 <Text style={styles.description}>🔌 Status: {node.status ?? '--'}</Text>
-              </View>
-            )}
-
-            {/* Página 1: Histórico NodeMCU */}
-            {page === 1 && node.sta_ip && history[node.sta_ip]?.length > 0 && (
-              <View>
-                <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
-                <SparkBar
-                  data={history[node.sta_ip] ?? []}
-                  width={graphWidth}
-                  highlightThreshold={80}
-                  onBarPress={(index, value) => setTooltip(index === -1 ? null : { index, value })}
-                />
-                {tooltip && (
-                  <View style={styles.tooltipCard}>
-                    <Text style={styles.tooltipCardText}>
-                      Ponto {tooltip.index + 1}: {tooltip.value.toFixed(1)}%
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Página 2: Histórico Geral */}
-            {page === 2 && Object.keys(history).length > 0 && (
-              <View>
-                <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>📦 Histórico Geral</Text>
-                {Object.entries(history).map(([serverIp, values]) => (
-                  <View key={serverIp} style={{ marginBottom: 12 }}>
-                    <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>
-                      🌐 {serverIp} — Últimos {values.length} pontos
-                    </Text>
-                    <SparkBar data={values ?? []} width={graphWidth} height={80} highlightThreshold={80} />
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Página 3: Vercel */}
-            {page === 3 && (
+              </>
+            ) : vercelData ? (
+              <Text style={styles.description}>{JSON.stringify(vercelData, null, 2)}</Text>
+            ) : vercelHTML ? (
               <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
-                {vercelData ? (
-                  <Text style={{ color: '#fff', padding: 12 }}>{JSON.stringify(vercelData, null, 2)}</Text>
-                ) : vercelHTML ? (
-                  <WebView source={{ html: vercelHTML }} style={{ flex: 1 }} originWhitelist={['*']} />
-                ) : (
-                  <Text style={{ color: '#facc15', textAlign: 'center', marginTop: 16 }}>Carregando dados da Vercel...</Text>
-                )}
+                <WebView
+                  key={webviewKey}
+                  source={{ html: vercelHTML }}
+                  style={{ flex: 1 }}
+                  originWhitelist={['*']}
+                />
+              </View>
+            ) : (
+              <Text style={styles.description}>Conecte-se ao NodeMCU ou aguarde dados da Vercel...</Text>
+            )}
+          </View>
+        )}
+
+        {/* Página 1: Histórico NodeMCU */}
+        {page === 1 && node?.sta_ip && history[node.sta_ip]?.length > 0 && (
+          <View>
+            <Text style={{ color: '#fff', marginBottom: 8 }}>📊 Histórico do Sensor ({node.sta_ip})</Text>
+            <SparkBar
+              data={history[node.sta_ip] ?? []}
+              width={graphWidth}
+              highlightThreshold={80}
+              onBarPress={(index, value) => setTooltip(index === -1 ? null : { index, value })}
+            />
+            {tooltip && (
+              <View style={styles.tooltipCard}>
+                <Text style={styles.tooltipCardText}>
+                  Ponto {tooltip.index + 1}: {tooltip.value.toFixed(1)}%
+                </Text>
               </View>
             )}
-
-            {/* Navegação */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
-              <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
-                <Text style={styles.pageBtnText}>⬅ Anterior</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={nextPage} style={styles.pageBtn}>
-                <Text style={styles.pageBtnText}>Próximo ➡</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={{ color: '#a8dadc', textAlign: 'center', marginTop: 8 }}>Página {page + 1} de 4</Text>
-          </>
-        ) : (
-          <Text style={{ color: '#facc15', textAlign: 'center' }}>Conecte-se ao NodeMCU...</Text>
+          </View>
         )}
+
+        {/* Página 2: Histórico Geral */}
+        {page === 2 && Object.keys(history).length > 0 && (
+          <View>
+            <Text style={{ color: '#f1faee', fontWeight: '600', marginBottom: 8, fontSize: 16 }}>📦 Histórico Geral</Text>
+            {Object.entries(history).map(([serverIp, values]) => (
+              <View key={serverIp} style={{ marginBottom: 12 }}>
+                <Text style={{ color: '#a8dadc', fontSize: 14, marginBottom: 4 }}>
+                  🌐 {serverIp} — Últimos {values.length} pontos
+                </Text>
+                <SparkBar data={values ?? []} width={graphWidth} height={80} highlightThreshold={80} />
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Página 3: Vercel */}
+        {page === 3 && (
+          <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
+            {vercelData ? (
+              <Text style={{ color: '#fff', padding: 12 }}>{JSON.stringify(vercelData, null, 2)}</Text>
+            ) : vercelHTML ? (
+              <WebView
+                key={webviewKey}
+                source={{ html: vercelHTML }}
+                style={{ flex: 1 }}
+                originWhitelist={['*']}
+              />
+            ) : (
+              <Text style={{ color: '#facc15', textAlign: 'center', marginTop: 16 }}>Carregando dados da Vercel...</Text>
+            )}
+          </View>
+        )}
+
+        {/* Navegação */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+          <TouchableOpacity onPress={prevPage} style={styles.pageBtn}>
+            <Text style={styles.pageBtnText}>⬅ Anterior</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={nextPage} style={styles.pageBtn}>
+            <Text style={styles.pageBtnText}>Próximo ➡</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={{ color: '#a8dadc', textAlign: 'center', marginTop: 8 }}>Página {page + 1} de 4</Text>
       </View>
     </ScrollView>
   );
