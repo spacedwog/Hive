@@ -220,6 +220,7 @@ export default function HiveScreen() {
             await axios.post(`${VERCEL_URL}/api/sensor`, {
               server: s.server,
               temperatura_C: s.temperatura_C,
+              umidade_pct: s.umidade_pct,
               timestamp: new Date().toISOString(),
             });
           } catch (err) {

@@ -23,7 +23,7 @@ class SensorApiHandler {
       }
 
       if (req.method === "POST") {
-        const { server, temperatura_C, timestamp } = req.body || {};
+        const { server, temperatura_C, umidade_pct, timestamp } = req.body || {};
 
         // Aqui você pode salvar os dados em um banco, arquivo, etc, se desejar
 
@@ -33,6 +33,7 @@ class SensorApiHandler {
           data: {
             server,
             temperatura_C,
+            umidade_pct,
             timestamp,
           },
         });
