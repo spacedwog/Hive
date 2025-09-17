@@ -88,8 +88,9 @@ export default async function handler(req, res) {
         return res.status(200).json(successResponse("Dados do sensor", data));
       }
 
-      if (info === "server") 
+      if (info === "server") {
         return res.status(200).json(successResponse("Dados do servidor", getServerInfo()));
+      }
 
       return res.status(400).json(errorResponse("INVALID_PARAM", `Valor inválido para 'info': ${info}`));
     }
