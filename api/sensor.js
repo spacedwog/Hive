@@ -1,4 +1,7 @@
+let lastSensorData = null;
+
 class SensorApiHandler {
+
   static logRequest(req) {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   }
@@ -10,10 +13,18 @@ class SensorApiHandler {
 
     try {
       if (req.method === "GET") {
+        if (lastSensorData) {
+          return res.status(200).json({
+            success: true,
+            message: "Últimos dados recebidos do sensor",
+            data: lastSensorData,
+            timestamp: lastSensorData.timestamp || Date.now(),
+          });
+        }
         // Exemplo de resposta simulada de sensor
         return res.status(200).json({
           success: true,
-          message: "Dados do sensor",
+          message: "Nenhum dado recebido ainda. Dados simulados:",
           data: {
             temperature: 22.5,
             humidity: 60,
@@ -25,17 +36,18 @@ class SensorApiHandler {
       if (req.method === "POST") {
         const { server, temperatura_C, umidade_pct, timestamp } = req.body || {};
 
-        // Aqui você pode salvar os dados em um banco, arquivo, etc, se desejar
+        // Salva os dados recebidos em memória
+        lastSensorData = {
+          server,
+          temperatura_C,
+          umidade_pct,
+          timestamp: timestamp || Date.now(),
+        };
 
         return res.status(201).json({
           success: true,
           message: "Dados do sensor recebidos com sucesso.",
-          data: {
-            server,
-            temperatura_C,
-            umidade_pct,
-            timestamp,
-          },
+          data: lastSensorData,
         });
       }
 
