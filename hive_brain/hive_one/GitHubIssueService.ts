@@ -9,7 +9,7 @@ export class GitHubIssueService {
     this.repo = repo;
   }
 
-  async abrirIssue(titulo: string, corpo: string): Promise<number | null> {
+  async abrirIssue(titulo: string, corpo: string, labels: string[]): Promise<number | null> {
     const url = `https://api.github.com/repos/${this.owner}/${this.repo}/issues`;
     const response = await fetch(url, {
       method: "POST",
