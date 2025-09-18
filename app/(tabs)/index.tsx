@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+// eslint-disable-next-line import/no-unresolved
 import { GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN, VERCEL_URL } from '@env'; // Certifique-se de que o .env está configurado corretamente
 import BottomNav from '../../hive_body/BottomNav'; // Certifique-se de que o caminho está correto
 import LoginScreen from '../../hive_body/LoginScreen';
