@@ -8,7 +8,7 @@ import {
 import { WebView } from 'react-native-webview';
 
 import { VespaService } from '../../hive_brain/hive_one/VespaService';
-import LoginScreen from './LoginScreen';
+import LoginScreen from '../../LoginScreen';
 
 // Instâncias dos objetos orientados a objetos
 const VESPA_URL = 'https://hive-chi-woad.vercel.app';
