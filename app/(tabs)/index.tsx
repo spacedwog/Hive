@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+import { GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } from '@env'; // Certifique-se de que o .env está configurado corretamente
 import BottomNav from '../../hive_body/BottomNav'; // Certifique-se de que o caminho está correto
 import LoginScreen from '../../hive_body/LoginScreen';
 import { GitHubIssueService } from '../../hive_brain/hive_one/GitHubIssueService';
@@ -26,11 +27,11 @@ export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [issueNumber, setIssueNumber] = useState<number | null>(null);
 
-  // Configure com seu token, owner e repo
+  // Configure com seu token, owner e repo usando variáveis do .env
   const gitHubService = new GitHubIssueService(
-    "SEU_TOKEN_AQUI", // Coloque seu token aqui
-    "usuario",        // Coloque o owner do repo
-    "repositorio"     // Coloque o nome do repo
+    GITHUB_TOKEN,
+    GITHUB_OWNER,
+    GITHUB_REPO
   );
 
   const handleAbrirIssue = async () => {
