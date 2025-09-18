@@ -9,6 +9,7 @@ import { WebView } from 'react-native-webview';
 
 import BottomNav from '../../hive_body/BottomNav'; // Certifique-se de que o caminho está correto
 import LoginScreen from '../../hive_body/LoginScreen';
+import { GitHubIssueService } from '../../hive_brain/hive_one/GitHubIssueService';
 import { VespaService } from '../../hive_brain/hive_one/VespaService';
 
 // Instâncias dos objetos orientados a objetos
@@ -23,7 +24,26 @@ export default function TelaPrinc() {
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
   const [accessCode, setAccessCode] = useState<string | null>(null);
+  const [issueNumber, setIssueNumber] = useState<number | null>(null);
 
+  // Configure com seu token, owner e repo
+  const gitHubService = new GitHubIssueService(
+    "SEU_TOKEN_AQUI", // Coloque seu token aqui
+    "usuario",        // Coloque o owner do repo
+    "repositorio"     // Coloque o nome do repo
+  );
+
+  const handleAbrirIssue = async () => {
+    const numero = await gitHubService.abrirIssue("Título via app", "Corpo da issue criada pelo app React Native");
+    setIssueNumber(numero);
+  };
+
+  const handleFecharIssue = async () => {
+    if (issueNumber) {
+      await gitHubService.fecharIssue(issueNumber);
+      setIssueNumber(null);
+    }
+  };
   useEffect(() => {
     if (!accessCode || accessCode.trim() === "") {
       return;
@@ -52,6 +72,26 @@ export default function TelaPrinc() {
         <Text style={styles.title}>📊 Data Science Dashboard</Text>
         <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
           <View>
+            {/* Botões para abrir/fechar issue */}
+            <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+              <Text
+                style={[styles.pageBtn, { marginRight: 8 }]}
+                onPress={handleAbrirIssue}
+              >
+                Abrir Issue
+              </Text>
+              <Text
+                style={styles.pageBtn}
+                onPress={handleFecharIssue}
+              >
+                Fechar Issue
+              </Text>
+            </View>
+            {issueNumber && (
+              <Text style={{ color: '#50fa7b', marginBottom: 8 }}>
+                Issue aberta: #{issueNumber}
+              </Text>
+            )}
             {vercelData ? (
               <View>
                 {/* Exibe as chaves principais exceto 'data' e 'timestamp' */}
