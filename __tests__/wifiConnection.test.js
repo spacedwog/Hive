@@ -9,6 +9,10 @@ import * as Network from 'expo-network';
 /* global jest */
 jest.mock('expo-network', () => ({
   getNetworkStateAsync: jest.fn(),
+  NetworkStateType: {
+    WIFI: 'FAMILIA SANTOS',
+    CELLULAR: '+55(11) 99171-9629',
+  },
 }));
 
 describe('WiFi Connection', () => {
