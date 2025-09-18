@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+import BottomNav from '../../BottomNav'; // Certifique-se de que o caminho está correto
 import { VespaService } from '../../hive_brain/hive_one/VespaService';
 import LoginScreen from '../../LoginScreen';
 
@@ -42,83 +43,87 @@ export default function TelaPrinc() {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      onScroll={() => setWebviewKey(prev => prev + 1)}
-      scrollEventThrottle={400}
-    >
-      <Text style={styles.title}>📊 Data Science Dashboard</Text>
-      <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
-        <View>
-          {vercelData ? (
-            <View>
-              {/* Exibe as chaves principais exceto 'data' e 'timestamp' */}
-              {Object.entries(vercelData)
-                .filter(([key]) => key !== 'data' && key !== 'timestamp')
-                .map(([key, value]) => (
-                  <Text key={key} style={styles.description}>
-                    <Text style={{ fontWeight: 'bold', color: '#facc15' }}>{key}: </Text>
-                    {typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}
-                  </Text>
-                ))}
-              {/* Exibe o campo 'data' completo */}
-              {vercelData.data && (
-                <View style={{ marginTop: 12 }}>
-                  <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Servidor IP:
-                    <Text style={styles.description}>
-                      {JSON.stringify(vercelData.data["ip"], null, 2)}
+    <>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        onScroll={() => setWebviewKey(prev => prev + 1)}
+        scrollEventThrottle={400}
+      >
+        <Text style={styles.title}>📊 Data Science Dashboard</Text>
+        <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
+          <View>
+            {vercelData ? (
+              <View>
+                {/* Exibe as chaves principais exceto 'data' e 'timestamp' */}
+                {Object.entries(vercelData)
+                  .filter(([key]) => key !== 'data' && key !== 'timestamp')
+                  .map(([key, value]) => (
+                    <Text key={key} style={styles.description}>
+                      <Text style={{ fontWeight: 'bold', color: '#facc15' }}>{key}: </Text>
+                      {typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}
                     </Text>
-                  </Text>
-                  <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Sensor:
-                    <Text style={styles.description}>
-                      {JSON.stringify(vercelData.data["sensor"], null, 2)}
+                  ))}
+                {/* Exibe o campo 'data' completo */}
+                {vercelData.data && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Servidor IP:
+                      <Text style={styles.description}>
+                        {JSON.stringify(vercelData.data["ip"], null, 2)}
+                      </Text>
                     </Text>
-                  </Text>
-                  <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Temperatura:
-                    <Text style={styles.description}>
-                      {JSON.stringify(vercelData.data["temperature"], null, 2)}
+                    <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Sensor:
+                      <Text style={styles.description}>
+                        {JSON.stringify(vercelData.data["sensor"], null, 2)}
+                      </Text>
                     </Text>
-                  </Text>
-                  <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Umidade:
-                    <Text style={styles.description}>
-                      {JSON.stringify(vercelData.data["humidity"], null, 2)}
+                    <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Temperatura:
+                      <Text style={styles.description}>
+                        {JSON.stringify(vercelData.data["temperature"], null, 2)}
+                      </Text>
                     </Text>
-                  </Text>
-                  <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Presença:
-                    <Text style={styles.description}>
-                      {JSON.stringify(vercelData.data["presenca"], null, 2)}
+                    <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Umidade:
+                      <Text style={styles.description}>
+                        {JSON.stringify(vercelData.data["humidity"], null, 2)}
+                      </Text>
                     </Text>
-                  </Text>
-                  <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Distância:
-                    <Text style={styles.description}>
-                      {JSON.stringify(vercelData.data["distancia"], null, 2)}
+                    <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Presença:
+                      <Text style={styles.description}>
+                        {JSON.stringify(vercelData.data["presenca"], null, 2)}
+                      </Text>
                     </Text>
+                    <Text style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>Distância:
+                      <Text style={styles.description}>
+                        {JSON.stringify(vercelData.data["distancia"], null, 2)}
+                      </Text>
+                    </Text>
+                  </View>
+                )}
+                {/* Exibe o timestamp por último */}
+                {'timestamp' in vercelData && (
+                  <Text style={[styles.description, { marginTop: 12 }]}>
+                    <Text style={{ fontWeight: 'bold', color: '#facc15' }}>timestamp: </Text>
+                    {String(vercelData.timestamp)}
                   </Text>
-                </View>
-              )}
-              {/* Exibe o timestamp por último */}
-              {'timestamp' in vercelData && (
-                <Text style={[styles.description, { marginTop: 12 }]}>
-                  <Text style={{ fontWeight: 'bold', color: '#facc15' }}>timestamp: </Text>
-                  {String(vercelData.timestamp)}
-                </Text>
-              )}
-            </View>
-          ) : vercelHTML ? (
-            <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
-              <WebView
-                key={webviewKey}
-                source={{ html: vercelHTML }}
-                style={{ flex: 1 }}
-                originWhitelist={['*']}
-              />
-            </View>
-          ) : (
-            <Text style={styles.description}>Carregando dados do Vespa...</Text>
-          )}
+                )}
+              </View>
+            ) : vercelHTML ? (
+              <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
+                <WebView
+                  key={webviewKey}
+                  source={{ html: vercelHTML }}
+                  style={{ flex: 1 }}
+                  originWhitelist={['*']}
+                />
+              </View>
+            ) : (
+              <Text style={styles.description}>Carregando dados do Vespa...</Text>
+            )}
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+      {/* Exibe o BottomNav apenas após login */}
+      <BottomNav />
+    </>
   );
 }
 
