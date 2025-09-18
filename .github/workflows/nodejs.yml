@@ -27,7 +27,7 @@ jobs:
       run: npm run lint
 
     - name: Rodar testes
-      run: npx test
+      run: npx test __test__
 
     - name: Build do projeto
       run: npm run build
