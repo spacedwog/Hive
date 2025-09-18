@@ -30,7 +30,7 @@ jobs:
       run: npx jest --passWithNoTests __test__/wifiConnection.test.js
 
     - name: Rodar testes
-      run: npx test __test__
+      run: npx test
 
     - name: Build do projeto
       run: npm run build
