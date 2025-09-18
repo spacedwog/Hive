@@ -18,7 +18,11 @@ export class GitHubIssueService {
         "Accept": "application/vnd.github.v3+json",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ title: titulo, body: corpo })
+      body: JSON.stringify({
+        title: titulo,
+        body: corpo,
+        labels: labels
+      })
     });
     if (response.status === 201) {
       const data = await response.json();
@@ -26,7 +30,7 @@ export class GitHubIssueService {
     }
     return null;
   }
-
+  
   async fecharIssue(numero: number): Promise<boolean> {
     const url = `https://api.github.com/repos/${this.owner}/${this.repo}/issues/${numero}`;
     const response = await fetch(url, {

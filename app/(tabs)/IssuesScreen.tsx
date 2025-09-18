@@ -18,6 +18,12 @@ export default function IssuesScreen() {
   const [projectStatus, setProjectStatus] = useState<"Backlog" | "Ready" | "In Progress" | "In Review">("Backlog");
   const [page, setPage] = useState(1);
 
+  // Estados para modal de abrir issue
+  const [abrirModalVisible, setAbrirModalVisible] = useState(false);
+  const [newIssueTitle, setNewIssueTitle] = useState('');
+  const [newIssueBody, setNewIssueBody] = useState('');
+  const [newIssueLabels, setNewIssueLabels] = useState('');
+
   const PAGE_SIZE = 5;
   const totalPages = Math.ceil(issues.length / PAGE_SIZE);
 
@@ -78,9 +84,34 @@ export default function IssuesScreen() {
 
   const paginatedIssues = issues.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Modal de abrir issue
+  const handleAbrirIssue = () => {
+    setAbrirModalVisible(true);
+  };
+
+  const handleConfirmAbrirIssue = async () => {
+    // Lógica igual editarIssue: status sempre "open", labels + projectStatus
+    const labelsArray = newIssueLabels
+      .split(',')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !["Backlog", "Ready", "In Progress", "In Review"].includes(l));
+    labelsArray.push(projectStatus);
+    setAbrirModalVisible(false);
+    setNewIssueTitle('');
+    setNewIssueBody('');
+    setNewIssueLabels('');
+    await fetchIssues();
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Minhas Issues do GitHub</Text>
+      <TouchableOpacity
+        style={[styles.saveBtn, { marginBottom: 16 }]}
+        onPress={handleAbrirIssue}
+      >
+        <Text style={styles.saveBtnText}>Abrir Issue</Text>
+      </TouchableOpacity>
       {loading ? (
         <ActivityIndicator size="large" color="#facc15" />
       ) : (
@@ -126,6 +157,103 @@ export default function IssuesScreen() {
         </>
       )}
 
+      {/* Modal para abrir issue */}
+      <Modal
+        visible={abrirModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setAbrirModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Abrir Nova Issue</Text>
+            <TextInput
+              style={styles.input}
+              value={newIssueTitle}
+              onChangeText={setNewIssueTitle}
+              placeholder="Título"
+              placeholderTextColor="#888"
+            />
+            <TextInput
+              style={[styles.input, { height: 80 }]}
+              value={newIssueBody}
+              onChangeText={setNewIssueBody}
+              placeholder="Descrição"
+              placeholderTextColor="#888"
+              multiline
+            />
+            <TextInput
+              style={styles.input}
+              value={newIssueLabels}
+              onChangeText={setNewIssueLabels}
+              placeholder="Tags (separadas por vírgula)"
+              placeholderTextColor="#888"
+            />
+            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[
+                  styles.projectStatusBtn,
+                  projectStatus === "Backlog" ? styles.projectStatusBtnActive : null,
+                ]}
+                onPress={() => setProjectStatus("Backlog")}
+              >
+                <Text style={projectStatus === "Backlog" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  Backlog
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.projectStatusBtn,
+                  projectStatus === "Ready" ? styles.projectStatusBtnActive : null,
+                ]}
+                onPress={() => setProjectStatus("Ready")}
+              >
+                <Text style={projectStatus === "Ready" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  Ready
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.projectStatusBtn,
+                  projectStatus === "In Progress" ? styles.projectStatusBtnActive : null,
+                ]}
+                onPress={() => setProjectStatus("In Progress")}
+              >
+                <Text style={projectStatus === "In Progress" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  In Progress
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.projectStatusBtn,
+                  projectStatus === "In Review" ? styles.projectStatusBtnActive : null,
+                ]}
+                onPress={() => setProjectStatus("In Review")}
+              >
+                <Text style={projectStatus === "In Review" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  In Review
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleConfirmAbrirIssue}
+                disabled={!newIssueTitle}
+              >
+                <Text style={styles.saveBtnText}>Criar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setAbrirModalVisible(false)}
+              >
+                <Text style={styles.cancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* Modal de edição permanece igual */}
       <Modal
         visible={editModalVisible}
         animationType="slide"
