@@ -10,7 +10,7 @@ export class VespaService {
 
   async sendSensorData(data: SensorData) {
     try {
-      await axios.post(`${this.url}/api/sensor_dth22`, data, {
+      await axios.post(`${this.url}/api/placa_vespa`, data, {
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (err) {
@@ -20,7 +20,7 @@ export class VespaService {
 
   async fetchSensorInfo(): Promise<{ data: any | null; html: string | null }> {
     try {
-      const res = await fetch(`${this.url}/api/sensor_dth22?info=sensor`);
+      const res = await fetch(`${this.url}/api/placa_vespa?info=sensor`);
       const text = await res.text();
       try {
         return { data: JSON.parse(text), html: null };
@@ -39,7 +39,7 @@ export class VespaService {
    */
   async fetchSensorInfoXML(): Promise<string | null> {
     try {
-      const res = await fetch(`${this.url}/api/sensor_dth22?info=sensor&format=xml`);
+      const res = await fetch(`${this.url}/api/placa_vespa?info=sensor&format=xml`);
       if (!res.ok) {
         throw new Error('Resposta não OK');
       }

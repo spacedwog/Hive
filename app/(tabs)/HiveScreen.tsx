@@ -226,11 +226,11 @@ export default function HiveScreen() {
 
       setStatus(responses);
 
-      // Enviar dados de temperatura para a API sensor_dth22.js (Vercel)
+      // Enviar dados de temperatura para a API placa_vespa.js (Vercel)
       responses.forEach(async (s) => {
         if (typeof s.temperatura_C === "number") {
           try {
-            await axios.post(`${VERCEL_URL}/api/sensor_dth22`, {
+            await axios.post(`${VERCEL_URL}/api/placa_vespa`, {
               server: s.server,
               sensor: s.analog_percent !== undefined ? `Analog-${s.analog_percent.toFixed(1)}` : "Unknown",
               temperatura_C: s.temperatura_C,
@@ -240,7 +240,7 @@ export default function HiveScreen() {
               timestamp: new Date().toISOString(),
             });
           } catch (err) {
-            console.error("Erro ao enviar temperatura para sensor_dth22.js (Vercel):", err);
+            console.error("Erro ao enviar temperatura para placa_vespa.js (Vercel):", err);
           }
         }
       });

@@ -16,7 +16,7 @@ class SensorApiHandler {
         if (lastSensorData) {
           return res.status(200).json({
             success: true,
-            message: "Dados do sensor de temperatura e umidade:",
+            message: "Dados da placa ESP32(VESPA):",
             data: {
               ip: lastSensorData.server,
               sensor: lastSensorData.sensor,
