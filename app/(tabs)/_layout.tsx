@@ -54,6 +54,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="airplane.circle" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="IssuesScreen"
+        options={{
+          title: 'Hive Issues',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="exclamationmark.bubble" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

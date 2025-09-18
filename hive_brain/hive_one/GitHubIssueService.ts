@@ -40,4 +40,19 @@ export class GitHubIssueService {
     });
     return response.status === 200;
   }
+
+  async listarIssues(): Promise<any[]> {
+    const url = `https://api.github.com/repos/${this.owner}/${this.repo}/issues`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": `token ${this.token}`,
+        "Accept": "application/vnd.github.v3+json"
+      }
+    });
+    if (response.status === 200) {
+      return await response.json();
+    }
+    return [];
+  }
 }
