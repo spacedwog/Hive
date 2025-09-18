@@ -55,4 +55,22 @@ export class GitHubIssueService {
     }
     return [];
   }
+
+  async editarIssue(numero: number, titulo: string, corpo: string, labels: string[]): Promise<boolean> {
+    const url = `https://api.github.com/repos/${this.owner}/${this.repo}/issues/${numero}`;
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Authorization": `token ${this.token}`,
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title: titulo,
+        body: corpo,
+        labels: labels
+      })
+    });
+    return response.status === 200;
+  }
 }
