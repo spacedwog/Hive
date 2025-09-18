@@ -14,6 +14,7 @@ export default function IssuesScreen() {
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [editLabels, setEditLabels] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<"open" | "closed">("open");
 
   const fetchIssues = async () => {
     setLoading(true);
@@ -31,6 +32,7 @@ export default function IssuesScreen() {
     setEditTitle(issue.title);
     setEditBody(issue.body || '');
     setEditLabels(issue.labels.map((l: any) => l.name).join(','));
+    setEditStatus(issue.state === "closed" ? "closed" : "open");
     setEditModalVisible(true);
   };
 
@@ -39,7 +41,7 @@ export default function IssuesScreen() {
       return;
     }
     const labelsArray = editLabels.split(',').map(l => l.trim()).filter(l => l.length > 0);
-    await gitHubService.editarIssue(editIssue.number, editTitle, editBody, labelsArray);
+    await gitHubService.editarIssue(editIssue.number, editTitle, editBody, labelsArray, editStatus);
     setEditModalVisible(false);
     setEditIssue(null);
     await fetchIssues();
@@ -103,6 +105,30 @@ export default function IssuesScreen() {
               placeholder="Tags (separadas por vírgula)"
               placeholderTextColor="#888"
             />
+            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[
+                  styles.statusBtn,
+                  editStatus === "open" ? styles.statusBtnActive : null,
+                ]}
+                onPress={() => setEditStatus("open")}
+              >
+                <Text style={editStatus === "open" ? styles.statusBtnTextActive : styles.statusBtnText}>
+                  Aberta
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.statusBtn,
+                  editStatus === "closed" ? styles.statusBtnActive : null,
+                ]}
+                onPress={() => setEditStatus("closed")}
+              >
+                <Text style={editStatus === "closed" ? styles.statusBtnTextActive : styles.statusBtnText}>
+                  Fechada
+                </Text>
+              </TouchableOpacity>
+            </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
               <TouchableOpacity style={styles.saveBtn} onPress={handleEditSave}>
                 <Text style={styles.saveBtnText}>Salvar</Text>
@@ -136,4 +162,8 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#0f172a', fontWeight: 'bold' },
   cancelBtn: { backgroundColor: '#f87171', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 24 },
   cancelBtnText: { color: '#fff', fontWeight: 'bold' },
+  statusBtn: { flex: 1, backgroundColor: '#222', borderRadius: 8, paddingVertical: 8, marginHorizontal: 4, alignItems: 'center' },
+  statusBtnActive: { backgroundColor: '#50fa7b' },
+  statusBtnText: { color: '#fff', fontWeight: 'bold' },
+  statusBtnTextActive: { color: '#0f172a', fontWeight: 'bold' },
 });

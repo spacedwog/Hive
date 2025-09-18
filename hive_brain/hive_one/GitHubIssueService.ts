@@ -56,7 +56,13 @@ export class GitHubIssueService {
     return [];
   }
 
-  async editarIssue(numero: number, titulo: string, corpo: string, labels: string[]): Promise<boolean> {
+  async editarIssue(
+    numero: number,
+    titulo: string,
+    corpo: string,
+    labels: string[],
+    status: "open" | "closed"
+  ): Promise<boolean> {
     const url = `https://api.github.com/repos/${this.owner}/${this.repo}/issues/${numero}`;
     const response = await fetch(url, {
       method: "PATCH",
@@ -68,7 +74,8 @@ export class GitHubIssueService {
       body: JSON.stringify({
         title: titulo,
         body: corpo,
-        labels: labels
+        labels: labels,
+        state: status
       })
     });
     return response.status === 200;
