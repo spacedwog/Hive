@@ -24,7 +24,7 @@ export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!accessCode) {
+    if (!accessCode || accessCode.trim() === "") {
       return;
     }
     const fetchVespaData = async () => {
@@ -37,7 +37,7 @@ export default function TelaPrinc() {
     return () => clearInterval(interval);
   }, [accessCode]);
 
-  if (!accessCode) {
+  if (!accessCode || accessCode.trim() === "") {
     return <LoginScreen onLogin={setAccessCode} />;
   }
 
