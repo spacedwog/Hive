@@ -420,9 +420,23 @@ export default function HiveScreen() {
                     <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
                     <Text style={styles.githubText}>🔗 URL: {selectedUser.html_url}</Text>
                     <Text style={styles.githubText}>📧 Email: {selectedUser.email ?? "Não disponível"}</Text>
-                    <Button
-                      title="✉️ Enviar E-mail"
-                      onPress={() => githubManager.sendEmail(selectedUser.login, "Projeto - HIVE", "Seja bem-vindo ao projeto - HIVE!")}
+                    <Button title="✉️ Enviar E-mail"  onPress={() =>  githubManager.sendEmail(selectedUser.login,
+                      "🚀 Conheça o HIVE: Inovação, Monitoramento e Automação Inteligente!",
+                      `Olá! Você já imaginou monitorar e automatizar ambientes de forma simples, visual e inteligente?  
+                        Apresentamos o **HIVE**, uma plataforma inovadora que integra sensores, automação e visualização em tempo real para facilitar o seu dia a dia!
+                        Com o HIVE você pode:
+                        - 📡 Monitorar sensores de temperatura, umidade, presença e distância em tempo real.
+                        - 🌎 Visualizar dispositivos e status diretamente no mapa.
+                        - ⚡ Ativar, desativar e interagir com dispositivos remotamente.
+                        - 📈 Acompanhar históricos e detectar anomalias automaticamente.
+                        - 🤝 Integrar com GitHub para colaboração e notificações inteligentes.
+                          Experimente agora!
+                          Acesse nossa plataforma e descubra como o HIVE pode transformar seu ambiente em um espaço mais inteligente e conectado.
+
+                          Seja bem-vindo ao futuro da automação!  
+                          Equipe HIVE`
+                        )
+                      }
                       disabled={!selectedUser.email}
                     />
 
