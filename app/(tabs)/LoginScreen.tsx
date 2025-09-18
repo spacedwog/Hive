@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-const GITHUB_AUTH_URL = 'https://github.com/login/oauth/authorize?client_id=SEU_CLIENT_ID';
-const VERCEL_AUTH_URL = 'https://vercel.com/oauth/authorize?client_id=SEU_CLIENT_ID';
+const GITHUB_AUTH_URL = 'https://github.com/login/oauth/authorize?client_id=Ov23lipnSCTehxkZTzx5';
 
 type LoginScreenProps = {
   onLogin?: (code: string) => void;
@@ -14,8 +13,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   const [authUrl, setAuthUrl] = useState('');
   const [accessCode, setAccessCode] = useState('');
 
-  const handleLogin = (provider: 'github' | 'vercel') => {
-    setAuthUrl(provider === 'github' ? GITHUB_AUTH_URL : VERCEL_AUTH_URL);
+  const handleLogin = () => {
+    setAuthUrl(GITHUB_AUTH_URL);
     setShowWebView(true);
   };
 
@@ -32,11 +31,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Login</Text>
-      <TouchableOpacity style={styles.btn} onPress={() => handleLogin('github')}>
+      <TouchableOpacity style={styles.btn} onPress={handleLogin}>
         <Text style={styles.btnText}>Entrar com GitHub</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.btn} onPress={() => handleLogin('vercel')}>
-        <Text style={styles.btnText}>Entrar com Vercel</Text>
       </TouchableOpacity>
       {accessCode ? (
         <View style={styles.codeBox}>
