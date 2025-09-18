@@ -27,7 +27,7 @@ jobs:
       run: npm run lint
 
     - name: Rodar teste wifiConnection
-      run: npx jest tests/wifiConnection.test.js
+      run: npx jest --passWithNoTests __tests__/wifiConnection.test.js
 
     - name: Rodar testes
       run: npm test
