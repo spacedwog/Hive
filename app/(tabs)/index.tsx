@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -33,6 +35,12 @@ export default function TelaPrinc() {
   const [issuesAbertas, setIssuesAbertas] = useState<any[]>([]);
   const [selectedIssueToClose, setSelectedIssueToClose] = useState<number | null>(null);
 
+  // Estados para modal de abrir issue
+  const [abrirModalVisible, setAbrirModalVisible] = useState(false);
+  const [newIssueTitle, setNewIssueTitle] = useState('');
+  const [newIssueBody, setNewIssueBody] = useState('');
+  const [newIssueLabels, setNewIssueLabels] = useState('');
+
   // Configure com seu token, owner e repo usando variáveis do .env
   const gitHubService = new GitHubIssueService(
     GITHUB_TOKEN,
@@ -40,9 +48,18 @@ export default function TelaPrinc() {
     GITHUB_REPO
   );
 
-  const handleAbrirIssue = async () => {
-    const numero = await gitHubService.abrirIssue("Título via app", "Corpo da issue criada pelo app React Native");
+  const handleAbrirIssue = () => {
+    setAbrirModalVisible(true);
+  };
+
+  const handleConfirmAbrirIssue = async () => {
+    const labels = newIssueLabels.split(',').map(l => l.trim()).filter(l => l.length > 0);
+    const numero = await gitHubService.abrirIssue(newIssueTitle, newIssueBody, labels);
     setIssueNumber(numero);
+    setAbrirModalVisible(false);
+    setNewIssueTitle('');
+    setNewIssueBody('');
+    setNewIssueLabels('');
   };
 
   const handleFecharIssue = async () => {
@@ -108,6 +125,68 @@ export default function TelaPrinc() {
                 Fechar Issue
               </Text>
             </View>
+            {/* Modal para abrir issue */}
+            <Modal
+              visible={abrirModalVisible}
+              animationType="slide"
+              transparent={true}
+              onRequestClose={() => setAbrirModalVisible(false)}
+            >
+              <View style={{
+                flex: 1,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+                <View style={{
+                  backgroundColor: '#1f2937',
+                  borderRadius: 12,
+                  padding: 24,
+                  width: '80%',
+                }}>
+                  <Text style={{ color: '#facc15', fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>
+                    Abrir nova Issue
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={newIssueTitle}
+                    onChangeText={setNewIssueTitle}
+                    placeholder="Título"
+                    placeholderTextColor="#888"
+                  />
+                  <TextInput
+                    style={[styles.input, { height: 80 }]}
+                    value={newIssueBody}
+                    onChangeText={setNewIssueBody}
+                    placeholder="Descrição"
+                    placeholderTextColor="#888"
+                    multiline
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={newIssueLabels}
+                    onChangeText={setNewIssueLabels}
+                    placeholder="Labels (separados por vírgula)"
+                    placeholderTextColor="#888"
+                  />
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+                    <TouchableOpacity
+                      style={styles.saveBtn}
+                      onPress={handleConfirmAbrirIssue}
+                      disabled={!newIssueTitle}
+                    >
+                      <Text style={styles.saveBtnText}>Criar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.cancelBtn}
+                      onPress={() => setAbrirModalVisible(false)}
+                    >
+                      <Text style={styles.cancelBtnText}>Cancelar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
             {/* Modal para selecionar issue a ser fechada */}
             {fecharModalVisible && (
               <View style={{
@@ -283,4 +362,9 @@ const styles = StyleSheet.create({
   chartLabelText: { fontSize: 10, color: 'rgba(255,255,255,0.6)' },
   tooltipCard: { marginTop: 12, backgroundColor: '#222', padding: 8, borderRadius: 8, alignItems: 'center' },
   tooltipCardText: { color: '#fff', fontWeight: '600' },
+  input: { backgroundColor: '#222', color: '#fff', borderRadius: 8, padding: 10, marginBottom: 12 },
+  saveBtn: { backgroundColor: '#50fa7b', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 24 },
+  saveBtnText: { color: '#0f172a', fontWeight: 'bold' },
+  cancelBtn: { backgroundColor: '#f87171', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 24 },
+  cancelBtnText: { color: '#fff', fontWeight: 'bold' },
 });
