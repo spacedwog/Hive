@@ -15,12 +15,18 @@ export default function IssuesScreen() {
   const [editBody, setEditBody] = useState('');
   const [editLabels, setEditLabels] = useState<string>('');
   const [editStatus, setEditStatus] = useState<"open" | "closed">("open");
+  const [projectStatus, setProjectStatus] = useState<"To Do" | "In Progress" | "Done">("To Do");
+  const [page, setPage] = useState(1);
+
+  const PAGE_SIZE = 5;
+  const totalPages = Math.ceil(issues.length / PAGE_SIZE);
 
   const fetchIssues = async () => {
     setLoading(true);
     const data = await gitHubService.listarIssues();
     setIssues(data);
     setLoading(false);
+    setPage(1); // Sempre volta para a primeira página ao atualizar
   };
 
   useEffect(() => {
@@ -31,8 +37,18 @@ export default function IssuesScreen() {
     setEditIssue(issue);
     setEditTitle(issue.title);
     setEditBody(issue.body || '');
-    setEditLabels(issue.labels.map((l: any) => l.name).join(','));
+    setEditLabels(issue.labels
+      .filter((l: any) => !["To Do", "In Progress", "Done"].includes(l.name))
+      .map((l: any) => l.name)
+      .join(','));
     setEditStatus(issue.state === "closed" ? "closed" : "open");
+    // Detecta status do projeto pela label
+    const statusLabel = issue.labels.find((l: any) =>
+      ["To Do", "In Progress", "Done"].includes(l.name)
+    );
+    setProjectStatus(
+      statusLabel ? (statusLabel.name as "To Do" | "In Progress" | "Done") : "To Do"
+    );
     setEditModalVisible(true);
   };
 
@@ -40,12 +56,27 @@ export default function IssuesScreen() {
     if (!editIssue) {
       return;
     }
-    const labelsArray = editLabels.split(',').map(l => l.trim()).filter(l => l.length > 0);
+    // Remove status antigo e adiciona o novo
+    const labelsArray = editLabels
+      .split(',')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !["To Do", "In Progress", "Done"].includes(l));
+    labelsArray.push(projectStatus);
     await gitHubService.editarIssue(editIssue.number, editTitle, editBody, labelsArray, editStatus);
     setEditModalVisible(false);
     setEditIssue(null);
     await fetchIssues();
   };
+
+  const handlePrevPage = () => {
+    setPage((prev) => Math.max(prev - 1, 1));
+  };
+
+  const handleNextPage = () => {
+    setPage((prev) => Math.min(prev + 1, totalPages));
+  };
+
+  const paginatedIssues = issues.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -53,25 +84,46 @@ export default function IssuesScreen() {
       {loading ? (
         <ActivityIndicator size="large" color="#facc15" />
       ) : (
-        issues.map(issue => (
-          <View key={issue.id} style={styles.issueCard}>
-            <Text style={styles.issueTitle}>#{issue.number} - {issue.title}</Text>
-            <Text style={styles.issueBody}>{issue.body}</Text>
-            <View style={styles.labelsRow}>
-              {issue.labels.map((label: any) => (
-                <Text key={label.id} style={[styles.label, { backgroundColor: `#${label.color}` }]}>
-                  {label.name}
-                </Text>
-              ))}
+        <>
+          {paginatedIssues.map(issue => (
+            <View key={issue.id} style={styles.issueCard}>
+              <Text style={styles.issueTitle}>#{issue.number} - {issue.title}</Text>
+              <Text style={styles.issueBody}>{issue.body}</Text>
+              <View style={styles.labelsRow}>
+                {issue.labels.map((label: any) => (
+                  <Text key={label.id} style={[styles.label, { backgroundColor: `#${label.color}` }]}>
+                    {label.name}
+                  </Text>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => openEditModal(issue)}
+              >
+                <Text style={styles.editBtnText}>Editar</Text>
+              </TouchableOpacity>
             </View>
+          ))}
+          <View style={styles.paginationRow}>
             <TouchableOpacity
-              style={styles.editBtn}
-              onPress={() => openEditModal(issue)}
+              style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+              onPress={handlePrevPage}
+              disabled={page === 1}
             >
-              <Text style={styles.editBtnText}>Editar</Text>
+              <Text style={styles.pageBtnText}>Anterior</Text>
+            </TouchableOpacity>
+            <Text style={styles.pageIndicator}>
+              Página {page} de {totalPages}
+            </Text>
+            <TouchableOpacity
+              style={[styles.pageBtn, page === totalPages && styles.pageBtnDisabled]}
+              onPress={handleNextPage}
+              disabled={page === totalPages}
+            >
+              <Text style={styles.pageBtnText}>Próxima</Text>
             </TouchableOpacity>
           </View>
-        ))
+        </>
       )}
 
       <Modal
@@ -129,6 +181,41 @@ export default function IssuesScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[
+                  styles.projectStatusBtn,
+                  projectStatus === "To Do" ? styles.projectStatusBtnActive : null,
+                ]}
+                onPress={() => setProjectStatus("To Do")}
+              >
+                <Text style={projectStatus === "To Do" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  To Do
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.projectStatusBtn,
+                  projectStatus === "In Progress" ? styles.projectStatusBtnActive : null,
+                ]}
+                onPress={() => setProjectStatus("In Progress")}
+              >
+                <Text style={projectStatus === "In Progress" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  In Progress
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.projectStatusBtn,
+                  projectStatus === "Done" ? styles.projectStatusBtnActive : null,
+                ]}
+                onPress={() => setProjectStatus("Done")}
+              >
+                <Text style={projectStatus === "Done" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
               <TouchableOpacity style={styles.saveBtn} onPress={handleEditSave}>
                 <Text style={styles.saveBtnText}>Salvar</Text>
@@ -147,9 +234,9 @@ export default function IssuesScreen() {
 const styles = StyleSheet.create({
   container: { padding: 24, backgroundColor: '#0f172a', alignItems: 'center' },
   title: { fontSize: 24, color: '#facc15', fontWeight: 'bold', marginBottom: 20 },
-  issueCard: { backgroundColor: '#1f2937', borderRadius: 12, padding: 16, marginBottom: 16, width: '100%' },
-  issueTitle: { fontSize: 18, color: '#50fa7b', fontWeight: 'bold', marginBottom: 8 },
-  issueBody: { fontSize: 14, color: '#e2e8f0', marginBottom: 8 },
+  issueCard: { backgroundColor: '#1f2937', borderRadius: 10, padding: 8, marginBottom: 8, width: '100%' },
+  issueTitle: { fontSize: 15, color: '#50fa7b', fontWeight: 'bold', marginBottom: 4 },
+  issueBody: { fontSize: 12, color: '#e2e8f0', marginBottom: 4 },
   labelsRow: { flexDirection: 'row', flexWrap: 'wrap' },
   label: { color: '#0f172a', fontWeight: 'bold', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginRight: 8, marginBottom: 4, fontSize: 12 },
   editBtn: { marginTop: 8, backgroundColor: '#facc15', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 16, alignSelf: 'flex-end' },
@@ -166,4 +253,13 @@ const styles = StyleSheet.create({
   statusBtnActive: { backgroundColor: '#50fa7b' },
   statusBtnText: { color: '#fff', fontWeight: 'bold' },
   statusBtnTextActive: { color: '#0f172a', fontWeight: 'bold' },
+  paginationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, marginBottom: 12 },
+  pageBtn: { backgroundColor: '#facc15', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 16, marginHorizontal: 8 },
+  pageBtnDisabled: { backgroundColor: '#888' },
+  pageBtnText: { color: '#0f172a', fontWeight: 'bold' },
+  pageIndicator: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  projectStatusBtn: { flex: 1, backgroundColor: '#222', borderRadius: 8, paddingVertical: 8, marginHorizontal: 4, alignItems: 'center' },
+  projectStatusBtnActive: { backgroundColor: '#facc15' },
+  projectStatusBtnText: { color: '#fff', fontWeight: 'bold' },
+  projectStatusBtnTextActive: { color: '#0f172a', fontWeight: 'bold' },
 });
