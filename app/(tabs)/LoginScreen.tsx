@@ -18,7 +18,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     setShowWebView(true);
   };
 
-  // Simulação de captura do código de acesso via redirect
+  // Captura o código de acesso via redirect
   const handleWebViewNavigationStateChange = (navState: any) => {
     if (navState.url.includes('code=')) {
       const code = navState.url.split('code=')[1].split('&')[0];
