@@ -21,7 +21,7 @@ class ApiResponse {
 class ProjectInfo {
   static get() {
     return ApiResponse.success("Informações do projeto", {
-      name: "Seu Projeto",
+      name: "HIVE PROJECT",
       version: "1.0.0",
       platform: os.platform(),
       cpuModel: os.cpus()[0].model,
