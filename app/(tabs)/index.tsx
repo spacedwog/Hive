@@ -7,15 +7,14 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } from '@env'; // Certifique-se de que o .env está configurado corretamente
+import { GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN, VERCEL_URL } from '@env'; // Certifique-se de que o .env está configurado corretamente
 import BottomNav from '../../hive_body/BottomNav'; // Certifique-se de que o caminho está correto
 import LoginScreen from '../../hive_body/LoginScreen';
 import { GitHubIssueService } from '../../hive_brain/hive_one/GitHubIssueService';
 import { VespaService } from '../../hive_brain/hive_one/VespaService';
 
 // Instâncias dos objetos orientados a objetos
-const VESPA_URL = 'https://hive-chi-woad.vercel.app';
-const vespaService = new VespaService(VESPA_URL);
+const vespaService = new VespaService(VERCEL_URL);
 
 // -------------------------
 // 📊 TelaPrincipal
