@@ -5,6 +5,7 @@ import {
   Text,
   View
 } from 'react-native';
+import { authorize } from 'react-native-app-auth';
 import { WebView } from 'react-native-webview';
 
 import BottomNav from '../../BottomNav'; // Certifique-se de que o caminho está correto
@@ -15,6 +16,17 @@ import LoginScreen from '../../LoginScreen';
 const VESPA_URL = 'https://hive-chi-woad.vercel.app';
 const vespaService = new VespaService(VESPA_URL);
 
+const githubConfig = {
+  clientId: 'SEU_CLIENT_ID',
+  clientSecret: 'SEU_CLIENT_SECRET',
+  redirectUrl: 'com.seuapp://oauthredirect',
+  scopes: ['read:user', 'repo'],
+  serviceConfiguration: {
+    authorizationEndpoint: 'https://github.com/login/oauth/authorize',
+    tokenEndpoint: 'https://github.com/login/oauth/access_token',
+  },
+};
+
 // -------------------------
 // 📊 TelaPrincipal
 // -------------------------
@@ -23,6 +35,8 @@ export default function TelaPrinc() {
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
   const [accessCode, setAccessCode] = useState<string | null>(null);
+  const [githubToken, setGithubToken] = useState<string | null>(null);
+  const [githubRepo, setGithubRepo] = useState<any | null>(null);
 
   useEffect(() => {
     if (!accessCode || accessCode.trim() === "") {
@@ -38,8 +52,48 @@ export default function TelaPrinc() {
     return () => clearInterval(interval);
   }, [accessCode]);
 
+  // Busca dados do repositório do GitHub após login
+  useEffect(() => {
+    if (!githubToken) {
+      return;
+    }
+    const fetchRepo = async () => {
+      const response = await fetch(
+        'https://api.github.com/repos/SEU_USUARIO/SEU_REPOSITORIO',
+        {
+          headers: { Authorization: `token ${githubToken}` },
+        }
+      );
+      const repoData = await response.json();
+      setGithubRepo(repoData);
+    };
+    fetchRepo();
+  }, [githubToken]);
+
   if (!accessCode || accessCode.trim() === "") {
     return <LoginScreen onLogin={setAccessCode} />;
+  }
+
+  if (!githubToken) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Conectar com GitHub</Text>
+        <Text style={styles.description}>Para acessar o projeto, conecte sua conta do GitHub.</Text>
+        <Text
+          style={styles.pageBtnText}
+          onPress={async () => {
+            try {
+              const result = await authorize(githubConfig);
+              setGithubToken(result.accessToken);
+            } catch (error) {
+              alert('Erro ao conectar com GitHub: ' + error);
+            }
+          }}
+        >
+          Login com GitHub
+        </Text>
+      </View>
+    );
   }
 
   return (
@@ -52,6 +106,17 @@ export default function TelaPrinc() {
         <Text style={styles.title}>📊 Data Science Dashboard</Text>
         <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
           <View>
+            {/* Exibe dados do GitHub se disponíveis */}
+            {githubRepo && (
+              <View style={{ marginBottom: 20 }}>
+                <Text style={styles.title}>Projeto do GitHub</Text>
+                <Text style={styles.description}>Nome: {githubRepo.name}</Text>
+                <Text style={styles.description}>Descrição: {githubRepo.description}</Text>
+                <Text style={styles.description}>Estrelas: {githubRepo.stargazers_count}</Text>
+                <Text style={styles.description}>Forks: {githubRepo.forks_count}</Text>
+                <Text style={styles.description}>URL: {githubRepo.html_url}</Text>
+              </View>
+            )}
             {vercelData ? (
               <View>
                 {/* Exibe as chaves principais exceto 'data' e 'timestamp' */}
