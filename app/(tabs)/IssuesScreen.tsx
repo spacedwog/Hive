@@ -15,7 +15,7 @@ export default function IssuesScreen() {
   const [editBody, setEditBody] = useState('');
   const [editLabels, setEditLabels] = useState<string>('');
   const [editStatus, setEditStatus] = useState<"open" | "closed">("open");
-  const [projectStatus, setProjectStatus] = useState<"To Do" | "In Progress" | "Done">("To Do");
+  const [projectStatus, setProjectStatus] = useState<"Backlog" | "Ready" | "In Progress" | "In Review">("Backlog");
   const [page, setPage] = useState(1);
 
   const PAGE_SIZE = 5;
@@ -38,16 +38,16 @@ export default function IssuesScreen() {
     setEditTitle(issue.title);
     setEditBody(issue.body || '');
     setEditLabels(issue.labels
-      .filter((l: any) => !["To Do", "In Progress", "Done"].includes(l.name))
+      .filter((l: any) => !["Backlog", "Ready", "In Progress", "In Review"].includes(l.name))
       .map((l: any) => l.name)
       .join(','));
     setEditStatus(issue.state === "closed" ? "closed" : "open");
     // Detecta status do projeto pela label
     const statusLabel = issue.labels.find((l: any) =>
-      ["To Do", "In Progress", "Done"].includes(l.name)
+      ["Backlog", "Ready", "In Progress", "In Review"].includes(l.name)
     );
     setProjectStatus(
-      statusLabel ? (statusLabel.name as "To Do" | "In Progress" | "Done") : "To Do"
+      statusLabel ? (statusLabel.name as "Backlog" | "Ready" | "In Progress" | "In Review") : "Backlog"
     );
     setEditModalVisible(true);
   };
@@ -60,7 +60,7 @@ export default function IssuesScreen() {
     const labelsArray = editLabels
       .split(',')
       .map(l => l.trim())
-      .filter(l => l.length > 0 && !["To Do", "In Progress", "Done"].includes(l));
+      .filter(l => l.length > 0 && !["Backlog", "Ready", "In Progress", "In Review"].includes(l));
     labelsArray.push(projectStatus);
     await gitHubService.editarIssue(editIssue.number, editTitle, editBody, labelsArray, editStatus);
     setEditModalVisible(false);
@@ -185,12 +185,23 @@ export default function IssuesScreen() {
               <TouchableOpacity
                 style={[
                   styles.projectStatusBtn,
-                  projectStatus === "To Do" ? styles.projectStatusBtnActive : null,
+                  projectStatus === "Backlog" ? styles.projectStatusBtnActive : null,
                 ]}
-                onPress={() => setProjectStatus("To Do")}
+                onPress={() => setProjectStatus("Backlog")}
               >
-                <Text style={projectStatus === "To Do" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
-                  To Do
+                <Text style={projectStatus === "Backlog" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  Backlog
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.projectStatusBtn,
+                  projectStatus === "Ready" ? styles.projectStatusBtnActive : null,
+                ]}
+                onPress={() => setProjectStatus("Ready")}
+              >
+                <Text style={projectStatus === "Ready" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  Ready
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -207,12 +218,12 @@ export default function IssuesScreen() {
               <TouchableOpacity
                 style={[
                   styles.projectStatusBtn,
-                  projectStatus === "Done" ? styles.projectStatusBtnActive : null,
+                  projectStatus === "In Review" ? styles.projectStatusBtnActive : null,
                 ]}
-                onPress={() => setProjectStatus("Done")}
+                onPress={() => setProjectStatus("In Review")}
               >
-                <Text style={projectStatus === "Done" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
-                  Done
+                <Text style={projectStatus === "In Review" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
+                  In Review
                 </Text>
               </TouchableOpacity>
             </View>

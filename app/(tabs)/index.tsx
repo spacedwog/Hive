@@ -3,7 +3,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -27,6 +28,11 @@ export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [issueNumber, setIssueNumber] = useState<number | null>(null);
 
+  // Novos estados para modal de fechar issue
+  const [fecharModalVisible, setFecharModalVisible] = useState(false);
+  const [issuesAbertas, setIssuesAbertas] = useState<any[]>([]);
+  const [selectedIssueToClose, setSelectedIssueToClose] = useState<number | null>(null);
+
   // Configure com seu token, owner e repo usando variáveis do .env
   const gitHubService = new GitHubIssueService(
     GITHUB_TOKEN,
@@ -40,9 +46,23 @@ export default function TelaPrinc() {
   };
 
   const handleFecharIssue = async () => {
-    if (issueNumber) {
-      await gitHubService.fecharIssue(issueNumber);
+    // Busca issues abertas e abre o modal
+    const todasIssues = await gitHubService.listarIssues();
+    const abertas = todasIssues.filter((issue: any) => issue.state === "open");
+    setIssuesAbertas(abertas);
+    setFecharModalVisible(true);
+  };
+
+  const handleConfirmFecharIssue = async () => {
+    if (selectedIssueToClose) {
+      await gitHubService.fecharIssue(selectedIssueToClose);
+      setFecharModalVisible(false);
+      setSelectedIssueToClose(null);
       setIssueNumber(null);
+      // Opcional: atualizar lista de issues abertas
+      const todasIssues = await gitHubService.listarIssues();
+      const abertas = todasIssues.filter((issue: any) => issue.state === "open");
+      setIssuesAbertas(abertas);
     }
   };
   useEffect(() => {
@@ -88,6 +108,83 @@ export default function TelaPrinc() {
                 Fechar Issue
               </Text>
             </View>
+            {/* Modal para selecionar issue a ser fechada */}
+            {fecharModalVisible && (
+              <View style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 999,
+              }}>
+                <View style={{
+                  backgroundColor: '#1f2937',
+                  borderRadius: 12,
+                  padding: 24,
+                  width: '80%',
+                  maxHeight: '70%',
+                }}>
+                  <Text style={{ color: '#facc15', fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>
+                    Selecione a Issue para fechar:
+                  </Text>
+                  <ScrollView style={{ maxHeight: 250 }}>
+                    {issuesAbertas.length === 0 ? (
+                      <Text style={{ color: '#fff' }}>Nenhuma issue aberta.</Text>
+                    ) : (
+                      issuesAbertas.map(issue => (
+                        <TouchableOpacity
+                          key={issue.number}
+                          style={{
+                            padding: 10,
+                            backgroundColor: selectedIssueToClose === issue.number ? '#facc15' : '#222',
+                            borderRadius: 8,
+                            marginBottom: 8,
+                          }}
+                          onPress={() => setSelectedIssueToClose(issue.number)}
+                        >
+                          <Text style={{
+                            color: selectedIssueToClose === issue.number ? '#0f172a' : '#fff',
+                            fontWeight: 'bold'
+                          }}>
+                            #{issue.number} - {issue.title}
+                          </Text>
+                        </TouchableOpacity>
+                      ))
+                    )}
+                  </ScrollView>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: '#50fa7b',
+                        borderRadius: 8,
+                        paddingVertical: 8,
+                        paddingHorizontal: 24,
+                        opacity: selectedIssueToClose ? 1 : 0.5
+                      }}
+                      onPress={handleConfirmFecharIssue}
+                      disabled={!selectedIssueToClose}
+                    >
+                      <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Fechar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: '#f87171',
+                        borderRadius: 8,
+                        paddingVertical: 8,
+                        paddingHorizontal: 24
+                      }}
+                      onPress={() => {
+                        setFecharModalVisible(false);
+                        setSelectedIssueToClose(null);
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancelar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
             {issueNumber && (
               <Text style={{ color: '#50fa7b', marginBottom: 8 }}>
                 Issue aberta: #{issueNumber}
