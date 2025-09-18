@@ -3,12 +3,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { VespaService } from '../../hive_brain/hive_one/VespaService';
+import LoginScreen from './LoginScreen';
 
 // Instâncias dos objetos orientados a objetos
 const VESPA_URL = 'https://hive-chi-woad.vercel.app';
@@ -18,12 +18,15 @@ const vespaService = new VespaService(VESPA_URL);
 // 📊 TelaPrincipal
 // -------------------------
 export default function TelaPrinc() {
-  useWindowDimensions();
   const [vercelData, setVercelData] = useState<any | null>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [webviewKey, setWebviewKey] = useState<number>(0);
+  const [accessCode, setAccessCode] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!accessCode) {
+      return;
+    }
     const fetchVespaData = async () => {
       const { data, html } = await vespaService.fetchSensorInfo();
       setVercelData(data);
@@ -32,7 +35,11 @@ export default function TelaPrinc() {
     fetchVespaData();
     const interval = setInterval(fetchVespaData, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [accessCode]);
+
+  if (!accessCode) {
+    return <LoginScreen onLogin={setAccessCode} />;
+  }
 
   return (
     <ScrollView
