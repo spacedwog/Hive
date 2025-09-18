@@ -17,7 +17,7 @@ describe('Cloud Connection', () => {
       })
     );
 
-    const response = await fetch('https://exemplo.com/api/teste-conexao');
+    const response = await fetch('https://hive-chi-woad.vercel.app/api/vercel-test');
     expect(response.ok).toBe(true);
     expect(response.status).toBe(200);
 
