@@ -16,7 +16,6 @@ import BottomNav from '../../hive_body/BottomNav'; // Certifique-se de que o cam
 import LoginScreen from '../../hive_body/LoginScreen';
 import { GitHubIssueService } from '../../hive_brain/hive_one/GitHubIssueService';
 import { VespaService } from '../../hive_brain/hive_one/VespaService';
-
 // Instâncias dos objetos orientados a objetos
 const vespaService = new VespaService(VERCEL_URL);
 
@@ -336,6 +335,25 @@ export default function TelaPrinc() {
               <Text style={styles.description}>Carregando dados do Vespa...</Text>
             )}
           </View>
+        </View>
+        {/* Novo card para o Firewall */}
+        <View style={[styles.card, { backgroundColor: '#22223b', marginTop: 20 }]}>
+          <Text style={{ fontSize: 20, color: '#facc15', fontWeight: 'bold', marginBottom: 10 }}>
+            🔥 Firewall
+          </Text>
+          {/* Exemplo de informações do firewall, substitua pelos dados reais depois */}
+          <Text style={styles.description}>
+            Status: <Text style={{ color: '#50fa7b', fontWeight: 'bold' }}>Ativo</Text>
+          </Text>
+          <Text style={styles.description}>
+            Última atualização: <Text style={{ color: '#fff' }}>2024-06-01 12:00</Text>
+          </Text>
+          <Text style={styles.description}>
+            Regras aplicadas: <Text style={{ color: '#fff' }}>5</Text>
+          </Text>
+          <Text style={styles.description}>
+            Tentativas bloqueadas: <Text style={{ color: '#f87171', fontWeight: 'bold' }}>12</Text>
+          </Text>
         </View>
       </ScrollView>
       {/* Exibe o BottomNav apenas após login */}

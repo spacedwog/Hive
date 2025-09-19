@@ -1,5 +1,3 @@
-// eslint-disable-next-line import/no-unresolved
-import { VERCEL_TOKEN } from '@env';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -13,7 +11,7 @@ export default function VercelFirewallView() {
       setLoading(true);
       const res = await fetch('https://api.vercel.com/v6/audit-log', {
         headers: {
-          Authorization: `Bearer ${VERCEL_TOKEN}`,
+          Authorization: `Bearer ${'NF6RQEC7xyNMFnzv0cTwpmFE'}`,
         },
       });
       const json = await res.json();

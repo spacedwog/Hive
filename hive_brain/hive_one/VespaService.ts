@@ -49,4 +49,20 @@ export class VespaService {
       return null;
     }
   }
+  /**
+   * Busca os dados do firewall da API do Vespa.
+   * Retorna um objeto com os dados do firewall ou null em caso de erro.
+   */
+  async fetchFirewallInfo(): Promise<any | null> {
+    try {
+      const res = await fetch(`${this.url}/api/firewall`);
+      if (!res.ok) {
+        throw new Error('Resposta não OK');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error('Erro ao acessar Firewall:', err);
+      return null;
+    }
+  }
 }
