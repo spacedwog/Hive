@@ -17,26 +17,8 @@ import LoginScreen from '../../hive_body/LoginScreen';
 import { GitHubIssueService } from '../../hive_brain/hive_one/GitHubIssueService';
 import { VespaService } from '../../hive_brain/hive_one/VespaService';
 
-// Exemplo de serviço para o firewall da Vercel
-class VercelFirewallService {
-  constructor(private baseUrl: string, private token: string) {}
-
-  async getFirewallRules() {
-    const res = await fetch(`${this.baseUrl}/v1/firewall/rules`, {
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!res.ok) {
-      throw new Error('Erro ao buscar regras do firewall');
-    }
-    return res.json();
-  }
-}
-
+// Instâncias dos objetos orientados a objetos
 const vespaService = new VespaService(VERCEL_URL);
-const vercelFirewallService = new VercelFirewallService(VERCEL_URL, GITHUB_TOKEN); // Use o token correto
 
 // -------------------------
 // 📊 TelaPrincipal
@@ -65,24 +47,6 @@ export default function TelaPrinc() {
     GITHUB_OWNER,
     GITHUB_REPO
   );
-
-  // Estados para o firewall
-  const [firewallModalVisible, setFirewallModalVisible] = useState(false);
-  const [firewallRules, setFirewallRules] = useState<any[]>([]);
-  const [firewallLoading, setFirewallLoading] = useState(false);
-
-  const handleOpenFirewall = async () => {
-    setFirewallLoading(true);
-    setFirewallModalVisible(true);
-    try {
-      const data = await vercelFirewallService.getFirewallRules();
-      setFirewallRules(data.rules || []);
-    } catch (e) {
-      setFirewallRules([]);
-      console.error('Erro ao carregar regras do firewall:', e);
-    }
-    setFirewallLoading(false);
-  };
 
   const handleAbrirIssue = () => {
     setAbrirModalVisible(true);
@@ -146,7 +110,7 @@ export default function TelaPrinc() {
         <Text style={styles.title}>📊 Data Science Dashboard</Text>
         <View style={[styles.card, { backgroundColor: '#1f2937' }]}>
           <View>
-            {/* Botões para abrir/fechar issue e firewall */}
+            {/* Botões para abrir/fechar issue */}
             <View style={{ flexDirection: 'row', marginBottom: 16 }}>
               <Text
                 style={[styles.pageBtn, { marginRight: 8 }]}
@@ -155,16 +119,10 @@ export default function TelaPrinc() {
                 Abrir Issue
               </Text>
               <Text
-                style={[styles.pageBtn, { marginRight: 8 }]}
+                style={styles.pageBtn}
                 onPress={handleFecharIssue}
               >
                 Fechar Issue
-              </Text>
-              <Text
-                style={styles.pageBtn}
-                onPress={handleOpenFirewall}
-              >
-                Firewall Vercel
               </Text>
             </View>
             {/* Modal para abrir issue */}
@@ -226,53 +184,6 @@ export default function TelaPrinc() {
                       <Text style={styles.cancelBtnText}>Cancelar</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
-              </View>
-            </Modal>
-            {/* Modal para visualizar regras do firewall */}
-            <Modal
-              visible={firewallModalVisible}
-              animationType="slide"
-              transparent={true}
-              onRequestClose={() => setFirewallModalVisible(false)}
-            >
-              <View style={{
-                flex: 1,
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                <View style={{
-                  backgroundColor: '#1f2937',
-                  borderRadius: 12,
-                  padding: 24,
-                  width: '80%',
-                  maxHeight: '70%',
-                }}>
-                  <Text style={{ color: '#facc15', fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>
-                    Regras do Firewall Vercel
-                  </Text>
-                  {firewallLoading ? (
-                    <Text style={{ color: '#fff' }}>Carregando...</Text>
-                  ) : firewallRules.length === 0 ? (
-                    <Text style={{ color: '#fff' }}>Nenhuma regra encontrada.</Text>
-                  ) : (
-                    <ScrollView style={{ maxHeight: 250 }}>
-                      {firewallRules.map((rule, idx) => (
-                        <View key={idx} style={{ marginBottom: 8, backgroundColor: '#222', borderRadius: 8, padding: 8 }}>
-                          <Text style={{ color: '#facc15', fontWeight: 'bold' }}>ID: <Text style={{ color: '#fff' }}>{rule.id}</Text></Text>
-                          <Text style={{ color: '#facc15', fontWeight: 'bold' }}>Tipo: <Text style={{ color: '#fff' }}>{rule.type}</Text></Text>
-                          <Text style={{ color: '#facc15', fontWeight: 'bold' }}>Valor: <Text style={{ color: '#fff' }}>{rule.value}</Text></Text>
-                        </View>
-                      ))}
-                    </ScrollView>
-                  )}
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#f87171', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 24, marginTop: 16 }}
-                    onPress={() => setFirewallModalVisible(false)}
-                  >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Fechar</Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             </Modal>
