@@ -14,15 +14,33 @@ app.use(express.json());
 // Endpoint para listar regras do firewall
 app.get('/api/firewall/rules', async (req, res) => {
   try {
+    // Verifica se as variáveis de ambiente estão definidas
+    if (!VERCEL_TOKEN || !VERCEL_API_URL) {
+      return res.status(500).json({ error: 'VERCEL_TOKEN ou VERCEL_API_URL não definidos nas variáveis de ambiente.' });
+    }
+
+    // Para debug: loga as variáveis (remova em produção)
+    // console.log('VERCEL_API_URL:', VERCEL_API_URL);
+    // console.log('VERCEL_TOKEN:', VERCEL_TOKEN ? '***' : 'NÃO DEFINIDO');
+
     const response = await fetch(`${VERCEL_API_URL}/v1/firewall/rules`, {
       headers: {
         Authorization: `Bearer ${VERCEL_TOKEN}`,
         'Content-Type': 'application/json',
       },
     });
+
+    // Tenta obter o corpo da resposta para debug
+    let errorBody = '';
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Erro ao buscar regras do firewall' });
+      try {
+        errorBody = await response.text();
+      } catch (e) {
+        errorBody = 'Não foi possível obter o corpo do erro.: ' + e.message;
+      }
+      return res.status(response.status).json({ error: 'Erro ao buscar regras do firewall', details: errorBody });
     }
+
     const data = await response.json();
     res.json(data);
   } catch (err) {
