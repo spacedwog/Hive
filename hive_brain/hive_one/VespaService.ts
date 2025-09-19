@@ -57,7 +57,7 @@ export class VespaService {
     try {
       const res = await fetch(`${this.url}/api/firewall`);
       if (!res.ok) {
-        throw new Error('Resposta não OK');
+        throw new Error('Resposta não OK:');
       }
       return await res.json();
     } catch (err) {

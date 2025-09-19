@@ -21,6 +21,13 @@ function firewall(req, res, next) {
 // Aplica o middleware de firewall em todas as rotas
 app.use(firewall);
 
+/**
+ * Rota GET para listar todos os IPs bloqueados
+ */
+app.get('/blocked', (req, res) => {
+  res.json({ blockedIPs });
+});
+
 // Exemplo de rota protegida
 app.get('/', (req, res) => {
   res.json({ message: 'Bem-vindo! Seu acesso foi permitido pelo firewall.' });
