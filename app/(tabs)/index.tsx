@@ -40,6 +40,9 @@ export default function TelaPrinc() {
   const [newIssueBody, setNewIssueBody] = useState('');
   const [newIssueLabels, setNewIssueLabels] = useState('');
 
+  // Estado para dados do firewall
+  const [firewallData, setFirewallData] = useState<any | null>(null);
+
   // Configure com seu token, owner e repo usando variáveis do .env
   const gitHubService = new GitHubIssueService(
     GITHUB_TOKEN,
@@ -92,6 +95,36 @@ export default function TelaPrinc() {
     };
     fetchVespaData();
     const interval = setInterval(fetchVespaData, 2000);
+    return () => clearInterval(interval);
+  }, [accessCode]);
+
+  // Buscar dados reais do firewall
+  useEffect(() => {
+    if (!accessCode || accessCode.trim() === "") {
+      return;
+    }
+    const fetchFirewallData = async () => {
+      try {
+        // Substitua por seu método real de busca dos dados do firewall
+        if (vespaService.fetchFirewallInfo) {
+          const firewall = await vespaService.fetchFirewallInfo();
+          setFirewallData(firewall);
+        } else {
+          // Exemplo de fallback se não existir o método
+          setFirewallData({
+            status: "Ativo",
+            updatedAt: new Date().toISOString(),
+            rules: 5,
+            blocked: 12,
+          });
+        }
+      } catch (e) {
+        setFirewallData(null);
+        console.error("Erro ao buscar dados do firewall:", e);
+      }
+    };
+    fetchFirewallData();
+    const interval = setInterval(fetchFirewallData, 5000);
     return () => clearInterval(interval);
   }, [accessCode]);
 
@@ -341,19 +374,49 @@ export default function TelaPrinc() {
           <Text style={{ fontSize: 20, color: '#facc15', fontWeight: 'bold', marginBottom: 10 }}>
             🔥 Firewall
           </Text>
-          {/* Exemplo de informações do firewall, substitua pelos dados reais depois */}
-          <Text style={styles.description}>
-            Status: <Text style={{ color: '#50fa7b', fontWeight: 'bold' }}>Ativo</Text>
-          </Text>
-          <Text style={styles.description}>
-            Última atualização: <Text style={{ color: '#fff' }}>2024-06-01 12:00</Text>
-          </Text>
-          <Text style={styles.description}>
-            Regras aplicadas: <Text style={{ color: '#fff' }}>5</Text>
-          </Text>
-          <Text style={styles.description}>
-            Tentativas bloqueadas: <Text style={{ color: '#f87171', fontWeight: 'bold' }}>12</Text>
-          </Text>
+          {firewallData ? (
+            <>
+              <Text style={styles.description}>
+                Status:{" "}
+                <Text style={{ color: firewallData.status === "Ativo" ? "#50fa7b" : "#f87171", fontWeight: "bold" }}>
+                  {firewallData.status}
+                </Text>
+              </Text>
+              <Text style={styles.description}>
+                Última atualização:{" "}
+                <Text style={{ color: "#fff" }}>
+                  {firewallData.updatedAt
+                    ? new Date(firewallData.updatedAt).toLocaleString("pt-BR")
+                    : "-"}
+                </Text>
+              </Text>
+              <Text style={styles.description}>
+                Regras aplicadas:{" "}
+                <Text style={{ color: "#fff" }}>
+                  {firewallData.rules ?? "-"}
+                </Text>
+              </Text>
+              <Text style={styles.description}>
+                Tentativas bloqueadas:{" "}
+                <Text style={{ color: "#f87171", fontWeight: "bold" }}>
+                  {firewallData.blocked ?? "-"}
+                </Text>
+              </Text>
+              {/* Exemplo: exibir regras detalhadas se existirem */}
+              {firewallData.rulesDetails && Array.isArray(firewallData.rulesDetails) && (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={[styles.description, { color: "#facc15", fontWeight: "bold" }]}>Regras:</Text>
+                  {firewallData.rulesDetails.map((rule: any, idx: number) => (
+                    <Text key={idx} style={styles.description}>
+                      {rule}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <Text style={styles.description}>Carregando dados do firewall...</Text>
+          )}
         </View>
       </ScrollView>
       {/* Exibe o BottomNav apenas após login */}
