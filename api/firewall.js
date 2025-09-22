@@ -1,66 +1,104 @@
-const express = require('express');
-const app = express();
+import os from "os";
 
-app.use(express.json());
-
-// Lista de IPs bloqueados (exemplo)
-const blockedIPs = [
-  '192.168.1.100',
-  '10.0.0.5'
-];
-
-// Middleware de firewall
-function firewall(req, res, next) {
-  const clientIP = req.ip || req.connection.remoteAddress;
-  if (blockedIPs.includes(clientIP)) {
-    return res.status(403).json({ error: 'Acesso negado pelo firewall.' });
+class ApiResponse {
+  static success(message, data = {}) {
+    return { success: true, message, data, timestamp: Date.now() };
   }
-  next();
+
+  static error(code, error, details = null) {
+    return {
+      success: false,
+      error: {
+        code,
+        message: error,
+        details,
+      },
+      timestamp: Date.now(),
+    };
+  }
 }
 
-// Aplica o middleware de firewall em todas as rotas
-app.use(firewall);
+class FirewallInfo {
+  static blockedIPs = ["192.168.1.100", "10.0.0.5"];
 
-/**
- * Rota GET para listar todos os IPs bloqueados
- */
-app.get('/blocked', (req, res) => {
-  res.json({ blockedIPs });
-});
-
-// Exemplo de rota protegida
-app.get('/', (req, res) => {
-  res.json({ message: 'Bem-vindo! Seu acesso foi permitido pelo firewall.' });
-});
-
-// Rota para adicionar IP à lista de bloqueio
-app.post('/block', (req, res) => {
-  const { ip } = req.body;
-  if (!ip) {
-    return res.status(400).json({ error: 'IP é obrigatório.' });
+  static getBlocked() {
+    return ApiResponse.success("IPs bloqueados", { blocked: this.blockedIPs });
   }
-  if (!blockedIPs.includes(ip)) {
-    blockedIPs.push(ip);
-  }
-  res.json({ message: `IP ${ip} bloqueado.` });
-});
 
-// Rota para remover IP da lista de bloqueio
-app.post('/unblock', (req, res) => {
-  const { ip } = req.body;
-  if (!ip) {
-    return res.status(400).json({ error: 'IP é obrigatório.' });
+  static block(ip) {
+    if (!ip) {
+      return ApiResponse.error("INVALID_IP", "IP é obrigatório.");
+    }
+    if (!this.blockedIPs.includes(ip)) {
+      this.blockedIPs.push(ip);
+    }
+    return ApiResponse.success(`IP ${ip} bloqueado.`, { blocked: this.blockedIPs });
   }
-  const index = blockedIPs.indexOf(ip);
-  if (index !== -1) {
-    blockedIPs.splice(index, 1);
-    return res.json({ message: `IP ${ip} desbloqueado.` });
-  }
-  res.status(404).json({ error: 'IP não encontrado na lista de bloqueio.' });
-});
 
-// Inicia o servidor
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`API de firewall rodando na porta ${PORT}`);
-});
+  static unblock(ip) {
+    if (!ip) {
+      return ApiResponse.error("INVALID_IP", "IP é obrigatório.");
+    }
+    const index = this.blockedIPs.indexOf(ip);
+    if (index !== -1) {
+      this.blockedIPs.splice(index, 1);
+      return ApiResponse.success(`IP ${ip} desbloqueado.`, {
+        blocked: this.blockedIPs,
+      });
+    }
+    return ApiResponse.error("NOT_FOUND", "IP não encontrado na lista de bloqueio.");
+  }
+}
+
+class FirewallApiHandler {
+  static logRequest(req) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  }
+
+  static handle(req, res) {
+    FirewallApiHandler.logRequest(req);
+    res.setHeader("Content-Type", "application/json");
+
+    try {
+      const { method, url, body } = req;
+
+      if (url === "/blocked" && method === "GET") {
+        return res.status(200).json(FirewallInfo.getBlocked());
+      }
+
+      if (url === "/block" && method === "POST") {
+        return res.status(200).json(FirewallInfo.block(body?.ip));
+      }
+
+      if (url === "/unblock" && method === "POST") {
+        return res.status(200).json(FirewallInfo.unblock(body?.ip));
+      }
+
+      if (url === "/" && method === "GET") {
+        return res.status(200).json(
+          ApiResponse.success("Bem-vindo! Seu acesso foi permitido pelo firewall.", {
+            project: "HIVE PROJECT",
+            version: "1.0.0",
+            platform: os.platform(),
+          })
+        );
+      }
+
+      return res
+        .status(404)
+        .json(ApiResponse.error("NOT_FOUND", "Rota não encontrada."));
+    } catch (err) {
+      console.error("Erro interno:", err);
+      return res.status(500).json(
+        ApiResponse.error("INTERNAL_ERROR", "Erro interno no servidor.", {
+          message: err.message,
+          stack: err.stack,
+        })
+      );
+    }
+  }
+}
+
+export default function handler(req, res) {
+  FirewallApiHandler.handle(req, res);
+}
