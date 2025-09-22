@@ -21,6 +21,21 @@ class ApiResponse {
 
 class FirewallInfo {
   static blockedIPs = ["192.168.1.100", "10.0.0.5"];
+  static rules = [
+    "Bloquear portas inseguras",
+    "Restringir IPs suspeitos",
+    "Monitorar tráfego anômalo",
+  ];
+  static status = "Ativo";
+
+  static getInfo() {
+    return ApiResponse.success("Informações do firewall", {
+      status: this.status,
+      updatedAt: new Date().toISOString(),
+      rules: this.rules.length,
+      blocked: this.blockedIPs.length,
+    });
+  }
 
   static getBlocked() {
     return ApiResponse.success("IPs bloqueados", { blocked: this.blockedIPs });
@@ -53,9 +68,13 @@ class FirewallInfo {
 
 export default function handler(req, res) {
   const { method, query, body } = req;
-  const { action } = query; // exemplo: /api/firewall?action=blocked
+  const { action } = query; // exemplo: /api/firewall?action=info
 
   try {
+    if (method === "GET" && action === "info") {
+      return res.status(200).json(FirewallInfo.getInfo());
+    }
+
     if (method === "GET" && action === "blocked") {
       return res.status(200).json(FirewallInfo.getBlocked());
     }
