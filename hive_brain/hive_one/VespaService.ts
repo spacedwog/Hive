@@ -41,7 +41,7 @@ export class VespaService {
     try {
       const res = await fetch(`${this.url}/api/placa_vespa?info=sensor&format=xml`);
       if (!res.ok) {
-        throw new Error('Resposta não OK');
+        throw new Error('Erro ao acessar: ' + res.url);
       }
       return await res.text();
     } catch (err) {
@@ -57,7 +57,7 @@ export class VespaService {
     try {
       const res = await fetch(`${this.url}/api/firewall`);
       if (!res.ok) {
-        throw new Error('Resposta não OK:');
+        throw new Error('Erro ao acessar: ' + res.url);
       }
       return await res.json();
     } catch (err) {
