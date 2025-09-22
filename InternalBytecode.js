@@ -1,5 +1,3 @@
-// C:\Users\felip\Hive\InternalBytecode.js
-
 class InternalBytecode {
   static version = "1.0.0";
 
@@ -24,8 +22,7 @@ class InternalBytecode {
     return {
       success: true,
       message: `Comando '${command}' executado com sucesso.`,
-      // eslint-disable-next-line no-undef
-      result: Buffer.from(command).toString("hex"), // exemplo: retorna o comando em hex
+      result: Array.from(new TextEncoder().encode(command)).map(b => b.toString(16).padStart(2, '0')).join(''), // exemplo: retorna o comando em hex
       timestamp: Date.now(),
     };
   }
