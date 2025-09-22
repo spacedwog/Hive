@@ -21,19 +21,17 @@ class ApiResponse {
 
 class FirewallInfo {
   static blockedIPs = ["192.168.1.100", "10.0.0.5"];
-  static rules = [
-    "Bloquear portas inseguras",
-    "Restringir IPs suspeitos",
-    "Monitorar tráfego anômalo",
-  ];
-  static status = "Ativo";
+  static attemptsBlocked = 0;
+  static lastUpdate = null;
+  static status = "Ativo"; // pode ser "Ativo" ou "Inativo"
 
   static getInfo() {
     return ApiResponse.success("Informações do firewall", {
       status: this.status,
-      updatedAt: new Date().toISOString(),
-      rules: this.rules.length,
-      blocked: this.blockedIPs.length,
+      ultimaAtualizacao: this.lastUpdate,
+      tentativasBloqueadas: this.attemptsBlocked,
+      regrasAplicadas: this.blockedIPs.length,
+      blocked: this.blockedIPs,
     });
   }
 
@@ -47,6 +45,8 @@ class FirewallInfo {
     }
     if (!this.blockedIPs.includes(ip)) {
       this.blockedIPs.push(ip);
+      this.attemptsBlocked++;
+      this.lastUpdate = new Date().toISOString();
     }
     return ApiResponse.success(`IP ${ip} bloqueado.`, { blocked: this.blockedIPs });
   }
@@ -58,6 +58,7 @@ class FirewallInfo {
     const index = this.blockedIPs.indexOf(ip);
     if (index !== -1) {
       this.blockedIPs.splice(index, 1);
+      this.lastUpdate = new Date().toISOString();
       return ApiResponse.success(`IP ${ip} desbloqueado.`, {
         blocked: this.blockedIPs,
       });
@@ -68,15 +69,15 @@ class FirewallInfo {
 
 export default function handler(req, res) {
   const { method, query, body } = req;
-  const { action } = query; // exemplo: /api/firewall?action=info
+  const { action } = query; // exemplo: /api/firewall?action=blocked
 
   try {
-    if (method === "GET" && action === "info") {
-      return res.status(200).json(FirewallInfo.getInfo());
-    }
-
     if (method === "GET" && action === "blocked") {
       return res.status(200).json(FirewallInfo.getBlocked());
+    }
+
+    if (method === "GET" && action === "info") {
+      return res.status(200).json(FirewallInfo.getInfo());
     }
 
     if (method === "POST" && action === "block") {
