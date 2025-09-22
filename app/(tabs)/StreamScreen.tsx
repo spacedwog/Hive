@@ -1,7 +1,6 @@
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
-import { WebView } from "react-native-webview";
 import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service";
 import VercelService from "../../hive_brain/hive_stream/VercelService";
 
@@ -12,7 +11,6 @@ export default function StreamScreen() {
   const [mode, setMode] = useState<"Soft-AP" | "STA">(esp32Service.mode);
   const [vercelData, setVercelData] = useState<any>(null);
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
-  const [page, setPage] = useState<"camera" | "vercel">("camera");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
   const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
@@ -31,13 +29,12 @@ export default function StreamScreen() {
     return () => clearInterval(interval);
   }, [status.ip]);
 
-  const fetchVercelData = async () => {
-    const { data, html } = await vercelService.fetchData();
-    setVercelData(data);
-    setVercelHTML(html);
-  };
-
   useEffect(() => {
+    const fetchVercelData = async () => {
+      const { data, html } = await vercelService.fetchData();
+      setVercelData(data);
+      setVercelHTML(html);
+    };
     fetchVercelData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -61,76 +58,63 @@ export default function StreamScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
 
-      <View style={styles.pageButtons}>
-        <Button title="📱 Câmera" onPress={() => setPage("camera")} />
-        <Button title="🌐 Vercel" onPress={() => { fetchVercelData(); setPage("vercel"); }} />
-      </View>
-
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
-        {page === "camera" && (
-          <>
-            <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
-            <View style={[styles.dataBox, { alignSelf: "center" }]}>
-              <Text style={styles.overlayText}>
-                LED Built-in:{" "}
-                <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
-                  {status.led_builtin.toUpperCase()}
-                </Text>
-              </Text>
-              <Text style={styles.overlayText}>
-                LED Opposite:{" "}
-                <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
-                  {status.led_opposite.toUpperCase()}
-                </Text>
-              </Text>
-              <Text style={styles.overlayText}>IP: {status.ip}</Text>
-              <View style={styles.buttonRow}>
-                <Button
-                  title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
-                  onPress={toggleLed}
-                />
-                <Button
-                  title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
-                  onPress={switchMode}
-                  color="#facc15"
-                />
-              </View>
-            </View>
+        <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
+        <View style={[styles.dataBox, { alignSelf: "center" }]}>
+          <Text style={styles.overlayText}>
+            LED Built-in:{" "}
+            <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
+              {status.led_builtin.toUpperCase()}
+            </Text>
+          </Text>
+          <Text style={styles.overlayText}>
+            LED Opposite:{" "}
+            <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
+              {status.led_opposite.toUpperCase()}
+            </Text>
+          </Text>
+          <Text style={styles.overlayText}>IP: {status.ip}</Text>
+          <View style={styles.buttonRow}>
+            <Button
+              title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
+              onPress={toggleLed}
+            />
+            <Button
+              title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
+              onPress={switchMode}
+              color="#facc15"
+            />
+          </View>
+        </View>
 
-            <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera Nativa:</Text>
-            <View style={styles.nativeCamera}>
-              {hasPermission ? (
-                <>
-                  <CameraView style={StyleSheet.absoluteFill} facing={type} />
-                  <Button
-                    title="🔄 Trocar câmera"
-                    onPress={() => setType(type === "back" ? "front" : "back")}
-                    color="#0af"
-                  />
-                </>
-              ) : (
-                <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
-              )}
-            </View>
-          </>
-        )}
-
-        {page === "vercel" && (
-          <>
-            <Text style={[styles.text, { marginTop: 20 }]}>🌐 Dados do Vercel:</Text>
-            <View style={[styles.nativeCamera, { backgroundColor: "#111", alignSelf: "center" }]}>
-              {vercelHTML ? (
-                <WebView originWhitelist={['*']} source={{ html: vercelHTML }} style={{ flex: 1 }} />
-              ) : vercelData ? (
-                <ScrollView contentContainerStyle={{ padding: 10 }}>
-                  <Text style={{ color: "#0f0" }}>{JSON.stringify(vercelData, null, 2)}</Text>
-                </ScrollView>
-              ) : (
-                <Text style={{ color: "red", textAlign: "center", marginTop: 20 }}>Carregando...</Text>
-              )}
-            </View>
-          </>
-        )}
+        <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera iOS:</Text>
+        <View style={styles.nativeCamera}>
+          {hasPermission ? (
+            <>
+              <CameraView style={StyleSheet.absoluteFill} facing={type} />
+              <Button
+                title="🔄 Trocar câmera"
+                onPress={() => setType(type === "back" ? "front" : "back")}
+                color="#0af"
+              />
+              <ScrollView style={styles.vercelOverlay}>
+                {vercelHTML ? (
+                  <Text style={styles.vercelText}>HTML carregado do Vercel</Text>
+                ) : vercelData ? (
+                  <Text style={styles.vercelText}>
+                    {JSON.stringify(vercelData, null, 1)}
+                  </Text>
+                ) : (
+                  <Text style={[styles.vercelText, { color: "red" }]}>
+                    Carregando dados Vercel...
+                  </Text>
+                )}
+              </ScrollView>
+            </>
+          ) : (
+            <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -163,19 +147,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginTop: 10,
     backgroundColor: "black",
+    padding: 5,
   },
-  streamBox: {
-    width: 320,
-    height: 240,
-    borderWidth: 2,
-    borderColor: "#0af",
-    borderRadius: 10,
-    overflow: "hidden",
-    alignSelf: "center",
-    marginTop: 10,
-    backgroundColor: "#000",
+  vercelOverlay: {
+    position: "absolute",
+    bottom: 5,
+    left: 5,
+    right: 5,
+    maxHeight: 260,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 5,
+    borderRadius: 5,
+  },
+  vercelText: {
+    color: "#0f0",
+    fontSize: 12,
   },
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
-  pageButtons: { flexDirection: "row", justifyContent: "space-around", width: "100%", marginBottom: 10 },
 });
