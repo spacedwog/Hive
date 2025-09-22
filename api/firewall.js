@@ -1,4 +1,5 @@
-import os from "os";
+// HIVE/api/firewall.js
+import * as os from "os";
 
 class ApiResponse {
   static success(message, data = {}) {
@@ -50,55 +51,43 @@ class FirewallInfo {
   }
 }
 
-class FirewallApiHandler {
-  static logRequest(req) {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  }
+export default function handler(req, res) {
+  const { method, query, body } = req;
+  const { action } = query; // exemplo: /api/firewall?action=blocked
 
-  static handle(req, res) {
-    FirewallApiHandler.logRequest(req);
-    res.setHeader("Content-Type", "application/json");
+  try {
+    if (method === "GET" && action === "blocked") {
+      return res.status(200).json(FirewallInfo.getBlocked());
+    }
 
-    try {
-      const { method, url, body } = req;
+    if (method === "POST" && action === "block") {
+      return res.status(200).json(FirewallInfo.block(body?.ip));
+    }
 
-      if (url === "/blocked" && method === "GET") {
-        return res.status(200).json(FirewallInfo.getBlocked());
-      }
+    if (method === "POST" && action === "unblock") {
+      return res.status(200).json(FirewallInfo.unblock(body?.ip));
+    }
 
-      if (url === "/block" && method === "POST") {
-        return res.status(200).json(FirewallInfo.block(body?.ip));
-      }
-
-      if (url === "/unblock" && method === "POST") {
-        return res.status(200).json(FirewallInfo.unblock(body?.ip));
-      }
-
-      if (url === "/" && method === "GET") {
-        return res.status(200).json(
-          ApiResponse.success("Bem-vindo! Seu acesso foi permitido pelo firewall.", {
-            project: "HIVE PROJECT",
-            version: "1.0.0",
-            platform: os.platform(),
-          })
-        );
-      }
-
-      return res
-        .status(404)
-        .json(ApiResponse.error("NOT_FOUND", "Rota não encontrada."));
-    } catch (err) {
-      console.error("Erro interno:", err);
-      return res.status(500).json(
-        ApiResponse.error("INTERNAL_ERROR", "Erro interno no servidor.", {
-          message: err.message,
-          stack: err.stack,
+    if (method === "GET" && !action) {
+      return res.status(200).json(
+        ApiResponse.success("Bem-vindo! Seu acesso foi permitido pelo firewall.", {
+          project: "HIVE PROJECT",
+          version: "1.0.0",
+          platform: os.platform(),
         })
       );
     }
-  }
-}
 
-export default function handler(req, res) {
-  FirewallApiHandler.handle(req, res);
+    return res
+      .status(404)
+      .json(ApiResponse.error("NOT_FOUND", "Rota não encontrada."));
+  } catch (err) {
+    console.error("Erro interno:", err);
+    return res.status(500).json(
+      ApiResponse.error("INTERNAL_ERROR", "Erro interno no servidor.", {
+        message: err.message,
+        stack: err.stack,
+      })
+    );
+  }
 }
