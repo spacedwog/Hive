@@ -35,6 +35,9 @@ export default function TelaPrinc() {
   const [selectedIssueToClose, setSelectedIssueToClose] = useState<number | null>(null);
 
   const [firewallData, setFirewallData] = useState<any | null>(null);
+  const [firewallPage, setFirewallPage] = useState(1);
+  const ipsPerPage = 10;
+
   const previousAttemptsRef = useRef<number>(0);
   const flashAnim = useRef(new Animated.Value(0)).current;
 
@@ -126,6 +129,11 @@ export default function TelaPrinc() {
 
   if (!accessCode || accessCode.trim() === "") return <LoginScreen onLogin={setAccessCode} />;
 
+  const paginatedIPs = firewallData?.blocked
+    ? firewallData.blocked.slice((firewallPage - 1) * ipsPerPage, firewallPage * ipsPerPage)
+    : [];
+  const totalPages = firewallData?.blocked ? Math.ceil(firewallData.blocked.length / ipsPerPage) : 1;
+
   return (
     <>
       <ScrollView contentContainerStyle={styles.container} onScroll={() => setWebviewKey(prev => prev + 1)} scrollEventThrottle={400}>
@@ -189,14 +197,26 @@ export default function TelaPrinc() {
                     {typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}
                   </Text>
                 ))}
+
                 {vercelData.data && (
                   <View style={{ marginTop: 12 }}>
-                    {["ip","sensor","temperature","humidity","presenca","distancia"].map(key => (
-                      <Text key={key} style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>{key.charAt(0).toUpperCase() + key.slice(1)}: <Text style={styles.description}>{JSON.stringify(vercelData.data[key], null, 2)}</Text></Text>
+                    {[
+                      { key: "ip", label: "Servidor" },
+                      { key: "sensor", label: "Sensor" },
+                      { key: "temperature", label: "Temperatura" },
+                      { key: "humidity", label: "Umidade" },
+                      { key: "presenca", label: "Presença" },
+                      { key: "distancia", label: "Distância" },
+                      { key: "timestamp", label: "Horário" }
+                    ].map(({ key, label }) => (
+                      vercelData.data[key] !== undefined && (
+                        <Text key={key} style={[styles.description, { color: '#facc15', fontWeight: 'bold' }]}>
+                          {label}: <Text style={styles.description}>{JSON.stringify(vercelData.data[key], null, 2)}</Text>
+                        </Text>
+                      )
                     ))}
                   </View>
                 )}
-                {'timestamp' in vercelData && <Text style={[styles.description, { marginTop: 12 }]}><Text style={{ fontWeight: 'bold', color: '#facc15' }}>timestamp: </Text>{String(vercelData.timestamp)}</Text>}
               </View>
             ) : vercelHTML ? (
               <View style={{ height: 400, borderRadius: 12, overflow: 'hidden' }}>
@@ -220,10 +240,22 @@ export default function TelaPrinc() {
               <Text style={styles.description}>Tentativas bloqueadas: <Text style={{ color: "#f87171", fontWeight: "bold" }}>{firewallData.tentativasBloqueadas ?? "-"}</Text></Text>
               <Text style={styles.description}>Regras aplicadas: <Text style={{ color: "#50fa7b" }}>{firewallData.regrasAplicadas ?? "-"}</Text></Text>
 
-              {firewallData.blocked && Array.isArray(firewallData.blocked) && (
+              {paginatedIPs.length > 0 && (
                 <View style={{ marginTop: 10 }}>
                   <Text style={[styles.description, { color: "#facc15", fontWeight: "bold" }]}>IPs bloqueados:</Text>
-                  {firewallData.blocked.map((ip: string, idx: number) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
+                  {paginatedIPs.map((ip: string, idx: number) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
+
+                  {totalPages > 1 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
+                      <TouchableOpacity disabled={firewallPage <= 1} onPress={() => setFirewallPage(prev => prev - 1)} style={{ marginHorizontal: 8 }}>
+                        <Text style={{ color: firewallPage > 1 ? '#50fa7b' : '#888' }}>◀</Text>
+                      </TouchableOpacity>
+                      <Text style={{ color: '#fff' }}>{firewallPage} / {totalPages}</Text>
+                      <TouchableOpacity disabled={firewallPage >= totalPages} onPress={() => setFirewallPage(prev => prev + 1)} style={{ marginHorizontal: 8 }}>
+                        <Text style={{ color: firewallPage < totalPages ? '#50fa7b' : '#888' }}>▶</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               )}
             </>
