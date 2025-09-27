@@ -70,6 +70,7 @@ export default function ExploreScreen() {
         console.warn('❌ Falha no WiFi local. Tentando Vercel...', err);
         try {
           const response = await fetch(`${VERCEL_API}/status`);
+          console.log('✅ Resposta do Vercel recebida. ', response.status);
           newStatus = await response.json();
         } catch (err2) {
           console.error('❌ Falha total: Vercel também não respondeu.', err2);
