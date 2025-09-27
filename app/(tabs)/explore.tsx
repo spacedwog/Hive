@@ -21,16 +21,16 @@ const nodeList = [new Node('NODEMCU', '192.168.4.1', '192.168.15.138')];
 const nodeManager = new NodeManager(nodeList);
 
 // URL do backend no Vercel (fallback)
-const VERCEL_API = VERCEL_URL+'/api/node';
+const VERCEL_API = VERCEL_URL + '/api/node';
 
 export default function ExploreScreen() {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
+  const [usingVercel, setUsingVercel] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [customCommands, setCustomCommands] = useState<Record<string, string>>({});
   const [history, setHistory] = useState<Record<string, number[]>>({});
 
-  // Função para calcular cor do gráfico
   const getBarColor = (value: number, anomaly: boolean) => {
     if (anomaly) {
       return '#ef4444';
@@ -55,7 +55,6 @@ export default function ExploreScreen() {
     }
   };
 
-  // Buscar status de todos os nodes (com fallback)
   const fetchStatus = useCallback(
     async (showLoader = false) => {
       if (showLoader) {
@@ -63,21 +62,35 @@ export default function ExploreScreen() {
       }
 
       let newStatus: Record<string, NodeStatus> = {};
+      const newUsingVercel: Record<string, boolean> = {};
+      let useVercel = false;
+
       try {
-        // tenta via NodeManager (STA/SoftAP)
         newStatus = await nodeManager.fetchAllStatus();
+        const hasDisconnected = Object.values(newStatus).some(
+          (s) => !s || s.error !== 'Conectado'
+        );
+        if (hasDisconnected) {
+          useVercel = true;
+        }
       } catch (err) {
         console.warn('❌ Falha no WiFi local. Tentando Vercel...', err);
+        useVercel = true;
+      }
+
+      if (useVercel) {
         try {
           const response = await fetch(`${VERCEL_API}/status`);
           console.log('✅ Resposta do Vercel recebida. ', response.status);
           newStatus = await response.json();
+          Object.keys(newStatus).forEach((name) => {
+            newUsingVercel[name] = true;
+          });
         } catch (err2) {
           console.error('❌ Falha total: Vercel também não respondeu.', err2);
         }
       }
 
-      // Atualiza histórico
       Object.entries(newStatus).forEach(([nodeName, s]) => {
         if (s?.sensor_db !== undefined) {
           setHistory((prev) => {
@@ -91,6 +104,7 @@ export default function ExploreScreen() {
       });
 
       setStatus(newStatus);
+      setUsingVercel(newUsingVercel);
       if (showLoader) {
         setLoading(false);
       }
@@ -101,12 +115,11 @@ export default function ExploreScreen() {
     [refreshing]
   );
 
-  // Enviar comando (com fallback)
   const sendCommand = async (nodeName: string, action: string) => {
     const node = nodeManager.getNodeByName(nodeName);
     let success = false;
 
-    if (node) {
+    if (node && status[nodeName]?.error === 'Conectado') {
       try {
         const res = await node.sendCommand(action);
         let msg = `Comando "${action}" enviado com sucesso para ${nodeName}.`;
@@ -119,9 +132,10 @@ export default function ExploreScreen() {
       } catch (e: any) {
         console.warn(`❌ Erro local para ${nodeName}, tentando Vercel...`, e.message);
       }
+    } else {
+      console.warn(`⚠️ Node ${nodeName} não está conectado, enviando direto para Vercel...`);
     }
 
-    // fallback no Vercel
     if (!success) {
       try {
         const res = await fetch(`${VERCEL_API}/command`, {
@@ -138,7 +152,6 @@ export default function ExploreScreen() {
     }
   };
 
-  // Inicializa e atualiza automaticamente
   useEffect(() => {
     fetchStatus(true);
     const interval = setInterval(fetchStatus, 5000);
@@ -175,6 +188,15 @@ export default function ExploreScreen() {
             const sensorHistory = history[node.name] || [];
             const maxValue = sensorHistory.length > 0 ? Math.max(...sensorHistory) : 0;
 
+            if (s?.error === 'Tentando reconectar...') {
+              return (
+                <View key={node.name} style={styles.nodeCard}>
+                  <Text style={styles.nodeName}>{node.name}</Text>
+                  <Text style={styles.statusText}>🔄 Tentando reconectar...</Text>
+                </View>
+              );
+            }
+
             return (
               <View key={node.name} style={styles.nodeCard}>
                 <Text style={styles.nodeName}>{node.name}</Text>
@@ -189,13 +211,17 @@ export default function ExploreScreen() {
                   <Text style={styles.statusLabel}>
                     {s?.error ? 'Desconectado' : 'Conectado'}
                   </Text>
+                  {usingVercel[node.name] && (
+                    <Text style={{ marginLeft: 8, color: '#facc15', fontWeight: '600' }}>
+                      📡 Fallback Vercel
+                    </Text>
+                  )}
                 </View>
 
                 {s?.error ? (
                   <Text style={styles.statusText}>❌ {s.error}</Text>
                 ) : (
                   <>
-                    {/* STATUS */}
                     <View style={styles.subCard}>
                       <Text style={styles.subTitle}>📊 Status</Text>
                       <Text style={styles.statusText}>🖥️ Aparelho: {s.device}</Text>
@@ -235,7 +261,6 @@ export default function ExploreScreen() {
                       )}
                     </View>
 
-                    {/* HISTÓRICO SENSOR */}
                     <View style={styles.subCard}>
                       <Text style={styles.subTitle}>📈 Histórico do Sensor de Som</Text>
                       <View style={styles.chartContainer}>
@@ -245,9 +270,7 @@ export default function ExploreScreen() {
                           sensorHistory.map((val, idx) => {
                             const isAnomalyBar =
                               !!(s?.anomaly?.detected && val === s.anomaly?.current_value);
-                            const barColor = isAnomalyBar
-                              ? '#000000'
-                              : getBarColor(val, false);
+                            const barColor = isAnomalyBar ? '#000000' : getBarColor(val, false);
                             const height = (val / maxValue) * 100;
                             return (
                               <View
@@ -263,7 +286,6 @@ export default function ExploreScreen() {
                       </View>
                     </View>
 
-                    {/* BOTÕES */}
                     <View style={styles.buttonRow}>
                       <Pressable
                         style={styles.actionButton}
@@ -285,7 +307,6 @@ export default function ExploreScreen() {
                       </Pressable>
                     </View>
 
-                    {/* COMANDO CUSTOM */}
                     <TextInput
                       style={styles.input}
                       placeholder="Digite um comando personalizado..."
