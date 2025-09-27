@@ -2,6 +2,9 @@
 import { Linking } from "react-native";
 
 export type GithubUser = {
+  latitude: any;
+  longitude: any;
+  location: string;
   login: string;
   id: number;
   email?: string | null;
@@ -10,6 +13,9 @@ export type GithubUser = {
 };
 
 export type GithubOrg = {
+  latitude: any;
+  longitude: any;
+  location: string;
   login: string;
   id: number;
   avatar_url: string;
