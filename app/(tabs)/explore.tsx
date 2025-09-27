@@ -1,3 +1,5 @@
+// eslint-disable-next-line import/no-unresolved
+import { VERCEL_URL } from '@env';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,10 +16,12 @@ import { Node } from '../../hive_brain/hive_finder/Node';
 import { NodeManager } from '../../hive_brain/hive_finder/NodeManager';
 import { NodeStatus } from '../../hive_brain/hive_finder/NodeStatus';
 
-const nodeList = [
-  new Node('NODEMCU', '192.168.4.1', '192.168.15.138'),
-];
+// Lista inicial de nodes locais
+const nodeList = [new Node('NODEMCU', '192.168.4.1', '192.168.15.138')];
 const nodeManager = new NodeManager(nodeList);
+
+// URL do backend no Vercel (fallback)
+const VERCEL_API = VERCEL_URL+'/api/node';
 
 export default function ExploreScreen() {
   const [status, setStatus] = useState<Record<string, NodeStatus>>({});
@@ -51,50 +55,85 @@ export default function ExploreScreen() {
     }
   };
 
-  // Buscar status de todos os nodes
-  const fetchStatus = useCallback(async (showLoader = false) => {
-    if (showLoader) {
-      setLoading(true);
-    }
-    const newStatus = await nodeManager.fetchAllStatus();
-
-    Object.entries(newStatus).forEach(([nodeName, s]) => {
-      if (s?.sensor_db !== undefined) {
-        setHistory((prev) => {
-          const prevData = prev[nodeName] || [];
-          const newData = [...prevData, s.sensor_db].filter(
-            (v): v is number => v !== undefined
-          ).slice(-30);
-          return { ...prev, [nodeName]: newData };
-        });
+  // Buscar status de todos os nodes (com fallback)
+  const fetchStatus = useCallback(
+    async (showLoader = false) => {
+      if (showLoader) {
+        setLoading(true);
       }
-    });
 
-    setStatus(newStatus);
-    if (showLoader) {
-      setLoading(false);
-    }
-    if (refreshing) {
-      setRefreshing(false);
-    }
-  }, [refreshing]);
+      let newStatus: Record<string, NodeStatus> = {};
+      try {
+        // tenta via NodeManager (STA/SoftAP)
+        newStatus = await nodeManager.fetchAllStatus();
+      } catch (err) {
+        console.warn('❌ Falha no WiFi local. Tentando Vercel...', err);
+        try {
+          const response = await fetch(`${VERCEL_API}/status`);
+          newStatus = await response.json();
+        } catch (err2) {
+          console.error('❌ Falha total: Vercel também não respondeu.', err2);
+        }
+      }
 
-  // Enviar comando para um node
+      // Atualiza histórico
+      Object.entries(newStatus).forEach(([nodeName, s]) => {
+        if (s?.sensor_db !== undefined) {
+          setHistory((prev) => {
+            const prevData = prev[nodeName] || [];
+            const newData = [...prevData, s.sensor_db]
+              .filter((v): v is number => v !== undefined)
+              .slice(-30);
+            return { ...prev, [nodeName]: newData };
+          });
+        }
+      });
+
+      setStatus(newStatus);
+      if (showLoader) {
+        setLoading(false);
+      }
+      if (refreshing) {
+        setRefreshing(false);
+      }
+    },
+    [refreshing]
+  );
+
+  // Enviar comando (com fallback)
   const sendCommand = async (nodeName: string, action: string) => {
     const node = nodeManager.getNodeByName(nodeName);
-    if (!node) {
-      return;
-    }
-    try {
-      const res = await node.sendCommand(action);
-      let msg = `Comando "${action}" enviado com sucesso para ${nodeName}.`;
-      if (action === 'ping' && res?.timestamp !== undefined) {
-        msg += ` Timestamp: ${res.timestamp} ms`;
+    let success = false;
+
+    if (node) {
+      try {
+        const res = await node.sendCommand(action);
+        let msg = `Comando "${action}" enviado com sucesso para ${nodeName}.`;
+        if (action === 'ping' && res?.timestamp !== undefined) {
+          msg += ` Timestamp: ${res.timestamp} ms`;
+        }
+        Alert.alert('✅ Sucesso', msg);
+        success = true;
+        fetchStatus();
+      } catch (e: any) {
+        console.warn(`❌ Erro local para ${nodeName}, tentando Vercel...`, e.message);
       }
-      Alert.alert('✅ Sucesso', msg);
-      fetchStatus();
-    } catch (e: any) {
-      Alert.alert('❌ Erro', e.message);
+    }
+
+    // fallback no Vercel
+    if (!success) {
+      try {
+        const res = await fetch(`${VERCEL_API}/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ node: nodeName, action }),
+        });
+        const json = await res.json();
+        Alert.alert('✅ Sucesso via Vercel', JSON.stringify(json));
+        fetchStatus();
+      } catch (err: any) {
+        Alert.alert('❌ Erro', `Falha no Vercel: ${err.message}`);
+      }
     }
   };
 
@@ -133,10 +172,7 @@ export default function ExploreScreen() {
           nodeManager.nodes.map((node) => {
             const s = status[node.name];
             const sensorHistory = history[node.name] || [];
-            const maxValue =
-              sensorHistory.length > 0
-                ? Math.max(...sensorHistory)
-                : 0; // or undefined/null, depending on your chart's requirements
+            const maxValue = sensorHistory.length > 0 ? Math.max(...sensorHistory) : 0;
 
             return (
               <View key={node.name} style={styles.nodeCard}>
@@ -164,8 +200,12 @@ export default function ExploreScreen() {
                       <Text style={styles.statusText}>🖥️ Aparelho: {s.device}</Text>
                       <Text style={styles.statusText}>🗄️ Servidor: {s.server_ip}</Text>
                       <Text style={styles.statusText}>✅ Estado: {s.status}</Text>
-                      <Text style={styles.statusText}>🔊 Sensor de som: {s.sensor_db?.toFixed(1)}</Text>
-                      <Text style={styles.statusText}>🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}</Text>
+                      <Text style={styles.statusText}>
+                        🔊 Sensor de som: {s.sensor_db?.toFixed(1)}
+                      </Text>
+                      <Text style={styles.statusText}>
+                        🧬 Mesh: {s.mesh ? 'Conectado' : 'Desconectado'}
+                      </Text>
                       <Text
                         style={[
                           styles.statusText,
@@ -174,10 +214,24 @@ export default function ExploreScreen() {
                       >
                         ⚠️ Anomalia: {s.anomaly?.detected ? 'Detectada' : 'Normal'}
                       </Text>
-                      {s.anomaly?.message && <Text style={styles.statusText}>📝 {s.anomaly.message}</Text>}
-                      {s.anomaly?.current_value !== undefined && <Text style={styles.statusText}>🔢 Valor Atual: {s.anomaly.current_value}</Text>}
-                      {s.anomaly?.expected_range && <Text style={styles.statusText}>📊 Faixa Esperada: {s.anomaly.expected_range}</Text>}
-                      {s.timestamp !== undefined && <Text style={styles.statusText}>📡 Ping Timestamp: {s.timestamp} ms</Text>}
+                      {s.anomaly?.message && (
+                        <Text style={styles.statusText}>📝 {s.anomaly.message}</Text>
+                      )}
+                      {s.anomaly?.current_value !== undefined && (
+                        <Text style={styles.statusText}>
+                          🔢 Valor Atual: {s.anomaly.current_value}
+                        </Text>
+                      )}
+                      {s.anomaly?.expected_range && (
+                        <Text style={styles.statusText}>
+                          📊 Faixa Esperada: {s.anomaly.expected_range}
+                        </Text>
+                      )}
+                      {s.timestamp !== undefined && (
+                        <Text style={styles.statusText}>
+                          📡 Ping Timestamp: {s.timestamp} ms
+                        </Text>
+                      )}
                     </View>
 
                     {/* HISTÓRICO SENSOR */}
@@ -188,11 +242,20 @@ export default function ExploreScreen() {
                           <Text style={styles.statusText}>Nenhum dado coletado ainda...</Text>
                         ) : (
                           sensorHistory.map((val, idx) => {
-                            const isAnomalyBar = !!(s?.anomaly?.detected && val === s.anomaly?.current_value);
-                            const barColor = isAnomalyBar ? '#000000' : getBarColor(val, false);
+                            const isAnomalyBar =
+                              !!(s?.anomaly?.detected && val === s.anomaly?.current_value);
+                            const barColor = isAnomalyBar
+                              ? '#000000'
+                              : getBarColor(val, false);
                             const height = (val / maxValue) * 100;
                             return (
-                              <View key={idx} style={[styles.bar, { height: `${height}%`, backgroundColor: barColor }]} />
+                              <View
+                                key={idx}
+                                style={[
+                                  styles.bar,
+                                  { height: `${height}%`, backgroundColor: barColor },
+                                ]}
+                              />
                             );
                           })
                         )}
@@ -201,13 +264,22 @@ export default function ExploreScreen() {
 
                     {/* BOTÕES */}
                     <View style={styles.buttonRow}>
-                      <Pressable style={styles.actionButton} onPress={() => sendCommand(node.name, 'on')}>
+                      <Pressable
+                        style={styles.actionButton}
+                        onPress={() => sendCommand(node.name, 'on')}
+                      >
                         <Text style={styles.actionText}>⚡ Ativar</Text>
                       </Pressable>
-                      <Pressable style={styles.actionButton} onPress={() => sendCommand(node.name, 'off')}>
+                      <Pressable
+                        style={styles.actionButton}
+                        onPress={() => sendCommand(node.name, 'off')}
+                      >
                         <Text style={styles.actionText}>🛑 Desativar</Text>
                       </Pressable>
-                      <Pressable style={styles.actionButton} onPress={() => sendCommand(node.name, 'ping')}>
+                      <Pressable
+                        style={styles.actionButton}
+                        onPress={() => sendCommand(node.name, 'ping')}
+                      >
                         <Text style={styles.actionText}>📡 Ping</Text>
                       </Pressable>
                     </View>
@@ -224,7 +296,9 @@ export default function ExploreScreen() {
                     />
                     <Pressable
                       style={styles.primaryButton}
-                      onPress={() => sendCommand(node.name, customCommands[node.name] || '')}
+                      onPress={() =>
+                        sendCommand(node.name, customCommands[node.name] || '')
+                      }
                     >
                       <Text style={styles.primaryButtonText}>🚀 Enviar Comando</Text>
                     </Pressable>
@@ -241,22 +315,94 @@ export default function ExploreScreen() {
 
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: '#0f172a' },
-  container: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 16 },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#facc15', marginBottom: 24, textAlign: 'center' },
-  primaryButton: { backgroundColor: '#facc15', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10, marginBottom: 20 },
-  primaryButtonText: { color: '#0f172a', fontWeight: '600', fontSize: 16, textAlign: 'center' },
-  nodeCard: { width: 340, padding: 20, backgroundColor: '#1e293b', marginVertical: 12, borderRadius: 16, borderColor: '#334155', borderWidth: 1 },
-  nodeName: { fontSize: 20, fontWeight: '600', color: '#e2e8f0', marginBottom: 8, textAlign: 'center' },
-  statusIndicatorWrapper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  container: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#facc15',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  primaryButton: {
+    backgroundColor: '#facc15',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  primaryButtonText: {
+    color: '#0f172a',
+    fontWeight: '600',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  nodeCard: {
+    width: 340,
+    padding: 20,
+    backgroundColor: '#1e293b',
+    marginVertical: 12,
+    borderRadius: 16,
+    borderColor: '#334155',
+    borderWidth: 1,
+  },
+  nodeName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#e2e8f0',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  statusIndicatorWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
   statusDot: { width: 12, height: 12, borderRadius: 6, marginRight: 6 },
   statusLabel: { color: '#94a3b8', fontSize: 14 },
   subCard: { marginTop: 10, padding: 12, backgroundColor: '#0f172a', borderRadius: 12 },
-  subTitle: { fontSize: 16, fontWeight: '600', color: '#facc15', marginBottom: 10, textAlign: 'center' },
-  statusText: { fontSize: 15, marginBottom: 6, color: '#94a3b8', textAlign: 'center' },
-  chartContainer: { flexDirection: 'row', alignItems: 'flex-end', height: 120, backgroundColor: '#1e293b', borderRadius: 8, padding: 4, overflow: 'hidden' },
+  subTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#facc15',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  statusText: {
+    fontSize: 15,
+    marginBottom: 6,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  chartContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 120,
+    backgroundColor: '#1e293b',
+    borderRadius: 8,
+    padding: 4,
+    overflow: 'hidden',
+  },
   bar: { flex: 1, marginHorizontal: 1, borderRadius: 2 },
   buttonRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 14 },
-  actionButton: { backgroundColor: '#334155', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
+  actionButton: {
+    backgroundColor: '#334155',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
   actionText: { color: '#f1f5f9', fontWeight: '600' },
-  input: { backgroundColor: '#334155', color: '#f1f5f9', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginTop: 14, width: '100%' },
+  input: {
+    backgroundColor: '#334155',
+    color: '#f1f5f9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 14,
+    width: '100%',
+  },
 });
