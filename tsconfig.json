@@ -1,17 +1,24 @@
 {
-  // "extends": "expo/tsconfig.base", // Removed because file not found
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "jsx": "react-native",
+    "module": "node16",
+    "target": "esnext",
+    "moduleResolution": "node16",
+    "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "module": "ESNext",
+
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+
     "typeRoots": [
       "./src/types",
       "./node_modules/@types"
     ],
-    "strict": true,
+
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
@@ -19,6 +26,7 @@
     "env.d.ts",
     "victory-native.d.ts",
     "**/*.ts",
-    "**/*.tsx"
-, "api/lib/sensor/SensorApiHandler.js"  ]
+    "**/*.tsx",
+    "api/lib/sensor/SensorApiHandler.js"
+  ]
 }

@@ -2,13 +2,13 @@
 import { VERCEL_URL } from '@env';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import BottomNav from '../../hive_body/BottomNav';
 
 export default function TelaPrinc() {
@@ -20,7 +20,7 @@ export default function TelaPrinc() {
   const ipsPerPage = 10;
 
   const previousAttemptsRef = useRef<number>(0);
-  const flashAnim = useRef(new Animated.Value(0)).current;
+  const flashAnim = useSharedValue(0);
 
   // -------------------------
   // Dados do Firewall em tempo real
@@ -116,10 +116,9 @@ export default function TelaPrinc() {
           // Animação para novas tentativas
           // -------------------------
           if (previousAttemptsRef.current < data.data.tentativasBloqueadas) {
-            Animated.sequence([
-              Animated.timing(flashAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-              Animated.timing(flashAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-            ]).start();
+            flashAnim.value = withTiming(1, { duration: 300 }, () => {
+              flashAnim.value = withTiming(0, { duration: 300 });
+            });
           }
 
           previousAttemptsRef.current = data.data.tentativasBloqueadas;
@@ -136,6 +135,10 @@ export default function TelaPrinc() {
     const interval = setInterval(fetchFirewallData, 5000);
     return () => clearInterval(interval);
   }, [accessCode, flashAnim, routeSaved]);
+
+  const animatedCardStyle = useAnimatedStyle(() => ({
+    backgroundColor: flashAnim.value === 1 ? "#f87171" : "#22223b",
+  }));
 
   if (!accessCode || accessCode.trim() === "")
     return (
@@ -163,18 +166,13 @@ export default function TelaPrinc() {
         {/* ------------------------- */}
         {/* Card Firewall */}
         {/* ------------------------- */}
+        
         <Animated.View
           style={[
             styles.card,
-            {
-              backgroundColor: flashAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: ["#22223b", "#f87171"],
-              }),
-            },
+            animatedCardStyle,
           ]}
         >
-          <Text style={styles.cardTitle}>🔥 Firewall</Text>
           {firewallData ? (
             <>
               <Text style={styles.description}>
