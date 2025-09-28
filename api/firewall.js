@@ -27,13 +27,18 @@ class FirewallInfo {
   static lastUpdate = null;
   static status = "Ativo";
 
-  // Simulação de tentativas de acesso falhas
+  static routingTable = [];
+  static natTable = [];
+  static activeConnections = [];
+  static vpnStatus = false;
+
+  // -------------------------
+  // Logs e IPs bloqueados
+  // -------------------------
   static simulateFailedAttempts() {
-    // Gerar entre 0 e 3 tentativas por chamada
     const failed = Math.floor(Math.random() * 4);
     this.attemptsBlocked += failed;
     if (failed > 0) {
-      // Gerar IPs falsos para bloqueio dinâmico
       for (let i = 0; i < failed; i++) {
         const ip = `192.168.1.${Math.floor(Math.random() * 254 + 1)}`;
         if (!this.blockedIPs.includes(ip)) {
@@ -68,29 +73,9 @@ class FirewallInfo {
     }
   }
 
-  static getInfo() {
-    this.loadBlockedFromLogs();
-    this.simulateFailedAttempts(); // atualiza tentativas falhas dinamicamente
-    return ApiResponse.success("Informações do firewall", {
-      status: this.status,
-      ultimaAtualizacao: this.lastUpdate,
-      tentativasBloqueadas: this.attemptsBlocked,
-      regrasAplicadas: this.blockedIPs.length,
-      blocked: this.blockedIPs,
-      system: {
-        platform: os.platform(),
-        hostname: os.hostname(),
-        cpus: os.cpus().length,
-        uptime: os.uptime(),
-      },
-    });
-  }
-
-  static getBlocked() {
-    this.loadBlockedFromLogs();
-    return ApiResponse.success("IPs bloqueados", { blocked: this.blockedIPs });
-  }
-
+  // -------------------------
+  // Bloqueio e desbloqueio
+  // -------------------------
   static block(ip) {
     if (!ip) {
       return ApiResponse.error("INVALID_IP", "IP é obrigatório.");
@@ -117,8 +102,81 @@ class FirewallInfo {
     }
     return ApiResponse.error("NOT_FOUND", "IP não encontrado na lista de bloqueio.");
   }
+
+  // -------------------------
+  // Informações gerais
+  // -------------------------
+  static getInfo() {
+    this.loadBlockedFromLogs();
+    this.simulateFailedAttempts();
+    return ApiResponse.success("Informações do firewall", {
+      status: this.status,
+      ultimaAtualizacao: this.lastUpdate,
+      tentativasBloqueadas: this.attemptsBlocked,
+      regrasAplicadas: this.blockedIPs.length,
+      blocked: this.blockedIPs,
+      routingTable: this.routingTable,
+      natTable: this.natTable,
+      vpnStatus: this.vpnStatus,
+      system: {
+        platform: os.platform(),
+        hostname: os.hostname(),
+        cpus: os.cpus().length,
+        uptime: os.uptime(),
+      },
+    });
+  }
+
+  static getBlocked() {
+    this.loadBlockedFromLogs();
+    return ApiResponse.success("IPs bloqueados", { blocked: this.blockedIPs });
+  }
+
+  // -------------------------
+  // Routing
+  // -------------------------
+  static addRoute(destination, gateway) {
+    if (!destination || !gateway) {
+      return ApiResponse.error("INVALID_ROUTE", "Destino e Gateway são obrigatórios.");
+    }
+    this.routingTable.push({ destination, gateway });
+    return ApiResponse.success("Rota adicionada.", { routingTable: this.routingTable });
+  }
+
+  // -------------------------
+  // NAT
+  // -------------------------
+  static addNAT(internalIP, externalIP) {
+    if (!internalIP || !externalIP) {
+      return ApiResponse.error("INVALID_NAT", "IP interno e externo são obrigatórios.");
+    }
+    this.natTable.push({ internalIP, externalIP });
+    return ApiResponse.success("NAT configurado.", { natTable: this.natTable });
+  }
+
+  // -------------------------
+  // VPN
+  // -------------------------
+  static setVPN(enable) {
+    this.vpnStatus = enable === true;
+    return ApiResponse.success(`VPN ${enable ? "ativada" : "desativada"}.`, { vpnStatus: this.vpnStatus });
+  }
+
+  // -------------------------
+  // Conexões ativas (simuladas)
+  // -------------------------
+  static getConnections() {
+    this.activeConnections = [
+      { src: "192.168.1.2", dst: "8.8.8.8", protocol: "TCP", status: "ESTABLISHED" },
+      { src: "192.168.1.3", dst: "1.1.1.1", protocol: "UDP", status: "CLOSED" },
+    ];
+    return ApiResponse.success("Conexões ativas", { activeConnections: this.activeConnections });
+  }
 }
 
+// -------------------------
+// Handler principal
+// -------------------------
 export default function handler(req, res) {
   const { method, query, body } = req;
   const { action } = query;
@@ -135,6 +193,26 @@ export default function handler(req, res) {
     }
     if (method === "POST" && action === "unblock") {
       return res.status(200).json(FirewallInfo.unblock(body?.ip));
+    }
+
+    // Routing
+    if (method === "POST" && action === "route") {
+      return res.status(200).json(FirewallInfo.addRoute(body?.destination, body?.gateway));
+    }
+
+    // NAT
+    if (method === "POST" && action === "nat") {
+      return res.status(200).json(FirewallInfo.addNAT(body?.internalIP, body?.externalIP));
+    }
+
+    // VPN
+    if (method === "POST" && action === "vpn") {
+      return res.status(200).json(FirewallInfo.setVPN(body?.enable));
+    }
+
+    // Conexões ativas
+    if (method === "GET" && action === "connections") {
+      return res.status(200).json(FirewallInfo.getConnections());
     }
 
     if (method === "GET" && !action) {
