@@ -56,22 +56,47 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
 // ==================================
 // Função de Geocodificação (OpenStreetMap)
 // ==================================
-const geocodeLocation = async (location: string) => {
+// Cache simples para não repetir requisições
+const geocodeCache: { [key: string]: { latitude: number; longitude: number } } = {};
+
+const geocodeLocation = async (location: string, retries = 3): Promise<{ latitude: number; longitude: number }> => {
   if (!location) {
     return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
   }
-  try {
-    const res = await axios.get('https://nominatim.openstreetmap.org/search', {
-      params: { q: location, format: 'json', limit: 1 },
-    });
-    if (res.data.length > 0) {
-      return { latitude: parseFloat(res.data[0].lat), longitude: parseFloat(res.data[0].lon) };
-    }
-    return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
-  } catch (err) {
-    console.error('Erro ao geocodificar localização:', err);
-    return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
+  if (geocodeCache[location]) {
+    return geocodeCache[location];
   }
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await axios.get('https://nominatim.openstreetmap.org/search', {
+        params: { q: location, format: 'json', limit: 1 },
+        headers: {
+          'User-Agent': 'HiveApp/1.0 (contact@seuemail.com)', // substitua pelo seu e-mail real
+          'Accept-Language': 'pt-BR',
+        },
+      });
+
+      if (res.data.length > 0) {
+        const coords = { latitude: parseFloat(res.data[0].lat), longitude: parseFloat(res.data[0].lon) };
+        geocodeCache[location] = coords;
+        return coords;
+      }
+
+      // Nenhuma coordenada encontrada
+      return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
+    } catch (err: any) {
+      console.error(`Erro ao geocodificar localização (tentativa ${attempt}):`, err.message || err);
+
+      // Se ainda houver retries, aguarda 1 segundo antes de tentar novamente
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+  }
+
+  // Retorna fallback após todas as tentativas
+  return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
 };
 
 // ==================================
@@ -418,10 +443,10 @@ export default function HiveScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
-  sliderBox: { position: "absolute", bottom: 110, width: "100%" },
-  pagePagination: { position: "absolute", bottom: 70, flexDirection: "row", justifyContent: "space-around", width: "100%" },
+  sliderBox: { position: "absolute", bottom: 125, width: "100%" },
+  pagePagination: { position: "absolute", bottom: 100, flexDirection: "row", justifyContent: "space-around", width: "100%" },
   overlayScroll: { position: "absolute", top: 0, width: "100%", maxHeight: "80%" },
-  unisonCard: { backgroundColor: "#fff", margin: 12, borderRadius: 12, padding: 12, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 4 },
+  unisonCard: { backgroundColor: "#fff", margin: 12, borderRadius: 12, padding: 12, top: 100, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 4 },
   nodeBox: { marginBottom: 12, borderBottomWidth: 1, borderBottomColor: "#ccc", paddingBottom: 8 },
   nodeText: { fontSize: 16, fontWeight: "bold" },
   statusText: { fontSize: 14 },
