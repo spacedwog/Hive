@@ -56,7 +56,6 @@ const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = (
 // ==================================
 // Função de Geocodificação (OpenStreetMap)
 // ==================================
-// Cache simples para não repetir requisições
 const geocodeCache: { [key: string]: { latitude: number; longitude: number } } = {};
 
 const geocodeLocation = async (location: string, retries = 3): Promise<{ latitude: number; longitude: number }> => {
@@ -72,7 +71,7 @@ const geocodeLocation = async (location: string, retries = 3): Promise<{ latitud
       const res = await axios.get('https://nominatim.openstreetmap.org/search', {
         params: { q: location, format: 'json', limit: 1 },
         headers: {
-          'User-Agent': 'HiveApp/1.0 (contact@seuemail.com)', // substitua pelo seu e-mail real
+          'User-Agent': 'HiveApp/1.0 (contact@seuemail.com)',
           'Accept-Language': 'pt-BR',
         },
       });
@@ -83,19 +82,15 @@ const geocodeLocation = async (location: string, retries = 3): Promise<{ latitud
         return coords;
       }
 
-      // Nenhuma coordenada encontrada
       return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
     } catch (err: any) {
       console.error(`Erro ao geocodificar localização (tentativa ${attempt}):`, err.message || err);
-
-      // Se ainda houver retries, aguarda 1 segundo antes de tentar novamente
       if (attempt < retries) {
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
   }
 
-  // Retorna fallback após todas as tentativas
   return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
 };
 
@@ -115,19 +110,16 @@ export default function HiveScreen() {
   const [githubOrgs, setGithubOrgs] = useState<GithubOrg[]>([]);
   const [selectedOrgIndex, setSelectedOrgIndex] = useState(0);
 
-  const [currentPage, setCurrentPage] = useState(0); // 0: Mapa, 1: Status, 2: GitHub
-  const [githubPage, setGithubPage] = useState<"user" | "org">("user"); // toggle interno
+  const [currentPage, setCurrentPage] = useState(0);
+  const [githubPage, setGithubPage] = useState<"user" | "org">("user");
 
   const { width: winWidth } = useWindowDimensions();
   const githubManager = useMemo(() => new GithubEmailManager(), []);
 
-  // =========================
-  // Autenticação GitHub
-  // =========================
   const githubAuthHeader = useMemo(() => ({ headers: { Authorization: `token ${GITHUB_TOKEN}` } }), []);
 
   // =========================
-  // Buscar usuários GitHub + detalhes (e-mail + geolocalização)
+  // Buscar usuários GitHub + detalhes
   // =========================
   const fetchGithubUsersPage = React.useCallback(async () => {
     try {
@@ -139,7 +131,13 @@ export default function HiveScreen() {
           try {
             const detailRes = await axios.get(`https://api.github.com/users/${user.login}`, githubAuthHeader);
             const userData = detailRes.data;
-            const coords = await geocodeLocation(userData.location);
+
+            // Só geocodifica se a localização existir e não for "Não informado"
+            let coords = { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
+            if (userData.location && userData.location !== "Não informado") {
+              coords = await geocodeLocation(userData.location);
+            }
+
             return { ...userData, latitude: coords.latitude, longitude: coords.longitude };
           } catch {
             return { ...user, latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
@@ -165,7 +163,12 @@ export default function HiveScreen() {
           try {
             const orgRes = await axios.get(`https://api.github.com/orgs/${org.login}`, githubAuthHeader);
             const orgData = orgRes.data;
-            const coords = await geocodeLocation(orgData.location);
+
+            let coords = { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
+            if (orgData.location && orgData.location !== "Não informado") {
+              coords = await geocodeLocation(orgData.location);
+            }
+
             return { ...orgData, latitude: coords.latitude, longitude: coords.longitude };
           } catch {
             return { ...org, latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
@@ -226,11 +229,12 @@ export default function HiveScreen() {
 
             const node: NodeStatus = { ...res.data, server, latitude, longitude, clients };
 
-            // Verificar anomalia
             if (node.ultrassonico_m !== undefined && node.ultrassonico_m < 0.1) {
               node.anomaly = { detected: true, message: "Distância ultrassônica muito baixa!", current_value: node.ultrassonico_m };
               Vibration.vibrate(500);
-              try { await axios.post(`${VERCEL_URL}/api/anomalia`, { server: node.server, device: node.device, message: node.anomaly.message, current_value: node.anomaly.current_value, timestamp: new Date().toISOString() }); } catch {}
+              try {
+                await axios.post(`${VERCEL_URL}/api/anomalia`, { server: node.server, device: node.device, message: node.anomaly.message, current_value: node.anomaly.current_value, timestamp: new Date().toISOString() });
+              } catch {}
             } else {
               node.anomaly = { detected: false, message: "", current_value: node.ultrassonico_m ?? 0 };
             }
@@ -244,7 +248,6 @@ export default function HiveScreen() {
 
       setStatus(responses);
 
-      // Histórico
       setHistory((prev) => {
         const next = { ...prev };
         responses.forEach((s) => {
@@ -297,7 +300,6 @@ export default function HiveScreen() {
   // =========================
   return (
     <View style={styles.container}>
-      {/* MAPA */}
       <MapView
         style={styles.map}
         region={{ latitude: userLocation?.latitude ?? FALLBACK_LAT, longitude: userLocation?.longitude ?? FALLBACK_LON, latitudeDelta: zoom, longitudeDelta: zoom }}
@@ -319,7 +321,6 @@ export default function HiveScreen() {
           </Marker>
         ))}
 
-        {/* Usuários GitHub */}
         {githubUsers.map((u, idx) => (
           u.latitude && u.longitude && (
             <Marker key={`gh-${idx}`} coordinate={{ latitude: u.latitude, longitude: u.longitude }} pinColor="blue">
@@ -331,7 +332,6 @@ export default function HiveScreen() {
           )
         ))}
 
-        {/* Organizações GitHub */}
         {githubOrgs.map((o, idx) => (
           o.latitude && o.longitude && (
             <Marker key={`org-${idx}`} coordinate={{ latitude: o.latitude, longitude: o.longitude }} pinColor="purple">
@@ -344,24 +344,28 @@ export default function HiveScreen() {
         ))}
       </MapView>
 
-      {/* SLIDER ZOOM MAPA */}
       <View style={styles.sliderBox}>
         <Text style={{ textAlign: "center" }}>🔎 Zoom</Text>
-        <Slider style={{ width: "90%", alignSelf: "center" }} minimumValue={0.01} maximumValue={0.2} step={0.005} value={zoom} onValueChange={setZoom} />
+        <Slider
+          style={{ width: "90%", alignSelf: "center" }}
+          minimumValue={0.01}    // zoom mínimo
+          maximumValue={100}     // zoom máximo aumentado
+          step={0.005}
+          value={zoom}
+          onValueChange={setZoom}
+        />
       </View>
 
-      {/* PAGINAÇÃO SOBRE O MAPA */}
       <View style={styles.pagePagination}>
         <Button title="Mapa" onPress={() => setCurrentPage(0)} />
         <Button title="Status Vespa" onPress={() => setCurrentPage(1)} />
         <Button title="GitHub" onPress={() => setCurrentPage(2)} />
       </View>
 
-      {/* CONTEÚDO POR PÁGINA */}
       {currentPage !== 0 && (
         <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={styles.unisonCard}>
-            {/* PÁGINA STATUS VESPA */}
+            {/* Página Status Vespa */}
             {currentPage === 1 && onlineStatus.map((s, idx) => {
               const serverKey = s.server ?? "unknown";
               const hist = history[serverKey] ?? [];
@@ -390,7 +394,7 @@ export default function HiveScreen() {
               );
             })}
 
-            {/* PÁGINA GITHUB */}
+            {/* Página GitHub */}
             {currentPage === 2 && (
               <>
                 <View style={{ flexDirection: "row", justifyContent: "center", marginBottom: 8 }}>
@@ -462,5 +466,5 @@ const styles = StyleSheet.create({
   githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 4 },
   githubText: { fontSize: 14, marginVertical: 2 },
   unisonTitle: { fontSize: 16, fontWeight: "bold", textAlign: "center", marginVertical: 6 },
-  chartTitle: { fontSize: 15, fontWeight: "bold", marginBottom: 4, textAlign: "center" }, // <-- Added style
+  chartTitle: { fontSize: 15, fontWeight: "bold", marginBottom: 4, textAlign: "center" },
 });
