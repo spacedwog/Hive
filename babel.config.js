@@ -6,8 +6,8 @@ module.exports = function(api) {
       [
         'module:react-native-dotenv',
         { moduleName: '@env', path: '.env', allowUndefined: true },
-        'react-native-reanimated/plugin', // 🔑 SEMPRE último
       ],
+      'react-native-reanimated/plugin', // 🔑 SEMPRE último
     ],
   };
 };
