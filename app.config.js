@@ -21,5 +21,14 @@ export default {
   },
   web: {
     favicon: "./assets/images/favicon.png"
-  }
+  },
+  plugins: [
+    "expo-router",
+    [
+      "react-native-reanimated/plugin",
+      {
+        relativeSourceLocation: true
+      }
+    ]
+  ]
 };
