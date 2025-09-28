@@ -1,32 +1,283 @@
-import { Link, Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
+// eslint-disable-next-line import/no-unresolved
+import { VERCEL_URL } from '@env';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  View as AnimatedView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
+import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import BottomNav from '../hive_body/BottomNav.tsx';
 
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+export default function TelaPrinc() {
+  const [accessCode, setAccessCode] = useState<string | null>(null);
+  const [firewallData, setFirewallData] = useState<any | null>(null);
+  const [firewallPage, setFirewallPage] = useState(1);
+  const [routeSaved, setRouteSaved] = useState(false);
+  const [alertMsg, setAlertMsg] = useState<string[]>([]); // lista de alertas
+  const ipsPerPage = 10;
 
-export default function NotFoundScreen() {
+  const previousAttemptsRef = useRef<number>(0);
+  const flashAnim = useSharedValue(0);
+
+  // -------------------------
+  // Dados do Firewall em tempo real
+  // -------------------------
+  useEffect(() => {
+    if (!accessCode || accessCode.trim() === "") {
+      return;
+    }
+
+    const fetchFirewallData = async () => {
+      try {
+        const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
+        const data = await response.json();
+
+        if (data.success) {
+          setFirewallData(data.data);
+
+          // -------------------------
+          // Bloqueio de IP e nova regra
+          // -------------------------
+          if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
+            try {
+              // Alerta
+              await fetch(`${VERCEL_URL}/api/firewall?action=alert`);
+
+              // Bloqueio do IP (usar último bloqueado ou aleatório)
+              const ipParaBloquear =
+                data.data.ip || `192.168.1.${Math.floor(Math.random() * 254 + 1)}`;
+              await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ip: ipParaBloquear }),
+              });
+
+              // Gerar nova regra automática
+              const destination = `10.0.${Math.floor(Math.random() * 255)}.0/24`;
+              const gateway = "192.168.1.1";
+              await fetch(`${VERCEL_URL}/api/firewall?action=route`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ destination, gateway }),
+              });
+
+              // Atualiza mensagens de alerta
+              setAlertMsg(prev => [
+                `IP bloqueado automaticamente: ${ipParaBloquear}`,
+                `Nova regra criada: ${destination} -> ${gateway}`,
+                ...prev,
+              ]);
+            } catch (err) {
+              console.error("Erro ao bloquear IP ou criar regra:", err);
+              setAlertMsg(prev => [
+                `Erro: ${err instanceof Error ? err.message : String(err)}`,
+                ...prev,
+              ]);
+            }
+          }
+
+          // -------------------------
+          // Salvar rota automaticamente quando tentativas = regras
+          // -------------------------
+          if (
+            data.data.tentativasBloqueadas === data.data.regrasAplicadas &&
+            !routeSaved
+          ) {
+            try {
+              const destination = "192.168.15.166/24";
+              const gateway = "192.168.1.1";
+
+              const routeResponse = await fetch(`${VERCEL_URL}/api/firewall?action=route`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ destination, gateway }),
+              });
+              const result = await routeResponse.json();
+              console.log("Rota salva automaticamente:", result);
+              setRouteSaved(true);
+
+              setAlertMsg(prev => [
+                `Rota automática salva: ${destination} -> ${gateway}`,
+                ...prev,
+              ]);
+            } catch (err) {
+              console.error("Erro ao salvar rota:", err);
+              setAlertMsg(prev => [
+                `Erro ao salvar rota: ${err instanceof Error ? err.message : String(err)}`,
+                ...prev,
+              ]);
+            }
+          }
+
+          // -------------------------
+          // Animação para novas tentativas
+          // -------------------------
+          if (previousAttemptsRef.current < data.data.tentativasBloqueadas) {
+            flashAnim.value = withTiming(1, { duration: 300 }, () => {
+              flashAnim.value = withTiming(0, { duration: 300 });
+            });
+          }
+
+          previousAttemptsRef.current = data.data.tentativasBloqueadas;
+        } else {
+          setFirewallData(null);
+        }
+      } catch (err) {
+        setFirewallData(null);
+        console.error("Erro ao buscar dados do firewall:", err);
+      }
+    };
+
+    fetchFirewallData();
+    const interval = setInterval(fetchFirewallData, 5000);
+    return () => clearInterval(interval);
+  }, [accessCode, flashAnim, routeSaved]);
+
+  const animatedCardStyle = useAnimatedStyle(() => ({
+    backgroundColor: flashAnim.value === 1 ? "#f87171" : "#22223b",
+  }));
+
+  if (!accessCode || accessCode.trim() === "")
+    return (
+      <View style={styles.loginContainer}>
+        <Text style={{ color: "#fff", fontSize: 16 }}>Insira o código de acesso:</Text>
+        <TouchableOpacity
+          onPress={() => setAccessCode("ACESSO_LIBERADO")}
+          style={styles.loginBtn}
+        >
+          <Text style={{ color: "#0f172a", fontWeight: "bold" }}>Login</Text>
+        </TouchableOpacity>
+      </View>
+    );
+
+  const paginatedIPs = firewallData?.blocked
+    ? firewallData.blocked.slice((firewallPage - 1) * ipsPerPage, firewallPage * ipsPerPage)
+    : [];
+  const totalPages = firewallData?.blocked ? Math.ceil(firewallData.blocked.length / ipsPerPage) : 1;
+
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
-      <ThemedView style={styles.container}>
-        <ThemedText type="title">This screen does not exist.</ThemedText>
-        <Link href="/(tabs)/explore" style={styles.link}>
-          <ThemedText type="link">Go to home screen!</ThemedText>
-        </Link>
-      </ThemedView>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>📊 Data Science Dashboard</Text>
+
+        {/* ------------------------- */}
+        {/* Card Firewall */}
+        {/* ------------------------- */}
+        
+        <AnimatedView
+          style={[
+            styles.card,
+            animatedCardStyle,
+          ]}
+        >
+          {firewallData ? (
+            <>
+              <Text style={styles.description}>
+                Status:{" "}
+                <Text
+                  style={{
+                    color: firewallData.status === "Ativo" ? "#50fa7b" : "#f87171",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {firewallData.status}
+                </Text>
+              </Text>
+              <Text style={styles.description}>
+                Última atualização:{" "}
+                <Text style={{ color: "#fff" }}>
+                  {firewallData.ultimaAtualizacao
+                    ? new Date(firewallData.ultimaAtualizacao).toLocaleString("pt-BR")
+                    : "-"}
+                </Text>
+              </Text>
+              <Text style={styles.description}>
+                Tentativas bloqueadas:{" "}
+                <Text style={{ color: "#f87171", fontWeight: "bold" }}>
+                  {firewallData.tentativasBloqueadas ?? "-"}
+                </Text>
+              </Text>
+              <Text style={styles.description}>
+                Regras aplicadas:{" "}
+                <Text style={{ color: "#50fa7b" }}>{firewallData.regrasAplicadas ?? "-"}</Text>
+              </Text>
+
+              {paginatedIPs.length > 0 && (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={[styles.description, { color: "#facc15", fontWeight: "bold" }]}>
+                    IPs bloqueados:
+                  </Text>
+                  {paginatedIPs.map((ip: string, idx: number) => (
+                    <Text key={idx} style={styles.description}>
+                      {ip}
+                    </Text>
+                  ))}
+
+                  {totalPages > 1 && (
+                    <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 8 }}>
+                      <TouchableOpacity
+                        disabled={firewallPage <= 1}
+                        onPress={() => setFirewallPage((prev) => prev - 1)}
+                        style={{ marginHorizontal: 8 }}
+                      >
+                        <Text style={{ color: firewallPage > 1 ? "#50fa7b" : "#888" }}>◀</Text>
+                      </TouchableOpacity>
+                      <Text style={{ color: "#fff" }}>
+                        {firewallPage} / {totalPages}
+                      </Text>
+                      <TouchableOpacity
+                        disabled={firewallPage >= totalPages}
+                        onPress={() => setFirewallPage((prev) => prev + 1)}
+                        style={{ marginHorizontal: 8 }}
+                      >
+                        <Text style={{ color: firewallPage < totalPages ? "#50fa7b" : "#888" }}>▶</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* ------------------------- */}
+              {/* Mensagens de alerta */}
+              {/* ------------------------- */}
+              {alertMsg.length > 0 && (
+                <View style={{ marginTop: 12 }}>
+                  {alertMsg.map((msg, idx) => (
+                    <Text key={idx} style={[styles.description, { color: "#f87171" }]}>
+                      {msg}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <Text style={styles.description}>Carregando dados do firewall...</Text>
+          )}
+        </AnimatedView>
+      </ScrollView>
+      <BottomNav />
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  container: { padding: 24, backgroundColor: "#0f172a", alignItems: "center" },
+  title: { fontSize: 28, color: "#facc15", fontWeight: "bold", marginBottom: 20 },
+  card: {
+    borderRadius: 16,
     padding: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    width: "100%",
+    marginBottom: 20,
   },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
+  cardTitle: { fontSize: 20, color: "#facc15", fontWeight: "bold", marginBottom: 10 },
+  description: { fontSize: 16, color: "#e2e8f0", lineHeight: 24 },
+  loginContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0f172a" },
+  loginBtn: { backgroundColor: "#50fa7b", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 24, marginTop: 12 },
 });
