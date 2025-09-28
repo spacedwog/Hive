@@ -9,6 +9,7 @@
     "forceConsistentCasingInFileNames": true,
 
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
 
