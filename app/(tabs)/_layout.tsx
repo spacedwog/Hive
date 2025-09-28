@@ -30,35 +30,35 @@ export default function TabLayout() {
         name="HiveScreen"
         options={{
           title: 'Hive Prime',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="apple.intelligence" color={color} />,
+          tabBarIcon: ({ color }: { color: string }) => <IconSymbol size={28} name="apple.intelligence" color={color} />,
         }}
       />
       <Tabs.Screen
         name="StreamScreen"
         options={{
           title: 'Hive Cam',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="airplayaudio" color={color} />,
+          tabBarIcon: ({ color }: { color: string }) => <IconSymbol size={28} name="airplayaudio" color={color} />,
         }}
       />
       <Tabs.Screen
         name="index"
         options={{
           title: 'Tela Principal',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }: { color: string }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Hive Finder',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="airplane.circle" color={color} />,
+          tabBarIcon: ({ color }: { color: string }) => <IconSymbol size={28} name="airplane.circle" color={color} />,
         }}
       />
       <Tabs.Screen
         name="IssuesScreen"
         options={{
           title: 'Hive Issues',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="exclamationmark.bubble" color={color} />,
+          tabBarIcon: ({ color }: { color: string }) => <IconSymbol size={28} name="exclamationmark.bubble" color={color} />,
         }}
       />
     </Tabs>
