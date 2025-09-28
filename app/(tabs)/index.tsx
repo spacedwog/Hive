@@ -3,12 +3,12 @@ import { VERCEL_URL } from '@env';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View as AnimatedView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
 import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import BottomNav from '../../hive_body/BottomNav.tsx';
 
