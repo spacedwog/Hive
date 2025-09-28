@@ -14,7 +14,8 @@ module.exports = function (api) {
           allowUndefined: true,
         },
       ],
-      'react-native-worklets/plugin', // ✅ plugin novo do Reanimated
+      // 🔑 O plugin do Reanimated deve ser o ÚLTIMO
+      'react-native-reanimated/plugin',
     ],
   };
 };
