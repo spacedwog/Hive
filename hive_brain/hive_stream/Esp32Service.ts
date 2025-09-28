@@ -1,11 +1,15 @@
 export type LedStatus = "on" | "off";
 export type Esp32Status = {
+  sensor_db: number;
   led_builtin: LedStatus;
   led_opposite: LedStatus;
   ip: string;
 };
 
 export default class Esp32Service {
+  fetchStatus() {
+    throw new Error("Method not implemented.");
+  }
   static SOFTAP_IP = "http://192.168.4.1";
   static STA_IP = "http://192.168.15.188";
 
@@ -15,6 +19,7 @@ export default class Esp32Service {
   constructor() {
     this.mode = "Soft-AP";
     this.status = {
+      sensor_db: 0,
       led_builtin: "off",
       led_opposite: "on",
       ip: Esp32Service.SOFTAP_IP,

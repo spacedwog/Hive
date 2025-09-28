@@ -14,7 +14,9 @@ export default function StreamScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
   const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
+  const [sensorDb, setSensorDb] = useState<number>(0);
 
+  // Solicita permissão da câmera
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
@@ -22,6 +24,7 @@ export default function StreamScreen() {
     })();
   }, []);
 
+  // Atualiza frame da câmera a cada 2 segundos
   useEffect(() => {
     const interval = setInterval(() => {
       setFrameUrl(`${status.ip}/stream?${Date.now()}`);
@@ -29,6 +32,7 @@ export default function StreamScreen() {
     return () => clearInterval(interval);
   }, [status.ip]);
 
+  // Busca dados do Vercel
   useEffect(() => {
     const fetchVercelData = async () => {
       const { data, html } = await vercelService.fetchData();
@@ -36,9 +40,23 @@ export default function StreamScreen() {
       setVercelHTML(html);
     };
     fetchVercelData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [vercelService]);
 
+  // Busca status do ESP32 a cada 5 segundos, incluindo sensor de som
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        await esp32Service.fetchStatus();
+        setStatus({ ...esp32Service.status });
+        setSensorDb(esp32Service.status.sensor_db ?? 0);
+      } catch (err) {
+        console.error("Erro ao buscar status ESP32:", err);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [esp32Service]);
+
+  // Alterna LED
   const toggleLed = async () => {
     try {
       await esp32Service.toggleLed();
@@ -48,6 +66,7 @@ export default function StreamScreen() {
     }
   };
 
+  // Alterna modo Soft-AP / STA
   const switchMode = () => {
     esp32Service.switchMode();
     setMode(esp32Service.mode);
@@ -59,6 +78,7 @@ export default function StreamScreen() {
       <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
+        {/* Status ESP32 */}
         <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
         <View style={[styles.dataBox, { alignSelf: "center" }]}>
           <Text style={styles.overlayText}>
@@ -74,6 +94,8 @@ export default function StreamScreen() {
             </Text>
           </Text>
           <Text style={styles.overlayText}>IP: {status.ip}</Text>
+          <Text style={styles.overlayText}>🔊 Sensor de som (pino 34): {sensorDb.toFixed(1)} dB</Text>
+
           <View style={styles.buttonRow}>
             <Button
               title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
@@ -87,6 +109,7 @@ export default function StreamScreen() {
           </View>
         </View>
 
+        {/* Câmera iOS */}
         <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera iOS:</Text>
         <View style={styles.nativeCamera}>
           {hasPermission ? (
@@ -97,13 +120,13 @@ export default function StreamScreen() {
                 onPress={() => setType(type === "back" ? "front" : "back")}
                 color="#0af"
               />
+
+              {/* Sobreposição de dados do Vercel */}
               <ScrollView style={styles.vercelOverlay}>
                 {vercelHTML ? (
                   <Text style={styles.vercelText}>HTML carregado do Vercel</Text>
                 ) : vercelData ? (
-                  <Text style={styles.vercelText}>
-                    {JSON.stringify(vercelData, null, 1)}
-                  </Text>
+                  <Text style={styles.vercelText}>{JSON.stringify(vercelData, null, 1)}</Text>
                 ) : (
                   <Text style={[styles.vercelText, { color: "red" }]}>
                     Carregando dados Vercel...
@@ -159,10 +182,7 @@ const styles = StyleSheet.create({
     padding: 5,
     borderRadius: 5,
   },
-  vercelText: {
-    color: "#0f0",
-    fontSize: 12,
-  },
+  vercelText: { color: "#0f0", fontSize: 12 },
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
 });

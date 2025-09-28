@@ -48,13 +48,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Hive Finder',
-          tabBarIcon: ({ color }: { color: string }) => <IconSymbol size={28} name="airplane.circle" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="IssuesScreen"
         options={{
           title: 'Hive Issues',
