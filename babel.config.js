@@ -8,7 +8,7 @@ module.exports = function (api) {
         {
           moduleName: '@env',
           path: '.env',
-          allowUndefined: true,
+          allowUndefined: true
         },
       ],
       // 🔑 O plugin do Reanimated SEMPRE deve ser o último
