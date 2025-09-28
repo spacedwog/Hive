@@ -16,6 +16,7 @@ export default function TelaPrinc() {
   const [firewallData, setFirewallData] = useState<any | null>(null);
   const [firewallPage, setFirewallPage] = useState(1);
   const [routeSaved, setRouteSaved] = useState(false);
+  const [alertMsg, setAlertMsg] = useState<string[]>([]); // lista de alertas
   const ipsPerPage = 10;
 
   const previousAttemptsRef = useRef<number>(0);
@@ -38,27 +39,48 @@ export default function TelaPrinc() {
           setFirewallData(data.data);
 
           // -------------------------
-          // Bloqueio de IP
+          // Bloqueio de IP e nova regra
           // -------------------------
           if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
             try {
               // Alerta
               await fetch(`${VERCEL_URL}/api/firewall?action=alert`);
 
-              // Bloqueio do IP (usar último bloqueado ou fictício)
-              const ipParaBloquear = data.data.ip || "192.168.1.125";
+              // Bloqueio do IP (usar último bloqueado ou aleatório)
+              const ipParaBloquear =
+                data.data.ip || `192.168.1.${Math.floor(Math.random() * 254 + 1)}`;
               await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ip: ipParaBloquear }),
               });
+
+              // Gerar nova regra automática
+              const destination = `10.0.${Math.floor(Math.random() * 255)}.0/24`;
+              const gateway = "192.168.1.1";
+              await fetch(`${VERCEL_URL}/api/firewall?action=route`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ destination, gateway }),
+              });
+
+              // Atualiza mensagens de alerta
+              setAlertMsg(prev => [
+                `IP bloqueado automaticamente: ${ipParaBloquear}`,
+                `Nova regra criada: ${destination} -> ${gateway}`,
+                ...prev,
+              ]);
             } catch (err) {
-              console.error("Erro ao bloquear IP:", err);
+              console.error("Erro ao bloquear IP ou criar regra:", err);
+              setAlertMsg(prev => [
+                `Erro: ${err instanceof Error ? err.message : String(err)}`,
+                ...prev,
+              ]);
             }
           }
 
           // -------------------------
-          // Salvar rota automaticamente
+          // Salvar rota automaticamente quando tentativas = regras
           // -------------------------
           if (
             data.data.tentativasBloqueadas === data.data.regrasAplicadas &&
@@ -76,8 +98,17 @@ export default function TelaPrinc() {
               const result = await routeResponse.json();
               console.log("Rota salva automaticamente:", result);
               setRouteSaved(true);
+
+              setAlertMsg(prev => [
+                `Rota automática salva: ${destination} -> ${gateway}`,
+                ...prev,
+              ]);
             } catch (err) {
               console.error("Erro ao salvar rota:", err);
+              setAlertMsg(prev => [
+                `Erro ao salvar rota: ${err instanceof Error ? err.message : String(err)}`,
+                ...prev,
+              ]);
             }
           }
 
@@ -208,6 +239,19 @@ export default function TelaPrinc() {
                       </TouchableOpacity>
                     </View>
                   )}
+                </View>
+              )}
+
+              {/* ------------------------- */}
+              {/* Mensagens de alerta */}
+              {/* ------------------------- */}
+              {alertMsg.length > 0 && (
+                <View style={{ marginTop: 12 }}>
+                  {alertMsg.map((msg, idx) => (
+                    <Text key={idx} style={[styles.description, { color: "#f87171" }]}>
+                      {msg}
+                    </Text>
+                  ))}
                 </View>
               )}
             </>
