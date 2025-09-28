@@ -1,4 +1,4 @@
-// HIVE/api/firewall.js
+import { exec } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -11,11 +11,7 @@ class ApiResponse {
   static error(code, error, details = null) {
     return {
       success: false,
-      error: {
-        code,
-        message: error,
-        details,
-      },
+      error: { code, message: error, details },
       timestamp: Date.now(),
     };
   }
@@ -163,21 +159,52 @@ class FirewallInfo {
   }
 
   // -------------------------
-  // Conexões ativas (simuladas)
+  // Conexões ativas (reais)
   // -------------------------
-  static getConnections() {
-    this.activeConnections = [
-      { src: "192.168.1.2", dst: "8.8.8.8", protocol: "TCP", status: "ESTABLISHED" },
-      { src: "192.168.1.3", dst: "1.1.1.1", protocol: "UDP", status: "CLOSED" },
-    ];
-    return ApiResponse.success("Conexões ativas", { activeConnections: this.activeConnections });
+  static async getConnections() {
+    return new Promise((resolve) => {
+      const cmd = process.platform === "win32" ? "netstat -n -p tcp" : "netstat -tun";
+      exec(cmd, (err, stdout) => {
+        if (err) {
+          return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err.message }));
+        }
+
+        const lines = stdout.split("\n").slice(4); // Ignora cabeçalho
+        const connections = [];
+
+        lines.forEach((line) => {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length < 4) {
+            return;
+          }
+
+          let protocol = parts[0].toUpperCase();
+          let src, dst, status;
+
+          if (process.platform === "win32") {
+            src = parts[1];
+            dst = parts[2];
+            status = parts[3] || "";
+          } else {
+            src = parts[3];
+            dst = parts[4];
+            status = parts[5] || "";
+          }
+
+          connections.push({ protocol, src, dst, status });
+        });
+
+        this.activeConnections = connections;
+        resolve(ApiResponse.success("Conexões ativas", { activeConnections: connections }));
+      });
+    });
   }
 }
 
 // -------------------------
 // Handler principal
 // -------------------------
-export default function handler(req, res) {
+export default async function handler(req, res) {
   const { method, query, body } = req;
   const { action } = query;
 
@@ -194,35 +221,20 @@ export default function handler(req, res) {
     if (method === "POST" && action === "unblock") {
       return res.status(200).json(FirewallInfo.unblock(body?.ip));
     }
-
-    // Routing
     if (method === "POST" && action === "route") {
       return res.status(200).json(FirewallInfo.addRoute(body?.destination, body?.gateway));
     }
-
-    // NAT
     if (method === "POST" && action === "nat") {
       return res.status(200).json(FirewallInfo.addNAT(body?.internalIP, body?.externalIP));
     }
-
-    // VPN
     if (method === "POST" && action === "vpn") {
       return res.status(200).json(FirewallInfo.setVPN(body?.enable));
     }
-
-    // Conexões ativas
     if (method === "GET" && action === "connections") {
-      return res.status(200).json(FirewallInfo.getConnections());
+      return res.status(200).json(await FirewallInfo.getConnections());
     }
-
     if (method === "GET" && !action) {
-      return res.status(200).json(
-        ApiResponse.success("Bem-vindo! Seu acesso foi permitido pelo firewall.", {
-          project: "HIVE PROJECT",
-          version: "1.2.0",
-          platform: os.platform(),
-        })
-      );
+      return res.status(200).json(ApiResponse.success("Bem-vindo! Seu acesso foi permitido pelo firewall.", { project: "HIVE PROJECT", version: "1.2.0", platform: os.platform() }));
     }
 
     return res.status(404).json(ApiResponse.error("NOT_FOUND", "Rota não encontrada."));
