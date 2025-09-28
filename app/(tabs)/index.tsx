@@ -46,7 +46,7 @@ export default function TelaPrinc() {
               await fetch(`${VERCEL_URL}/api/firewall?action=alert`);
 
               // Bloqueio do IP (usar último bloqueado ou fictício)
-              const ipParaBloquear = data.data.ip || "192.168.1.100";
+              const ipParaBloquear = data.data.ip || "192.168.1.125";
               await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
