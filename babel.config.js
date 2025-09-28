@@ -11,7 +11,7 @@ module.exports = function (api) {
           allowUndefined: true,
         },
       ],
-      // 🔑 O plugin do Reanimated deve ser o ÚLTIMO
+      // 🔑 O plugin do Reanimated SEMPRE deve ser o último
       'react-native-reanimated/plugin',
     ],
   };
