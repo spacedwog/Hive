@@ -10,7 +10,6 @@
     "web": "expo start --web",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "type": "module",
     "build": "tsc",
     "test": "jest"
   },
@@ -104,5 +103,6 @@
       }
     }
   },
-  "private": true
+  "private": true,
+  "type": "module"
 }
