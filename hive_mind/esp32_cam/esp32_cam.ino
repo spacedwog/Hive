@@ -10,9 +10,8 @@ bool ledOn = false;
 
 // --- Sensor de som ---
 #define SOUND_SENSOR_PIN 34
-#define SOUND_THRESHOLD 1000  // Ajuste conforme sensibilidade do microfone
-#define LED_AUTO_OFF_MS 5000  // Desliga LED automaticamente após 5 segundos sem som
-
+#define SOUND_THRESHOLD 1000      // Ajuste conforme sensibilidade do microfone
+#define LED_AUTO_OFF_MS 5000      // Desliga LED automaticamente após 5 segundos sem som
 unsigned long lastSoundTime = 0;
 
 // --- Configurações Wi-Fi ---
@@ -29,11 +28,16 @@ String getStatusJSON() {
   IPAddress ipAP = WiFi.softAPIP();
   IPAddress ipSTA = WiFi.localIP();
 
+  // Leitura do microfone
+  int soundLevel = analogRead(SOUND_SENSOR_PIN);
+
   String json = "{";
   json += "\"led_builtin\":\"" + String(ledOn ? "on" : "off") + "\",";
   json += "\"led_opposite\":\"" + String(ledOn ? "off" : "on") + "\",";
   json += "\"ip_ap\":\"" + ipAP.toString() + "\",";
-  json += "\"ip_sta\":\"" + (ipSTA.toString() == "0.0.0.0" ? "desconectado" : ipSTA.toString()) + "\"";
+  json += "\"ip_sta\":\"" + (ipSTA.toString() == "0.0.0.0" ? "desconectado" : ipSTA.toString()) + "\",";
+  json += "\"sound_level\":" + String(soundLevel) + ",";
+  json += "\"auto_off_ms\":" + String(LED_AUTO_OFF_MS);
   json += "}";
   return json;
 }
@@ -86,28 +90,29 @@ void setup() {
 
 // --- Loop principal ---
 void loop() {
-  // --- Cliente HTTP ---
   WiFiClient client = server.available();
   if (client) {
     String request = client.readStringUntil('\r');
     client.flush();
 
-    // Controle de LEDs via HTTP
-    if (request.indexOf("GET /H") >= 0) setLED(true);
-    else if (request.indexOf("GET /L") >= 0) setLED(false);
+    // --- Resposta padrão JSON ---
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
 
-    // Responde status JSON
-    if (request.indexOf("GET /status") >= 0) {
-      client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
+    // Controle de LEDs via JSON
+    if (request.indexOf("GET /led/on") >= 0) {
+      setLED(true);
+      client.print("{\"success\":true,\"led\":\"on\",\"message\":\"LED ligado\"}");
+    } 
+    else if (request.indexOf("GET /led/off") >= 0) {
+      setLED(false);
+      client.print("{\"success\":true,\"led\":\"off\",\"message\":\"LED desligado\"}");
+    } 
+    else if (request.indexOf("GET /status") >= 0) {
       client.print(getStatusJSON());
-    } else {
-      // Página web simples
-      client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
-      client.print("<html><body><h1>HIVE STREAM ESP32</h1>");
-      client.print("<p><a href='/H'>🔴 Ligar LED</a></p>");
-      client.print("<p><a href='/L'>⚪ Desligar LED</a></p>");
-      client.print("<p><a href='/status'>📊 Status JSON</a></p>");
-      client.print("</body></html>");
+    } 
+    else {
+      // JSON de erro para endpoints desconhecidos
+      client.print("{\"success\":false,\"message\":\"Endpoint não encontrado\"}");
     }
 
     client.stop();
@@ -120,7 +125,7 @@ void loop() {
     setLED(true);
   }
 
-  // --- Desliga LED automaticamente se não houver som por X ms ---
+  // --- Desliga LED automaticamente se não houver som ---
   if (ledOn && millis() - lastSoundTime > LED_AUTO_OFF_MS) {
     Serial.println("⏱️ Sem som por 5s. Desligando LED...");
     setLED(false);
