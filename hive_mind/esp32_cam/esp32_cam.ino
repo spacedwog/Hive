@@ -50,6 +50,34 @@ void setLED(bool state) {
   if (state) lastSoundTime = millis();  // Reinicia timer ao ligar LED
 }
 
+// --- Função auxiliar para enviar header WAV ---
+void sendWavHeader(WiFiClient &client, uint32_t sampleRate, uint16_t bitsPerSample, uint16_t channels) {
+  uint32_t dataSize = 0xFFFFFFFF; // tamanho indefinido (streaming)
+  uint32_t byteRate = sampleRate * channels * bitsPerSample / 8;
+  uint16_t blockAlign = channels * bitsPerSample / 8;
+
+  // RIFF header
+  client.write("RIFF", 4);
+  client.write((const uint8_t *)&dataSize, 4);   // tamanho fake
+  client.write("WAVE", 4);
+
+  // fmt chunk
+  client.write("fmt ", 4);
+  uint32_t subChunk1Size = 16;
+  client.write((const uint8_t *)&subChunk1Size, 4);
+  uint16_t audioFormat = 1; // PCM
+  client.write((const uint8_t *)&audioFormat, 2);
+  client.write((const uint8_t *)&channels, 2);
+  client.write((const uint8_t *)&sampleRate, 4);
+  client.write((const uint8_t *)&byteRate, 4);
+  client.write((const uint8_t *)&blockAlign, 2);
+  client.write((const uint8_t *)&bitsPerSample, 2);
+
+  // data chunk
+  client.write("data", 4);
+  client.write((const uint8_t *)&dataSize, 4); // tamanho fake
+}
+
 // --- Setup ---
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -95,23 +123,44 @@ void loop() {
     String request = client.readStringUntil('\r');
     client.flush();
 
-    // --- Resposta padrão JSON ---
-    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
-
-    // Controle de LEDs via JSON
+    // --- Rota LED ON ---
     if (request.indexOf("GET /led/on") >= 0) {
+      client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
       setLED(true);
       client.print("{\"success\":true,\"led\":\"on\",\"message\":\"LED ligado\"}");
     } 
+    // --- Rota LED OFF ---
     else if (request.indexOf("GET /led/off") >= 0) {
+      client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
       setLED(false);
       client.print("{\"success\":true,\"led\":\"off\",\"message\":\"LED desligado\"}");
     } 
+    // --- Rota STATUS ---
     else if (request.indexOf("GET /status") >= 0) {
+      client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
       client.print(getStatusJSON());
     } 
+    // --- Rota AUDIO ---
+    else if (request.indexOf("GET /audio") >= 0) {
+      Serial.println("🎵 Cliente requisitou /audio");
+      client.print("HTTP/1.1 200 OK\r\n");
+      client.print("Content-Type: audio/wav\r\n");
+      client.print("Connection: close\r\n\r\n");
+
+      // Envia header WAV (16kHz, 16-bit, mono)
+      sendWavHeader(client, 16000, 16, 1);
+
+      // Envia algumas amostras de áudio fake (silêncio ou leitura do microfone)
+      for (int i = 0; i < 16000; i++) { // 1 segundo
+        int raw = analogRead(SOUND_SENSOR_PIN);
+        int16_t sample = map(raw, 0, 4095, -32768, 32767);
+        client.write((uint8_t *)&sample, 2);
+      }
+      Serial.println("🎧 Áudio enviado (1s de stream)");
+    } 
+    // --- Rota desconhecida ---
     else {
-      // JSON de erro para endpoints desconhecidos
+      client.print("HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
       client.print("{\"success\":false,\"message\":\"Endpoint não encontrado\"}");
     }
 

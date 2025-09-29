@@ -1,4 +1,3 @@
-import { Audio } from "expo-av";
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -16,16 +15,11 @@ export default function StreamScreen() {
   const [type, setType] = useState<"front" | "back">("back");
   const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
 
-  // --- Controle de áudio ---
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [audioActive, setAudioActive] = useState(false);
-
-  // Solicita permissão para câmera e microfone
+  // Solicita permissão para câmera
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
-      const { status: audioStatus } = await Audio.requestPermissionsAsync();
-      setHasPermission(status === "granted" && audioStatus === "granted");
+      setHasPermission(status === "granted");
     })();
   }, []);
 
@@ -92,39 +86,6 @@ export default function StreamScreen() {
     return () => clearInterval(interval);
   }, [esp32Service]);
 
-  // Função para tocar/parar áudio da câmera com tratamento iOS
-  const toggleCameraAudio = async () => {
-    if (!audioActive) {
-      try {
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: `http://${status.ip}/audio` },
-          { shouldPlay: true, isLooping: true }
-        );
-        setSound(sound);
-        setAudioActive(true);
-        await sound.playAsync();
-      } catch (error: any) {
-        console.error("Erro ao tocar áudio:", error);
-
-        if (error.code === "AVFoundationErrorDomain") {
-          alert("O iOS não conseguiu reproduzir o áudio. Verifique o formato ou a URL.");
-        }
-      }
-    } else {
-      try {
-        if (sound) {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-        }
-      } catch (err) {
-        console.warn("Erro ao parar áudio:", err);
-      } finally {
-        setAudioActive(false);
-        setSound(null);
-      }
-    }
-  };
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
@@ -167,16 +128,11 @@ export default function StreamScreen() {
           {hasPermission ? (
             <>
               <CameraView style={StyleSheet.absoluteFill} facing={type} />
-              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 5 }}>
+              <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 5 }}>
                 <Button
                   title="🔄 Trocar câmera"
                   onPress={() => setType(type === "back" ? "front" : "back")}
                   color="#0af"
-                />
-                <Button
-                  title={audioActive ? "🔇 Desligar Áudio" : "🔊 Ativar Áudio"}
-                  onPress={toggleCameraAudio}
-                  color="#f0a"
                 />
               </View>
               <ScrollView style={styles.vercelOverlay}>
@@ -194,7 +150,7 @@ export default function StreamScreen() {
               </ScrollView>
             </>
           ) : (
-            <Text style={{ color: "red" }}>Permissão para câmera ou áudio negada</Text>
+            <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
           )}
         </View>
       </ScrollView>
