@@ -1,3 +1,4 @@
+import { Audio } from "expo-av";
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
 import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -14,17 +15,21 @@ export default function StreamScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
   const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
-  const [sensorDb, setSensorDb] = useState<number>(0);
 
-  // Solicita permissão da câmera
+  // --- Controle de áudio ---
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [audioActive, setAudioActive] = useState(false);
+
+  // Solicita permissão para câmera e microfone
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === "granted");
+      const { status: audioStatus } = await Audio.requestPermissionsAsync();
+      setHasPermission(status === "granted" && audioStatus === "granted");
     })();
   }, []);
 
-  // Atualiza frame da câmera a cada 2 segundos
+  // Atualiza a URL do stream a cada 2s
   useEffect(() => {
     const interval = setInterval(() => {
       setFrameUrl(`${status.ip}/stream?${Date.now()}`);
@@ -35,42 +40,89 @@ export default function StreamScreen() {
   // Busca dados do Vercel
   useEffect(() => {
     const fetchVercelData = async () => {
-      const { data, html } = await vercelService.fetchData();
-      setVercelData(data);
-      setVercelHTML(html);
+      try {
+        const { data, html } = await vercelService.fetchData();
+        setVercelData(data);
+        setVercelHTML(html);
+      } catch (err) {
+        console.warn("Erro ao buscar dados do Vercel:", err);
+      }
     };
     fetchVercelData();
   }, [vercelService]);
 
-  // Busca status do ESP32 a cada 5 segundos, incluindo sensor de som
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        await esp32Service.fetchStatus();
-        setStatus({ ...esp32Service.status });
-        setSensorDb(esp32Service.status.sensor_db ?? 0);
-      } catch (err) {
-        console.error("Erro ao buscar status ESP32:", err);
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [esp32Service]);
-
-  // Alterna LED
+  // Função para alternar LED com tratamento seguro
   const toggleLed = async () => {
     try {
-      await esp32Service.toggleLed();
+      const response = await esp32Service.toggleLed();
+
+      // Tenta parsear JSON, mas captura HTML ou erro
+      if (typeof response === "string") {
+        try {
+          const json = JSON.parse(response);
+          console.log("Resposta ESP32:", json);
+        } catch {
+          console.warn("Resposta do ESP32 não é JSON:", response);
+        }
+      }
+
       setStatus({ ...esp32Service.status });
     } catch (error) {
       console.error("Erro ao acessar ESP32:", error);
     }
   };
 
-  // Alterna modo Soft-AP / STA
+  // Alterna entre Soft-AP e STA
   const switchMode = () => {
     esp32Service.switchMode();
     setMode(esp32Service.mode);
     setStatus({ ...esp32Service.status });
+  };
+
+  // Atualiza status ESP32 a cada 2s
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const newStatus = await esp32Service.fetchStatus();
+        setStatus(newStatus);
+      } catch (err) {
+        console.error("Erro ao atualizar status ESP32:", err);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [esp32Service]);
+
+  // Função para tocar/parar áudio da câmera com tratamento iOS
+  const toggleCameraAudio = async () => {
+    if (!audioActive) {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: `http://${status.ip}/audio` },
+          { shouldPlay: true, isLooping: true }
+        );
+        setSound(sound);
+        setAudioActive(true);
+        await sound.playAsync();
+      } catch (error: any) {
+        console.error("Erro ao tocar áudio:", error);
+
+        if (error.code === "AVFoundationErrorDomain") {
+          alert("O iOS não conseguiu reproduzir o áudio. Verifique o formato ou a URL.");
+        }
+      }
+    } else {
+      try {
+        if (sound) {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+        }
+      } catch (err) {
+        console.warn("Erro ao parar áudio:", err);
+      } finally {
+        setAudioActive(false);
+        setSound(null);
+      }
+    }
   };
 
   return (
@@ -78,7 +130,6 @@ export default function StreamScreen() {
       <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
-        {/* Status ESP32 */}
         <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
         <View style={[styles.dataBox, { alignSelf: "center" }]}>
           <Text style={styles.overlayText}>
@@ -94,7 +145,9 @@ export default function StreamScreen() {
             </Text>
           </Text>
           <Text style={styles.overlayText}>IP: {status.ip}</Text>
-          <Text style={styles.overlayText}>🔊 Sensor de som (pino 34): {sensorDb.toFixed(1)} dB</Text>
+          <Text style={styles.overlayText}>
+            🔊 Sensor de Som (pino 34): {status.sensor_db.toFixed(1)} dB
+          </Text>
 
           <View style={styles.buttonRow}>
             <Button
@@ -109,24 +162,30 @@ export default function StreamScreen() {
           </View>
         </View>
 
-        {/* Câmera iOS */}
         <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera iOS:</Text>
         <View style={styles.nativeCamera}>
           {hasPermission ? (
             <>
               <CameraView style={StyleSheet.absoluteFill} facing={type} />
-              <Button
-                title="🔄 Trocar câmera"
-                onPress={() => setType(type === "back" ? "front" : "back")}
-                color="#0af"
-              />
-
-              {/* Sobreposição de dados do Vercel */}
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 5 }}>
+                <Button
+                  title="🔄 Trocar câmera"
+                  onPress={() => setType(type === "back" ? "front" : "back")}
+                  color="#0af"
+                />
+                <Button
+                  title={audioActive ? "🔇 Desligar Áudio" : "🔊 Ativar Áudio"}
+                  onPress={toggleCameraAudio}
+                  color="#f0a"
+                />
+              </View>
               <ScrollView style={styles.vercelOverlay}>
                 {vercelHTML ? (
                   <Text style={styles.vercelText}>HTML carregado do Vercel</Text>
                 ) : vercelData ? (
-                  <Text style={styles.vercelText}>{JSON.stringify(vercelData, null, 1)}</Text>
+                  <Text style={styles.vercelText}>
+                    {JSON.stringify(vercelData, null, 1)}
+                  </Text>
                 ) : (
                   <Text style={[styles.vercelText, { color: "red" }]}>
                     Carregando dados Vercel...
@@ -135,7 +194,7 @@ export default function StreamScreen() {
               </ScrollView>
             </>
           ) : (
-            <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
+            <Text style={{ color: "red" }}>Permissão para câmera ou áudio negada</Text>
           )}
         </View>
       </ScrollView>
