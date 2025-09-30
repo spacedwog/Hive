@@ -1,5 +1,5 @@
 import { Camera, CameraView } from "expo-camera";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service";
 import VercelService from "../../hive_brain/hive_stream/VercelService";
@@ -14,6 +14,9 @@ export default function StreamScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
   const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+
+  const cameraRef = useRef<CameraView>(null);
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -73,11 +76,8 @@ export default function StreamScreen() {
       });
       const json = await res.json();
       if (json.success) {
-        // Atualiza serviço primeiro
         esp32Service.status.ip = json.ip;
         esp32Service.mode = esp32Service.mode === "Soft-AP" ? "STA" : "Soft-AP";
-
-        // Atualiza estado React
         setMode(esp32Service.mode);
         setStatus({ ...esp32Service.status });
       } else {
@@ -100,6 +100,24 @@ export default function StreamScreen() {
     }, 2000);
     return () => clearInterval(interval);
   }, [esp32Service]);
+
+  // Captura uma foto da câmera e salva em JPG
+  const capturePhoto = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 1,
+          base64: false,
+          exif: false,
+          skipProcessing: true,
+        });
+        setCapturedPhoto(photo.uri); // já vem como .jpg
+        console.log("📸 Foto capturada:", photo.uri);
+      } catch (err) {
+        console.error("Erro ao capturar foto:", err);
+      }
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -142,19 +160,30 @@ export default function StreamScreen() {
         <View style={styles.nativeCamera}>
           {hasPermission ? (
             <>
-              <CameraView style={StyleSheet.absoluteFill} facing={type} />
+              <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={type} />
               <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 5 }}>
                 <Button
                   title="🔄 Trocar câmera"
                   onPress={() => setType(type === "back" ? "front" : "back")}
                   color="#0af"
                 />
+                <Button title="📸 Capturar" onPress={capturePhoto} color="#4caf50" />
               </View>
+
+              {/* Mostra a foto capturada */}
+              {capturedPhoto && (
+                <Image
+                  source={{ uri: capturedPhoto }}
+                  style={{ width: "100%", height: 240, marginTop: 10 }}
+                />
+              )}
+
               {/* Stream do ESP32 via Image */}
               <Image
                 source={{ uri: frameUrl }}
                 style={{ width: "100%", height: 240, marginTop: 10 }}
               />
+
               <ScrollView style={styles.vercelOverlay}>
                 {vercelHTML ? (
                   <Text style={styles.vercelText}>HTML carregado do Vercel</Text>
