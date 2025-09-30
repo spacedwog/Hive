@@ -17,7 +17,7 @@ export default function StreamScreen() {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
   const cameraRef = useRef<CameraView>(null);
-  const VERCEL_CAMERA_URL = "https://<seu-projeto-vercel>.vercel.app/api/camera"; // substituir pela sua URL Vercel
+  const VERCEL_CAMERA_URL = "https://hive-chi-woad.vercel.app/api/camera"; // substituir pela sua URL Vercel
 
   // Solicita permissão para câmera
   useEffect(() => {
