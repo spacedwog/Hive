@@ -289,7 +289,7 @@ export default function HiveScreen() {
 
       {/* MODAL STATUS VESPA */}
       <Modal visible={modalVisible === "status"} animationType="slide" onRequestClose={() => setModalVisible(null)}>
-        <ScrollView style={{ padding: 12 }}>
+        <ScrollView style={{ padding: 12, top: 50 }}>
           <Button title="Fechar" onPress={() => setModalVisible(null)} />
           {onlineStatus.map((s, idx) => {
             const serverKey = s.server ?? "unknown";
@@ -323,7 +323,7 @@ export default function HiveScreen() {
 
       {/* MODAL GITHUB USERS */}
       <Modal visible={modalVisible === "githubUsers"} animationType="slide" onRequestClose={() => setModalVisible(null)}>
-        <ScrollView style={{ padding: 12 }}>
+        <ScrollView style={{ padding: 12, top: 50 }}>
           <Button title="Fechar" onPress={() => setModalVisible(null)} />
           <Text style={styles.unisonTitle}>👤 Usuários GitHub</Text>
           {githubUsers.map((u, idx) => (
@@ -349,7 +349,7 @@ export default function HiveScreen() {
 
       {/* MODAL GITHUB ORGS */}
       <Modal visible={modalVisible === "githubOrgs"} animationType="slide" onRequestClose={() => setModalVisible(null)}>
-        <ScrollView style={{ padding: 12 }}>
+        <ScrollView style={{ padding: 12, top: 50 }}>
           <Button title="Fechar" onPress={() => setModalVisible(null)} />
           <Text style={styles.unisonTitle}>🏢 Organizações GitHub</Text>
           {githubOrgs.map((o, idx) => (
