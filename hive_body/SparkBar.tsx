@@ -1,28 +1,29 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-interface SparkBarProps {
-  data: number[];
+export class SparkBar {
   width: number;
-  height?: number;
-}
+  height: number;
+  data: number[];
 
-export class SparkBar extends React.PureComponent<SparkBarProps> {
-  static defaultProps = { height: 120 };
+  constructor(data: number[], width: number, height = 120) {
+    this.data = data;
+    this.width = width;
+    this.height = height;
+  }
 
   render() {
-    const { data, width, height } = this.props;
-    const n = Math.max(data.length, 1);
+    const n = Math.max(this.data.length, 1);
     const barGap = 2;
-    const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
+    const barWidth = Math.max(2, Math.floor((this.width - (n - 1) * barGap) / n));
 
     return (
-      <View style={[styles.chartBox, { width, height }]}>
+      <View style={[styles.chartBox, { width: this.width, height: this.height }]}>
         <View style={styles.chartAxis} />
         <View style={styles.chartBarsRow}>
-          {data.map((v, i) => {
+          {this.data.map((v, i) => {
             const clamped = Math.max(0, Math.min(100, v));
-            const h = Math.max(2, Math.round((clamped / 100) * (height! - 16)));
+            const h = Math.max(2, Math.round((clamped / 100) * (this.height - 16)));
             return (
               <View
                 key={`${i}-${v}`}
@@ -41,10 +42,10 @@ export class SparkBar extends React.PureComponent<SparkBarProps> {
 }
 
 const styles = StyleSheet.create({
-  chartBox: { position: "relative", justifyContent: "flex-end", backgroundColor: "#eee", borderRadius: 4, padding: 4 },
-  chartBarsRow: { flexDirection: "row", alignItems: "flex-end", height: "80%" },
-  chartBar: { backgroundColor: "#4a90e2" },
-  chartAxis: { position: "absolute", left: 0, top: 0, bottom: 0, width: 1, backgroundColor: "#000" },
-  chartLabels: { flexDirection: "row", justifyContent: "space-between", paddingTop: 4 },
+  chartBox: { position: "relative", justifyContent: "flex-end", backgroundColor: "#eee", borderRadius: 6, padding: 4 },
+  chartAxis: { position: "absolute", left: 0, bottom: 0, height: "100%", width: 1, backgroundColor: "#888" },
+  chartBarsRow: { flexDirection: "row", alignItems: "flex-end" },
+  chartBar: { backgroundColor: "#3b82f6", borderRadius: 2 },
+  chartLabels: { flexDirection: "row", justifyContent: "space-between" },
   chartLabelText: { fontSize: 10 },
 });

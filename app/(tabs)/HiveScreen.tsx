@@ -1,5 +1,5 @@
 // eslint-disable-next-line import/no-unresolved
-import { AUTH_PASSWORD, AUTH_USERNAME, GITHUB_TOKEN } from '@env';
+import { AUTH_PASSWORD, AUTH_USERNAME, GITHUB_TOKEN, VERCEL_URL } from '@env';
 import Slider from "@react-native-community/slider";
 import axios from "axios";
 import * as Location from "expo-location";
@@ -20,83 +20,9 @@ import MapView, { Callout, Marker } from "react-native-maps";
 import { FALLBACK_LAT, FALLBACK_LON, MAX_POINTS, NodeStatus } from "../../hive_brain/hive_prime/EspManager";
 import { GithubEmailManager, GithubOrg, GithubUser } from "../../hive_brain/hive_prime/GithubManager";
 
-const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
+import { SparkBar } from "../../hive_body/SparkBar";
+import { GeoCoder } from "../../hive_brain/hive_prime/GeoCoder";
 
-// ==================================
-// Componente gráfico de barras
-// ==================================
-const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({ data, width, height = 120 }) => {
-  const n = Math.max(data.length, 1);
-  const barGap = 2;
-  const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
-
-  return (
-    <View style={[styles.chartBox, { width, height }]}>
-      <View style={styles.chartAxis} />
-      <View style={styles.chartBarsRow}>
-        {data.map((v, i) => {
-          const clamped = Math.max(0, Math.min(100, v));
-          const h = Math.max(2, Math.round((clamped / 100) * (height - 16)));
-          return (
-            <View
-              key={`${i}-${v}`}
-              style={[styles.chartBar, { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap }]}
-            />
-          );
-        })}
-      </View>
-      <View style={styles.chartLabels}>
-        <Text style={styles.chartLabelText}>0%</Text>
-        <Text style={styles.chartLabelText}>100%</Text>
-      </View>
-    </View>
-  );
-};
-
-// ==================================
-// Função de Geocodificação (OpenStreetMap)
-// ==================================
-const geocodeCache: { [key: string]: { latitude: number; longitude: number } } = {};
-
-const geocodeLocation = async (location: string, retries = 3): Promise<{ latitude: number; longitude: number }> => {
-  if (!location) {
-    return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
-  }
-  if (geocodeCache[location]) {
-    return geocodeCache[location];
-  }
-
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const res = await axios.get('https://nominatim.openstreetmap.org/search', {
-        params: { q: location, format: 'json', limit: 1 },
-        headers: {
-          'User-Agent': 'HiveApp/1.0 (contact@seuemail.com)',
-          'Accept-Language': 'pt-BR',
-        },
-      });
-
-      if (res.data.length > 0) {
-        const coords = { latitude: parseFloat(res.data[0].lat), longitude: parseFloat(res.data[0].lon) };
-        geocodeCache[location] = coords;
-        return coords;
-      }
-
-      return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
-    } catch (err: any) {
-      console.error(`Erro ao geocodificar localização (tentativa ${attempt}):`, err.message || err);
-      if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1000));
-      }
-    }
-  }
-
-  return { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
-};
-
-// ==================================
-// HiveScreen
-// ==================================
 export default function HiveScreen() {
   const [status, setStatus] = useState<NodeStatus[]>([]);
   const [, setPingValues] = useState<{ [key: string]: number }>({});
@@ -115,27 +41,28 @@ export default function HiveScreen() {
 
   const { width: winWidth } = useWindowDimensions();
   const githubManager = useMemo(() => new GithubEmailManager(), []);
-
+  const geoCoder = useMemo(() => new GeoCoder(), []);
   const githubAuthHeader = useMemo(() => ({ headers: { Authorization: `token ${GITHUB_TOKEN}` } }), []);
+  const authHeader = "Basic " + btoa(`${AUTH_USERNAME}:${AUTH_PASSWORD}`);
 
   // =========================
-  // Buscar usuários GitHub + detalhes
+  // Buscar usuários GitHub + geolocalização
   // =========================
   const fetchGithubUsersPage = React.useCallback(async () => {
     try {
       const url = "https://api.github.com/users?per_page=100";
       const res = await axios.get(url, githubAuthHeader);
       const users = res.data;
+
       const detailedUsers = await Promise.all(
         users.map(async (user: any) => {
           try {
             const detailRes = await axios.get(`https://api.github.com/users/${user.login}`, githubAuthHeader);
             const userData = detailRes.data;
-
-            // Só geocodifica se a localização existir e não for "Não informado"
             let coords = { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
+
             if (userData.location && userData.location !== "Não informado") {
-              coords = await geocodeLocation(userData.location);
+              coords = await geoCoder.geocode(userData.location);
             }
 
             return { ...userData, latitude: coords.latitude, longitude: coords.longitude };
@@ -144,12 +71,13 @@ export default function HiveScreen() {
           }
         })
       );
+
       setGithubUsers(detailedUsers);
       githubManager.setUsers(detailedUsers);
     } catch (err) {
       console.error("Erro ao buscar usuários do GitHub:", err);
     }
-  }, [githubAuthHeader, githubManager]);
+  }, [githubAuthHeader, githubManager, geoCoder]);
 
   // =========================
   // Buscar organizações GitHub + geolocalização
@@ -158,15 +86,16 @@ export default function HiveScreen() {
     try {
       const res = await axios.get("https://api.github.com/organizations?per_page=50", githubAuthHeader);
       const orgs = res.data;
+
       const detailedOrgs = await Promise.all(
         orgs.map(async (org: any) => {
           try {
             const orgRes = await axios.get(`https://api.github.com/orgs/${org.login}`, githubAuthHeader);
             const orgData = orgRes.data;
-
             let coords = { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
+
             if (orgData.location && orgData.location !== "Não informado") {
-              coords = await geocodeLocation(orgData.location);
+              coords = await geoCoder.geocode(orgData.location);
             }
 
             return { ...orgData, latitude: coords.latitude, longitude: coords.longitude };
@@ -175,11 +104,12 @@ export default function HiveScreen() {
           }
         })
       );
+
       setGithubOrgs(detailedOrgs);
     } catch (err) {
       console.error("Erro ao buscar organizações do GitHub:", err);
     }
-  }, [githubAuthHeader]);
+  }, [githubAuthHeader, geoCoder]);
 
   // =========================
   // Localização do usuário
@@ -202,28 +132,19 @@ export default function HiveScreen() {
   // =========================
   // Status servidores
   // =========================
-  const authHeader = "Basic " + btoa(`${AUTH_USERNAME}:${AUTH_PASSWORD}`);
-
   const fetchStatus = React.useCallback(async () => {
     try {
       const servers = ["192.168.4.1", "192.168.15.166"];
       const responses = await Promise.all(
         servers.map(async (server) => {
           try {
-            const res = await axios.get(`http://${server}/status`, {
-              timeout: 3000,
-              headers: { Authorization: authHeader },
-            });
-
+            const res = await axios.get(`http://${server}/status`, { timeout: 3000, headers: { Authorization: authHeader } });
             const latitude = res.data.location?.latitude ?? FALLBACK_LAT;
             const longitude = res.data.location?.longitude ?? FALLBACK_LON;
             let clients: any[] = [];
 
             try {
-              const clientsRes = await axios.get(`http://${server}/clients`, {
-                timeout: 8000,
-                headers: { Authorization: authHeader },
-              });
+              const clientsRes = await axios.get(`http://${server}/clients`, { timeout: 8000, headers: { Authorization: authHeader } });
               clients = clientsRes.data?.clients ?? [];
             } catch {}
 
@@ -282,6 +203,9 @@ export default function HiveScreen() {
     }
   };
 
+  // =========================
+  // Inicialização
+  // =========================
   useEffect(() => {
     fetchStatus();
     fetchGithubUsersPage();
@@ -321,39 +245,28 @@ export default function HiveScreen() {
           </Marker>
         ))}
 
-        {githubUsers.map((u, idx) => (
-          u.latitude && u.longitude && (
-            <Marker key={`gh-${idx}`} coordinate={{ latitude: u.latitude, longitude: u.longitude }} pinColor="blue">
-              <Callout>
-                <Text>{u.login}</Text>
-                <Text>{u.location ?? "Não informado"}</Text>
-              </Callout>
-            </Marker>
-          )
+        {githubUsers.map((u, idx) => u.latitude && u.longitude && (
+          <Marker key={`gh-${idx}`} coordinate={{ latitude: u.latitude, longitude: u.longitude }} pinColor="blue">
+            <Callout>
+              <Text>{u.login}</Text>
+              <Text>{u.location ?? "Não informado"}</Text>
+            </Callout>
+          </Marker>
         ))}
 
-        {githubOrgs.map((o, idx) => (
-          o.latitude && o.longitude && (
-            <Marker key={`org-${idx}`} coordinate={{ latitude: o.latitude, longitude: o.longitude }} pinColor="purple">
-              <Callout>
-                <Text>{o.login}</Text>
-                <Text>{o.location ?? "Não informado"}</Text>
-              </Callout>
-            </Marker>
-          )
+        {githubOrgs.map((o, idx) => o.latitude && o.longitude && (
+          <Marker key={`org-${idx}`} coordinate={{ latitude: o.latitude, longitude: o.longitude }} pinColor="purple">
+            <Callout>
+              <Text>{o.login}</Text>
+              <Text>{o.location ?? "Não informado"}</Text>
+            </Callout>
+          </Marker>
         ))}
       </MapView>
 
       <View style={styles.sliderBox}>
         <Text style={{ textAlign: "center" }}>🔎 Zoom</Text>
-        <Slider
-          style={{ width: "90%", alignSelf: "center" }}
-          minimumValue={0.01}    // zoom mínimo
-          maximumValue={100}     // zoom máximo aumentado
-          step={0.005}
-          value={zoom}
-          onValueChange={setZoom}
-        />
+        <Slider style={{ width: "90%", alignSelf: "center" }} minimumValue={0.01} maximumValue={100} step={0.005} value={zoom} onValueChange={setZoom} />
       </View>
 
       <View style={styles.pagePagination}>
@@ -388,7 +301,7 @@ export default function HiveScreen() {
 
                   <View style={styles.chartCard}>
                     <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
-                    <SparkBar data={hist} width={graphWidth} />
+                    {new SparkBar(hist, graphWidth).render()}
                   </View>
                 </View>
               );
@@ -447,24 +360,18 @@ export default function HiveScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
-  sliderBox: { position: "absolute", bottom: 125, width: "100%" },
-  pagePagination: { position: "absolute", bottom: 100, flexDirection: "row", justifyContent: "space-around", width: "100%" },
-  overlayScroll: { position: "absolute", top: 0, width: "100%", maxHeight: "80%" },
-  unisonCard: { backgroundColor: "#fff", margin: 12, borderRadius: 12, padding: 12, top: 100, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 4 },
-  nodeBox: { marginBottom: 12, borderBottomWidth: 1, borderBottomColor: "#ccc", paddingBottom: 8 },
-  nodeText: { fontSize: 16, fontWeight: "bold" },
-  statusText: { fontSize: 14 },
-  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginVertical: 6 },
-  chartCard: { marginTop: 4 },
-  chartBox: { position: "relative", justifyContent: "flex-end", backgroundColor: "#eee", borderRadius: 6, padding: 4 },
-  chartAxis: { position: "absolute", left: 0, bottom: 0, height: "100%", width: 1, backgroundColor: "#888" },
-  chartBarsRow: { flexDirection: "row", alignItems: "flex-end" },
-  chartBar: { backgroundColor: "#3b82f6", borderRadius: 2 },
-  chartLabels: { flexDirection: "row", justifyContent: "space-between" },
-  chartLabelText: { fontSize: 10 },
-  githubUserBox: { alignItems: "center", marginVertical: 8 },
+  sliderBox: { position: "absolute", bottom: 150, width: "100%" },
+  pagePagination: { flexDirection: "row", justifyContent: "space-around", position: "absolute", bottom: 100, width: "100%" },
+  overlayScroll: { position: "absolute", top: 100, width: "100%", height: "100%" },
+  unisonCard: { backgroundColor: "#fff", margin: 12, borderRadius: 8, padding: 12 },
+  unisonTitle: { fontSize: 16, fontWeight: "bold", textAlign: "center", marginBottom: 8 },
+  nodeBox: { marginVertical: 6, padding: 6, borderWidth: 1, borderRadius: 6, borderColor: "#ccc" },
+  nodeText: { fontWeight: "bold", fontSize: 14 },
+  statusText: { fontSize: 12 },
+  buttonRow: { flexDirection: "row", justifyContent: "space-around", marginVertical: 4 },
+  chartCard: { marginTop: 6, padding: 4, borderWidth: 1, borderColor: "#ddd", borderRadius: 6 },
+  chartTitle: { fontSize: 12, fontWeight: "bold", marginBottom: 4 },
+  githubUserBox: { marginVertical: 6, padding: 6, borderWidth: 1, borderColor: "#ddd", borderRadius: 6, alignItems: "center" },
   githubAvatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 4 },
-  githubText: { fontSize: 14, marginVertical: 2 },
-  unisonTitle: { fontSize: 16, fontWeight: "bold", textAlign: "center", marginVertical: 6 },
-  chartTitle: { fontSize: 15, fontWeight: "bold", marginBottom: 4, textAlign: "center" },
+  githubText: { fontSize: 12 },
 });
