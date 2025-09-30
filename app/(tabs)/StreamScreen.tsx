@@ -45,7 +45,7 @@ export default function StreamScreen() {
     fetchVercelData();
   }, [vercelService]);
 
-  // Função para alternar LED com tratamento seguro
+  // Função para alternar LED
   const toggleLed = async () => {
     try {
       const response = await esp32Service.toggleLed();
@@ -165,7 +165,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
   },
-  title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 15, textAlign: "center" },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 15,
+    textAlign: "center",
+  },
   text: { fontSize: 16, color: "#fff", marginVertical: 5, textAlign: "center" },
   dataBox: {
     width: "90%",

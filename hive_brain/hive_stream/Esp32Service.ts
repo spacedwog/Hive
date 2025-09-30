@@ -9,7 +9,7 @@ export default class Esp32Service {
   status: Esp32Status = {
     led_builtin: "off",
     led_opposite: "off",
-    ip: "192.168.4.1",
+    ip: "192.168.4.1", // IP inicial Soft-AP
     sensor_db: 0,
   };
 
@@ -18,18 +18,19 @@ export default class Esp32Service {
   // Alterna o LED built-in
   async toggleLed(): Promise<Esp32Status | string> {
     try {
-      // Aqui você pode chamar o ESP32 via fetch ou Axios
-      this.status.led_builtin =
-        this.status.led_builtin === "on" ? "off" : "on";
+      this.status.led_builtin = this.status.led_builtin === "on" ? "off" : "on";
       return { ...this.status };
     } catch (err) {
       return `Erro ao alternar LED: ${err}`;
     }
   }
 
-  // Alterna entre Soft-AP e STA
+  // Alterna entre Soft-AP e STA e ajusta IP
   switchMode() {
     this.mode = this.mode === "Soft-AP" ? "STA" : "Soft-AP";
+
+    // Altera IP conforme o modo
+    this.status.ip = this.mode === "Soft-AP" ? "192.168.4.1" : "192.168.15.188";
   }
 
   // Simula leitura de status do ESP32
