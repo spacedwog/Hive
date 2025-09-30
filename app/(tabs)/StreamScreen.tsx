@@ -17,6 +17,7 @@ export default function StreamScreen() {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
   const cameraRef = useRef<CameraView>(null);
+  const VERCEL_CAMERA_URL = "https://<seu-projeto-vercel>.vercel.app/api/camera"; // substituir pela sua URL Vercel
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -51,15 +52,7 @@ export default function StreamScreen() {
   // Alterna o LED
   const toggleLed = async () => {
     try {
-      const response = await esp32Service.toggleLed();
-      if (typeof response === "string") {
-        try {
-          const json = JSON.parse(response);
-          console.log("Resposta ESP32:", json);
-        } catch {
-          console.warn("Resposta do ESP32 não é JSON:", response);
-        }
-      }
+      await esp32Service.toggleLed();
       setStatus({ ...esp32Service.status });
     } catch (error) {
       console.error("Erro ao acessar ESP32:", error);
@@ -68,32 +61,17 @@ export default function StreamScreen() {
 
   // Alterna entre Soft-AP e STA
   const switchMode = async () => {
-    try {
-      const res = await fetch("https://hive-chi-woad.vercel.app/api/camera", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "switch_mode" }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        esp32Service.status.ip = json.ip;
-        esp32Service.mode = esp32Service.mode === "Soft-AP" ? "STA" : "Soft-AP";
-        setMode(esp32Service.mode);
-        setStatus({ ...esp32Service.status });
-      } else {
-        console.warn("Falha ao alternar modo:", json);
-      }
-    } catch (err) {
-      console.error("Erro ao chamar API Vercel:", err);
-    }
+    esp32Service.switchMode();
+    setMode(esp32Service.mode);
+    setStatus({ ...esp32Service.status });
   };
 
-  // Atualiza status ESP32 a cada 2s
+  // Atualiza status ESP32 a cada 2s com reconexão automática
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const newStatus = await esp32Service.fetchStatus();
-        setStatus({ ...esp32Service.status, ...newStatus });
+        setStatus({ ...newStatus });
       } catch (err) {
         console.error("Erro ao atualizar status ESP32:", err);
       }
@@ -101,20 +79,34 @@ export default function StreamScreen() {
     return () => clearInterval(interval);
   }, [esp32Service]);
 
-  // Captura uma foto da câmera e salva em JPG
-  const capturePhoto = async () => {
+  // Captura uma foto da câmera e envia para a API Vercel
+  const captureAndUploadPhoto = async () => {
     if (cameraRef.current) {
       try {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 1,
-          base64: false,
+          base64: true,
           exif: false,
           skipProcessing: true,
         });
-        setCapturedPhoto(photo.uri); // já vem como .jpg
+        setCapturedPhoto(photo.uri);
         console.log("📸 Foto capturada:", photo.uri);
+
+        // Envia para API do Vercel
+        const response = await fetch(VERCEL_CAMERA_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: photo.base64 }),
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          console.log("✅ Foto enviada para Vercel com sucesso!", result.fileName);
+        } else {
+          console.warn("⚠️ Falha ao enviar foto para Vercel:", result);
+        }
       } catch (err) {
-        console.error("Erro ao capturar foto:", err);
+        console.error("Erro ao capturar/enviar foto:", err);
       }
     }
   };
@@ -167,7 +159,11 @@ export default function StreamScreen() {
                   onPress={() => setType(type === "back" ? "front" : "back")}
                   color="#0af"
                 />
-                <Button title="📸 Capturar" onPress={capturePhoto} color="#4caf50" />
+                <Button
+                  title="📸 Capturar & Enviar"
+                  onPress={captureAndUploadPhoto}
+                  color="#4caf50"
+                />
               </View>
 
               {/* Mostra a foto capturada */}

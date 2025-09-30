@@ -86,6 +86,7 @@
     "@types/crypto-js": "^4.2.2",
     "@types/react": "~19.1.10",
     "@types/react-native-dotenv": "^0.2.2",
+    "@vercel/node": "^5.3.24",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "eslint-import-resolver-node": "^0.3.9",
