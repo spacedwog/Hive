@@ -20,7 +20,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
         led_opposite: "off",
         sensor_db: 42.7,
       },
-      streamUrl: "http://esp32.local/stream", // exemplo de URL do ESP32
+      streamUrl: "http://192.168.15.188/stream", // exemplo de URL do ESP32
     };
 
     return res.status(200).json(data);
