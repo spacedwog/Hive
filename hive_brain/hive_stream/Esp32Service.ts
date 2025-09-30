@@ -1,49 +1,70 @@
+export type LedStatus = "on" | "off";
+
 export type Esp32Status = {
-  led_builtin: "on" | "off";
-  led_opposite: "on" | "off";
-  ip: string;
   sensor_db: number;
+  led_builtin: LedStatus;
+  led_opposite: LedStatus;
+  ip: string;
 };
 
 export default class Esp32Service {
-  status: Esp32Status = {
-    led_builtin: "off",
-    led_opposite: "off",
-    ip: "192.168.4.1", // IP inicial Soft-AP
-    sensor_db: 0,
-  };
+  static SOFTAP_IP = "http://192.168.4.1";
+  static STA_IP = "http://192.168.15.188";
 
-  mode: "Soft-AP" | "STA" = "Soft-AP";
+  status: Esp32Status;
+  mode: "Soft-AP" | "STA";
 
-  // Alterna o LED built-in
-  async toggleLed(): Promise<Esp32Status | string> {
+  constructor() {
+    this.mode = "Soft-AP";
+    this.status = {
+      sensor_db: 0,
+      led_builtin: "off",
+      led_opposite: "on",
+      ip: Esp32Service.SOFTAP_IP,
+    };
+  }
+
+  switchMode() {
+    this.mode = this.mode === "Soft-AP" ? "STA" : "Soft-AP";
+    this.status.ip = this.mode === "Soft-AP" ? Esp32Service.SOFTAP_IP : Esp32Service.STA_IP;
+  }
+
+  async toggleLed() {
+    const endpoint = this.status.led_builtin === "on" ? "L" : "H";
     try {
-      this.status.led_builtin = this.status.led_builtin === "on" ? "off" : "on";
-      return { ...this.status };
+      const res = await fetch(`${this.status.ip}/${endpoint}`);
+      const json = await res.json();
+      this.status = {
+        ...this.status,
+        ...json,
+      };
     } catch (err) {
-      return `Erro ao alternar LED: ${err}`;
+      console.error("Erro toggleLed:", err);
+      // alterna manualmente se fetch falhar
+      this.status.led_builtin = this.status.led_builtin === "on" ? "off" : "on";
+      this.status.led_opposite = this.status.led_opposite === "on" ? "off" : "on";
     }
   }
 
-  // Alterna entre Soft-AP e STA e ajusta IP
-  switchMode() {
-    this.mode = this.mode === "Soft-AP" ? "STA" : "Soft-AP";
-
-    // Altera IP conforme o modo
-    this.status.ip = this.mode === "Soft-AP" ? "192.168.4.1" : "192.168.15.188";
-  }
-
-  // Simula leitura de status do ESP32
+  // Implementação correta de fetchStatus
   async fetchStatus(): Promise<Esp32Status> {
     try {
-      // Simula sensor de som
-      this.status.sensor_db = Math.random() * 100;
+      const res = await fetch(`${this.status.ip}/status`);
+      const json = await res.json();
 
-      // Retorna status atualizado
-      return { ...this.status };
+      // Simula sensor de som se ainda não estiver no ESP32
+      const sensor_db = json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1));
+
+      this.status = {
+        ...this.status,
+        ...json,
+        sensor_db,
+      };
+
+      return this.status;
     } catch (err) {
-      console.error("Erro ao buscar status do ESP32:", err);
-      return { ...this.status };
+      console.error("Erro ao buscar status ESP32:", err);
+      throw err;
     }
   }
 }

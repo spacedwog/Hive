@@ -1,33 +1,84 @@
-name: CI
+name: CI/CD
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: "0 3 * * 1" # Executa toda segunda-feira (teste periódico)
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [18, 20]
+
     steps:
-    - name: Checkout código
-      uses: actions/checkout@v3
+      - name: Checkout código
+        uses: actions/checkout@v3
 
-    - name: Configurar Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      - name: Usar Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
 
-    - name: Instalar dependências
-      run: npm install
+      - name: Instalar dependências
+        run: npm install
 
-    - name: Rodar lint
-      run: npm run lint
+      - name: Rodar lint
+        run: npm run lint
 
-    - name: Rodar testes
-      run: npx jest
+      - name: Rodar testes com cobertura
+        run: npm run test -- --coverage
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage/
 
-    - name: Build do projeto
-      run: npm run build
+      - name: Build do projeto
+        run: npm run build
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: build
+          path: dist/
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Verificar vulnerabilidades
+        run: npm audit --audit-level=moderate
+
+      - name: Executar CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+      - run: github/codeql-action/analyze@v2
+
+  deploy:
+    needs: [build, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Instalar Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy para Vercel (produção)
+        run: vercel --prod --token=${{ secrets.VERCEL_TOKEN }}
+        # Certifique-se de adicionar o segredo VERCEL_TOKEN em Settings > Secrets and variables > Actions

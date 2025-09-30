@@ -1,6 +1,6 @@
 import { Camera, CameraView } from "expo-camera";
 import React, { useEffect, useState } from "react";
-import { Button, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service";
 import VercelService from "../../hive_brain/hive_stream/VercelService";
 
@@ -13,7 +13,7 @@ export default function StreamScreen() {
   const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
-  const [, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
+  const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -45,11 +45,10 @@ export default function StreamScreen() {
     fetchVercelData();
   }, [vercelService]);
 
-  // Função para alternar LED
+  // Alterna o LED
   const toggleLed = async () => {
     try {
       const response = await esp32Service.toggleLed();
-
       if (typeof response === "string") {
         try {
           const json = JSON.parse(response);
@@ -58,28 +57,29 @@ export default function StreamScreen() {
           console.warn("Resposta do ESP32 não é JSON:", response);
         }
       }
-
       setStatus({ ...esp32Service.status });
     } catch (error) {
       console.error("Erro ao acessar ESP32:", error);
     }
   };
 
-  // Alterna entre Soft-AP e STA via API Vercel
+  // Alterna entre Soft-AP e STA
   const switchMode = async () => {
     try {
-      // Chamada POST para alternar modo
       const res = await fetch("https://hive-chi-woad.vercel.app/api/camera", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "switch_mode" }),
       });
-
       const json = await res.json();
       if (json.success) {
-        // Atualiza estado local
-        setMode(mode === "Soft-AP" ? "STA" : "Soft-AP");
-        setStatus((prev) => ({ ...prev, ip: json.ip }));
+        // Atualiza serviço primeiro
+        esp32Service.status.ip = json.ip;
+        esp32Service.mode = esp32Service.mode === "Soft-AP" ? "STA" : "Soft-AP";
+
+        // Atualiza estado React
+        setMode(esp32Service.mode);
+        setStatus({ ...esp32Service.status });
       } else {
         console.warn("Falha ao alternar modo:", json);
       }
@@ -93,7 +93,7 @@ export default function StreamScreen() {
     const interval = setInterval(async () => {
       try {
         const newStatus = await esp32Service.fetchStatus();
-        setStatus(newStatus);
+        setStatus({ ...esp32Service.status, ...newStatus });
       } catch (err) {
         console.error("Erro ao atualizar status ESP32:", err);
       }
@@ -150,6 +150,11 @@ export default function StreamScreen() {
                   color="#0af"
                 />
               </View>
+              {/* Stream do ESP32 via Image */}
+              <Image
+                source={{ uri: frameUrl }}
+                style={{ width: "100%", height: 240, marginTop: 10 }}
+              />
               <ScrollView style={styles.vercelOverlay}>
                 {vercelHTML ? (
                   <Text style={styles.vercelText}>HTML carregado do Vercel</Text>
