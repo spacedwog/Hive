@@ -1,5 +1,5 @@
-import { Platform, View, Text } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import { Platform, Text, View } from "react-native";
+import MapView from "react-native-maps";
 
 export default function MapViewWrapper(props: any) {
   if (Platform.OS === "web") {
