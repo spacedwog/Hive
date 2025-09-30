@@ -8,9 +8,11 @@ import {
   Button,
   Image,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   Vibration,
   View,
   useWindowDimensions,
@@ -31,13 +33,14 @@ export default function HiveScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const [githubUsers, setGithubUsers] = useState<GithubUser[]>([]);
-  const [selectedUserIndex, setSelectedUserIndex] = useState(0);
+  const [selectedUser, setSelectedUser] = useState<GithubUser | null>(null);
+  const [githubUsersPage] = useState(1);
 
   const [githubOrgs, setGithubOrgs] = useState<GithubOrg[]>([]);
-  const [selectedOrgIndex, setSelectedOrgIndex] = useState(0);
+  const [selectedOrg, setSelectedOrg] = useState<GithubOrg | null>(null);
+  const [githubOrgsPage] = useState(1);
 
-  const [currentPage, setCurrentPage] = useState(0);
-  const [githubPage, setGithubPage] = useState<"user" | "org">("user");
+  const [modalVisible, setModalVisible] = useState<null | "status" | "githubUsers" | "githubOrgs">(null);
 
   const { width: winWidth } = useWindowDimensions();
   const githubManager = useMemo(() => new GithubEmailManager(), []);
@@ -46,70 +49,49 @@ export default function HiveScreen() {
   const authHeader = "Basic " + btoa(`${AUTH_USERNAME}:${AUTH_PASSWORD}`);
 
   // =========================
-  // Buscar usuários GitHub + geolocalização
+  // Buscar usuários GitHub (apenas dados principais)
   // =========================
-  const fetchGithubUsersPage = React.useCallback(async () => {
+  const fetchGithubUsersPage = React.useCallback(async (page = 1) => {
     try {
-      const url = "https://api.github.com/users?per_page=100";
+      const url = `https://api.github.com/users?per_page=50&page=${page}`;
       const res = await axios.get(url, githubAuthHeader);
-      const users = res.data;
-
-      const detailedUsers = await Promise.all(
-        users.map(async (user: any) => {
-          try {
-            const detailRes = await axios.get(`https://api.github.com/users/${user.login}`, githubAuthHeader);
-            const userData = detailRes.data;
-            let coords = { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
-
-            if (userData.location && userData.location !== "Não informado") {
-              coords = await geoCoder.geocode(userData.location);
-            }
-
-            return { ...userData, latitude: coords.latitude, longitude: coords.longitude };
-          } catch {
-            return { ...user, latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
-          }
-        })
-      );
-
-      setGithubUsers(detailedUsers);
-      githubManager.setUsers(detailedUsers);
-    } catch (err) {
-      console.error("Erro ao buscar usuários do GitHub:", err);
+      const users = res.data.map((u: any) => ({
+        login: u.login,
+        avatar_url: u.avatar_url,
+        id: u.id,
+        html_url: u.html_url,
+        location: null, // geocoding adiado
+        latitude: null,
+        longitude: null,
+        email: null,
+      }));
+      setGithubUsers(users);
+      githubManager.setUsers(users);
+    } catch (err: any) {
+      console.error("Erro ao buscar usuários do GitHub:", err.response?.status, err.message);
     }
-  }, [githubAuthHeader, githubManager, geoCoder]);
+  }, [githubAuthHeader, githubManager]);
 
   // =========================
-  // Buscar organizações GitHub + geolocalização
+  // Buscar organizações GitHub (apenas dados principais)
   // =========================
-  const fetchGithubOrgs = React.useCallback(async () => {
+  const fetchGithubOrgsPage = React.useCallback(async (page = 1) => {
     try {
-      const res = await axios.get("https://api.github.com/organizations?per_page=50", githubAuthHeader);
-      const orgs = res.data;
-
-      const detailedOrgs = await Promise.all(
-        orgs.map(async (org: any) => {
-          try {
-            const orgRes = await axios.get(`https://api.github.com/orgs/${org.login}`, githubAuthHeader);
-            const orgData = orgRes.data;
-            let coords = { latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
-
-            if (orgData.location && orgData.location !== "Não informado") {
-              coords = await geoCoder.geocode(orgData.location);
-            }
-
-            return { ...orgData, latitude: coords.latitude, longitude: coords.longitude };
-          } catch {
-            return { ...org, latitude: FALLBACK_LAT, longitude: FALLBACK_LON };
-          }
-        })
-      );
-
-      setGithubOrgs(detailedOrgs);
-    } catch (err) {
-      console.error("Erro ao buscar organizações do GitHub:", err);
+      const res = await axios.get(`https://api.github.com/organizations?per_page=50&page=${page}`, githubAuthHeader);
+      const orgs = res.data.map((o: any) => ({
+        login: o.login,
+        avatar_url: o.avatar_url,
+        id: o.id,
+        html_url: o.html_url,
+        location: null,
+        latitude: null,
+        longitude: null,
+      }));
+      setGithubOrgs(orgs);
+    } catch (err: any) {
+      console.error("Erro ao buscar organizações do GitHub:", err.response?.status, err.message);
     }
-  }, [githubAuthHeader, geoCoder]);
+  }, [githubAuthHeader]);
 
   // =========================
   // Localização do usuário
@@ -208,19 +190,44 @@ export default function HiveScreen() {
   // =========================
   useEffect(() => {
     fetchStatus();
-    fetchGithubUsersPage();
-    fetchGithubOrgs();
+    fetchGithubUsersPage(githubUsersPage);
+    fetchGithubOrgsPage(githubOrgsPage);
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [fetchGithubUsersPage, fetchGithubOrgs, fetchStatus]);
+  }, [fetchStatus, fetchGithubUsersPage, fetchGithubOrgsPage, githubUsersPage, githubOrgsPage]);
 
   const graphWidth = useMemo(() => Math.min(winWidth * 0.9 - 24, 600), [winWidth]);
   const onlineStatus = status.filter((s) => s.status !== "offline");
-  const selectedUser = githubUsers[selectedUserIndex] ?? null;
-  const selectedOrg = githubOrgs[selectedOrgIndex] ?? null;
 
   // =========================
-  // Renderização
+  // Função para carregar geocoding ao abrir modal
+  // =========================
+  const loadUserGeocode = async (user: GithubUser) => {
+    if (!user.location || (user.latitude && user.longitude)) {
+      return;
+    }
+    try {
+      const coords = await geoCoder.geocode(user.location);
+      user.latitude = coords.latitude;
+      user.longitude = coords.longitude;
+      setSelectedUser({ ...user });
+    } catch {}
+  };
+
+  const loadOrgGeocode = async (org: GithubOrg) => {
+    if (!org.location || (org.latitude && org.longitude)) {
+      return;
+    }
+    try {
+      const coords = await geoCoder.geocode(org.location);
+      org.latitude = coords.latitude;
+      org.longitude = coords.longitude;
+      setSelectedOrg({ ...org });
+    } catch {}
+  };
+
+  // =========================
+  // Render
   // =========================
   return (
     <View style={styles.container}>
@@ -264,92 +271,106 @@ export default function HiveScreen() {
         ))}
       </MapView>
 
+      {/* ZOOM */}
       <View style={styles.sliderBox}>
         <Text style={{ textAlign: "center" }}>🔎 Zoom</Text>
         <Slider style={{ width: "90%", alignSelf: "center" }} minimumValue={0.01} maximumValue={100} step={0.005} value={zoom} onValueChange={setZoom} />
       </View>
 
+      {/* MENU */}
       <View style={styles.pagePagination}>
-        <Button title="Mapa" onPress={() => setCurrentPage(0)} />
-        <Button title="Status Vespa" onPress={() => setCurrentPage(1)} />
-        <Button title="GitHub" onPress={() => setCurrentPage(2)} />
+        <Button title="Mapa" onPress={() => setModalVisible(null)} />
+        <Button title="Status Vespa" onPress={() => setModalVisible("status")} />
+        <Button title="GitHub Users" onPress={() => setModalVisible("githubUsers")} />
+        <Button title="GitHub Orgs" onPress={() => setModalVisible("githubOrgs")} />
       </View>
 
-      {currentPage !== 0 && (
-        <ScrollView style={styles.overlayScroll} contentContainerStyle={{ paddingBottom: 140 }}>
-          <View style={styles.unisonCard}>
-            {/* Página Status Vespa */}
-            {currentPage === 1 && onlineStatus.map((s, idx) => {
-              const serverKey = s.server ?? "unknown";
-              const hist = history[serverKey] ?? [];
-              return (
-                <View key={idx} style={styles.nodeBox}>
-                  <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
-                  <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
-                  {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
-                  {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
-                  {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
-                  {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
-                  {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
-                  {s.anomaly?.detected && <Text style={[styles.statusText, { color: "red", fontWeight: "bold" }]}>⚠️ Anomalia: {s.anomaly.message} (valor atual: {s.anomaly.current_value.toFixed(2)})</Text>}
+      {/* ========================= MODALS ========================= */}
 
-                  <View style={styles.buttonRow}>
-                    <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
-                    <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
-                    <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
-                  </View>
+      {/* MODAL STATUS VESPA */}
+      <Modal visible={modalVisible === "status"} animationType="slide" onRequestClose={() => setModalVisible(null)}>
+        <ScrollView style={{ padding: 12 }}>
+          <Button title="Fechar" onPress={() => setModalVisible(null)} />
+          {onlineStatus.map((s, idx) => {
+            const serverKey = s.server ?? "unknown";
+            const hist = history[serverKey] ?? [];
+            return (
+              <View key={idx} style={styles.nodeBox}>
+                <Text style={styles.nodeText}>🖥️ {s.device || "Dispositivo"}</Text>
+                <Text style={styles.statusText}>📡 {s.server ?? "-"} - {s.status ?? "-"}</Text>
+                {s.analog_percent !== undefined && <Text style={styles.statusText}>⚡ Sensor: {s.analog_percent.toFixed(1)}%</Text>}
+                {typeof s.temperatura_C === "number" && <Text style={styles.statusText}>🌡️ Temperatura: {s.temperatura_C.toFixed(1)} °C</Text>}
+                {typeof s.umidade_pct === "number" && <Text style={styles.statusText}>💧 Umidade: {s.umidade_pct.toFixed(1)} %</Text>}
+                {s.presenca !== undefined && <Text style={styles.statusText}>🚶 Presença: {s.presenca ? "Sim" : "Não"}</Text>}
+                {s.ultrassonico_m !== undefined && <Text style={styles.statusText}>📏 Distância: {s.ultrassonico_m.toFixed(2)} m</Text>}
+                {s.anomaly?.detected && <Text style={[styles.statusText, { color: "red", fontWeight: "bold" }]}>⚠️ Anomalia: {s.anomaly.message} (valor atual: {s.anomaly.current_value.toFixed(2)})</Text>}
 
-                  <View style={styles.chartCard}>
-                    <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
-                    {new SparkBar(hist, graphWidth).render()}
-                  </View>
-                </View>
-              );
-            })}
-
-            {/* Página GitHub */}
-            {currentPage === 2 && (
-              <>
-                <View style={{ flexDirection: "row", justifyContent: "center", marginBottom: 8 }}>
-                  <Button title="Usuários" onPress={() => setGithubPage("user")} />
-                  <Button title="Empresas" onPress={() => setGithubPage("org")} />
+                <View style={styles.buttonRow}>
+                  <Button title="Ativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "activate")} />
+                  <Button title="Desativar" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "deactivate")} />
+                  <Button title="Ping" disabled={!s.server} onPress={() => s.server && sendCommand(s.server, "ping")} />
                 </View>
 
-                <Text style={styles.unisonTitle}>{githubPage === "user" ? "👤 Usuário GitHub" : "🏢 Empresa GitHub"}</Text>
-
-                {githubPage === "user" && selectedUser && (
-                  <View style={styles.githubUserBox}>
-                    <Image source={{ uri: selectedUser.avatar_url }} style={styles.githubAvatar} />
-                    <Text style={styles.githubText}>🆔 ID: {selectedUser.id}</Text>
-                    <Text style={styles.githubText}>👤 Nome: {selectedUser.login}</Text>
-                    <Text style={styles.githubText}>📍 Localização: {selectedUser.location ?? "Não informado"}</Text>
-                    <Text style={styles.githubText}>📧 Email: {selectedUser.email ?? "Privado"}</Text>
-                    <Button title="Abrir Perfil GitHub" onPress={() => Linking.openURL(selectedUser.html_url)} />
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
-                      <Button title="←" onPress={() => setSelectedUserIndex((i) => Math.max(0, i - 1))} />
-                      <Button title="→" onPress={() => setSelectedUserIndex((i) => Math.min(githubUsers.length - 1, i + 1))} />
-                    </View>
-                  </View>
-                )}
-
-                {githubPage === "org" && selectedOrg && (
-                  <View style={styles.githubUserBox}>
-                    <Image source={{ uri: selectedOrg.avatar_url }} style={styles.githubAvatar} />
-                    <Text style={styles.githubText}>🆔 ID: {selectedOrg.id}</Text>
-                    <Text style={styles.githubText}>🏢 Nome: {selectedOrg.login}</Text>
-                    <Text style={styles.githubText}>📍 Localização: {selectedOrg.location ?? "Não informado"}</Text>
-                    <Button title="Abrir Perfil GitHub" onPress={() => Linking.openURL(selectedOrg.html_url)} />
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
-                      <Button title="←" onPress={() => setSelectedOrgIndex((i) => Math.max(0, i - 1))} />
-                      <Button title="→" onPress={() => setSelectedOrgIndex((i) => Math.min(githubOrgs.length - 1, i + 1))} />
-                    </View>
-                  </View>
-                )}
-              </>
-            )}
-          </View>
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartTitle}>📈 Histórico do Sensor ({serverKey}) — últimos {MAX_POINTS}s</Text>
+                  {new SparkBar(hist, graphWidth).render()}
+                </View>
+              </View>
+            );
+          })}
         </ScrollView>
-      )}
+      </Modal>
+
+      {/* MODAL GITHUB USERS */}
+      <Modal visible={modalVisible === "githubUsers"} animationType="slide" onRequestClose={() => setModalVisible(null)}>
+        <ScrollView style={{ padding: 12 }}>
+          <Button title="Fechar" onPress={() => setModalVisible(null)} />
+          <Text style={styles.unisonTitle}>👤 Usuários GitHub</Text>
+          {githubUsers.map((u, idx) => (
+            <TouchableOpacity key={idx} style={styles.githubUserBox} onPress={async () => { setSelectedUser(u); await loadUserGeocode(u); }}>
+              <Image source={{ uri: u.avatar_url }} style={styles.githubAvatar} />
+              <Text style={styles.githubText}>{u.login}</Text>
+            </TouchableOpacity>
+          ))}
+
+          {selectedUser && (
+            <View style={{ marginTop: 12, padding: 8, borderWidth: 1, borderColor: "#aaa", borderRadius: 6 }}>
+              <Text style={{ fontWeight: "bold" }}>Detalhes do Usuário</Text>
+              <Image source={{ uri: selectedUser.avatar_url }} style={{ width: 80, height: 80, borderRadius: 40, marginVertical: 4 }} />
+              <Text>ID: {selectedUser.id}</Text>
+              <Text>Login: {selectedUser.login}</Text>
+              <Text>Localização: {selectedUser.location ?? "Não informado"}</Text>
+              <Text>Email: {selectedUser.email ?? "Privado"}</Text>
+              <Button title="Abrir Perfil GitHub" onPress={() => Linking.openURL(selectedUser.html_url)} />
+            </View>
+          )}
+        </ScrollView>
+      </Modal>
+
+      {/* MODAL GITHUB ORGS */}
+      <Modal visible={modalVisible === "githubOrgs"} animationType="slide" onRequestClose={() => setModalVisible(null)}>
+        <ScrollView style={{ padding: 12 }}>
+          <Button title="Fechar" onPress={() => setModalVisible(null)} />
+          <Text style={styles.unisonTitle}>🏢 Organizações GitHub</Text>
+          {githubOrgs.map((o, idx) => (
+            <TouchableOpacity key={idx} style={styles.githubUserBox} onPress={async () => { setSelectedOrg(o); await loadOrgGeocode(o); }}>
+              <Image source={{ uri: o.avatar_url }} style={styles.githubAvatar} />
+              <Text style={styles.githubText}>{o.login}</Text>
+            </TouchableOpacity>
+          ))}
+
+          {selectedOrg && (
+            <View style={{ marginTop: 12, padding: 8, borderWidth: 1, borderColor: "#aaa", borderRadius: 6 }}>
+              <Text style={{ fontWeight: "bold" }}>Detalhes da Organização</Text>
+              <Image source={{ uri: selectedOrg.avatar_url }} style={{ width: 80, height: 80, borderRadius: 40, marginVertical: 4 }} />
+              <Text>ID: {selectedOrg.id}</Text>
+              <Text>Login: {selectedOrg.login}</Text>
+              <Text>Localização: {selectedOrg.location ?? "Não informado"}</Text>
+              <Button title="Abrir Perfil GitHub" onPress={() => Linking.openURL(selectedOrg.html_url)} />
+            </View>
+          )}
+        </ScrollView>
+      </Modal>
     </View>
   );
 }
@@ -362,8 +383,6 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   sliderBox: { position: "absolute", bottom: 150, width: "100%" },
   pagePagination: { flexDirection: "row", justifyContent: "space-around", position: "absolute", bottom: 100, width: "100%" },
-  overlayScroll: { position: "absolute", top: 100, width: "100%", height: "100%" },
-  unisonCard: { backgroundColor: "#fff", margin: 12, borderRadius: 8, padding: 12 },
   unisonTitle: { fontSize: 16, fontWeight: "bold", textAlign: "center", marginBottom: 8 },
   nodeBox: { marginVertical: 6, padding: 6, borderWidth: 1, borderRadius: 6, borderColor: "#ccc" },
   nodeText: { fontWeight: "bold", fontSize: 14 },

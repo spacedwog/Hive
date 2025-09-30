@@ -13,6 +13,7 @@ export type GithubUser = {
 };
 
 export type GithubOrg = {
+  email: string;
   latitude: any;
   longitude: any;
   location: string;
