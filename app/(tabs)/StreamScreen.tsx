@@ -65,11 +65,27 @@ export default function StreamScreen() {
     }
   };
 
-  // Alterna entre Soft-AP e STA
-  const switchMode = () => {
-    esp32Service.switchMode();
-    setMode(esp32Service.mode);
-    setStatus({ ...esp32Service.status });
+  // Alterna entre Soft-AP e STA via API Vercel
+  const switchMode = async () => {
+    try {
+      // Chamada POST para alternar modo
+      const res = await fetch("https://hive-chi-woad.vercel.app/api/camera", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "switch_mode" }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        // Atualiza estado local
+        setMode(mode === "Soft-AP" ? "STA" : "Soft-AP");
+        setStatus((prev) => ({ ...prev, ip: json.ip }));
+      } else {
+        console.warn("Falha ao alternar modo:", json);
+      }
+    } catch (err) {
+      console.error("Erro ao chamar API Vercel:", err);
+    }
   };
 
   // Atualiza status ESP32 a cada 2s
