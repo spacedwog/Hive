@@ -1,23 +1,19 @@
 import { Camera, CameraView } from "expo-camera";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service";
-import VercelService from "../../hive_brain/hive_stream/VercelService";
 
 export default function StreamScreen() {
   const [esp32Service] = useState(() => new Esp32Service());
-  const [vercelService] = useState(() => new VercelService());
   const [status, setStatus] = useState<Esp32Status>({ ...esp32Service.status });
   const [mode, setMode] = useState<"Soft-AP" | "STA">(esp32Service.mode);
-  const [vercelData, setVercelData] = useState<any>(null);
-  const [vercelHTML, setVercelHTML] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [type, setType] = useState<"front" | "back">("back");
   const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
   const cameraRef = useRef<CameraView>(null);
-  const VERCEL_CAMERA_URL = "https://hive-chi-woad.vercel.app/api/camera"; // substituir pela sua URL Vercel
+  const VERCEL_API_URL = "https://hive-chi-woad.vercel.app/api/esp32-camera";
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -27,27 +23,13 @@ export default function StreamScreen() {
     })();
   }, []);
 
-  // Atualiza a URL do stream a cada 2s
+  // Atualiza a URL do stream do ESP32 a cada 2s
   useEffect(() => {
     const interval = setInterval(() => {
       setFrameUrl(`${status.ip}/stream?${Date.now()}`);
     }, 2000);
     return () => clearInterval(interval);
   }, [status.ip]);
-
-  // Busca dados do Vercel
-  useEffect(() => {
-    const fetchVercelData = async () => {
-      try {
-        const { data, html } = await vercelService.fetchData();
-        setVercelData(data);
-        setVercelHTML(html);
-      } catch (err) {
-        console.warn("Erro ao buscar dados do Vercel:", err);
-      }
-    };
-    fetchVercelData();
-  }, [vercelService]);
 
   // Alterna o LED
   const toggleLed = async () => {
@@ -66,7 +48,7 @@ export default function StreamScreen() {
     setStatus({ ...esp32Service.status });
   };
 
-  // Atualiza status ESP32 a cada 2s com reconexão automática
+  // Atualiza status do ESP32 a cada 2s
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -79,7 +61,35 @@ export default function StreamScreen() {
     return () => clearInterval(interval);
   }, [esp32Service]);
 
-  // Captura uma foto da câmera e envia para a API Vercel
+  // Envia status + foto para a API Vercel
+  const sendDataToVercel = useCallback(
+    async (photoBase64?: string) => {
+      try {
+        const payload = {
+          status,
+          image: photoBase64 || null,
+        };
+
+        const response = await fetch(VERCEL_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          console.log("✅ Dados enviados para Vercel com sucesso!", result.logData);
+        } else {
+          console.warn("⚠️ Falha ao enviar dados para Vercel:", result);
+        }
+      } catch (err) {
+        console.error("Erro ao enviar dados para Vercel:", err);
+      }
+    },
+    [status, VERCEL_API_URL]
+  );
+
+  // Captura uma foto e envia para Vercel
   const captureAndUploadPhoto = async () => {
     if (cameraRef.current) {
       try {
@@ -92,24 +102,21 @@ export default function StreamScreen() {
         setCapturedPhoto(photo.uri);
         console.log("📸 Foto capturada:", photo.uri);
 
-        // Envia para API do Vercel
-        const response = await fetch(VERCEL_CAMERA_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: photo.base64 }),
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          console.log("✅ Foto enviada para Vercel com sucesso!", result.fileName);
-        } else {
-          console.warn("⚠️ Falha ao enviar foto para Vercel:", result);
-        }
+        // Envia status + foto para Vercel
+        await sendDataToVercel(photo.base64);
       } catch (err) {
         console.error("Erro ao capturar/enviar foto:", err);
       }
     }
   };
+
+  // Envio periódico do status ESP32 (sem foto)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      await sendDataToVercel();
+    }, 5000); // a cada 5s
+    return () => clearInterval(interval);
+  }, [sendDataToVercel, status]);
 
   return (
     <View style={styles.container}>
@@ -166,7 +173,6 @@ export default function StreamScreen() {
                 />
               </View>
 
-              {/* Mostra a foto capturada */}
               {capturedPhoto && (
                 <Image
                   source={{ uri: capturedPhoto }}
@@ -174,25 +180,10 @@ export default function StreamScreen() {
                 />
               )}
 
-              {/* Stream do ESP32 via Image */}
               <Image
                 source={{ uri: frameUrl }}
                 style={{ width: "100%", height: 240, marginTop: 10 }}
               />
-
-              <ScrollView style={styles.vercelOverlay}>
-                {vercelHTML ? (
-                  <Text style={styles.vercelText}>HTML carregado do Vercel</Text>
-                ) : vercelData ? (
-                  <Text style={styles.vercelText}>
-                    {JSON.stringify(vercelData, null, 1)}
-                  </Text>
-                ) : (
-                  <Text style={[styles.vercelText, { color: "red" }]}>
-                    Carregando dados Vercel...
-                  </Text>
-                )}
-              </ScrollView>
             </>
           ) : (
             <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
@@ -238,17 +229,6 @@ const styles = StyleSheet.create({
     backgroundColor: "black",
     padding: 5,
   },
-  vercelOverlay: {
-    position: "absolute",
-    bottom: 5,
-    left: 5,
-    right: 5,
-    maxHeight: 260,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 5,
-    borderRadius: 5,
-  },
-  vercelText: { color: "#0f0", fontSize: 12 },
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
 });
