@@ -50,7 +50,6 @@ export default function StreamScreen() {
     try {
       const response = await esp32Service.toggleLed();
 
-      // Tenta parsear JSON, mas captura HTML ou erro
       if (typeof response === "string") {
         try {
           const json = JSON.parse(response);
