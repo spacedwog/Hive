@@ -28,7 +28,9 @@ export default class Esp32Service {
   switchMode(): "Soft-AP" | "STA" {
     this.mode = this.mode === "Soft-AP" ? "STA" : "Soft-AP";
     this.status.ip =
-      this.mode === "Soft-AP" ? Esp32Service.SOFTAP_IP : Esp32Service.STA_IP + "/status";
+      this.mode === "Soft-AP" ? Esp32Service.SOFTAP_IP : Esp32Service.STA_IP;
+
+    this.status.ip += "/status";
 
     console.log(`🔄 Modo alterado para ${this.mode} (${this.status.ip})`);
     return this.mode;
