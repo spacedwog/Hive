@@ -22,12 +22,14 @@ export default function TelaPrinc() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [potentialIPs, setPotentialIPs] = useState<string[]>([]);
   const [firewallPage, setFirewallPage] = useState(1);
+  const [rulesPage, setRulesPage] = useState(1);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [newDestination, setNewDestination] = useState('');
   const [newGateway, setNewGateway] = useState('');
 
   const ipsPerPage = 10;
+  const rulesPerPage = 5; // Quantas regras aparecem por página
 
   // -------------------------
   // Resolve domínio via Google DNS
@@ -91,9 +93,8 @@ export default function TelaPrinc() {
       if (!data.success) {
         console.warn("Falha ao salvar rota:", data.error);
       } else {
-              console.log(`Rota ${destination} ➝ ${gateway} salva com sucesso.`);
-              setRules(prev => [...prev, { destination, gateway }]);
-            }
+        setRules(prev => [...prev, { destination, gateway }]);
+      }
     } catch (err: any) {
       console.error("Erro ao salvar rota:", err.message);
     }
@@ -114,9 +115,7 @@ export default function TelaPrinc() {
           destination: r.destination || r.DestinationPrefix,
           gateway: r.gateway || r.NextHop,
         }));
-      
         setRules(formatted);
-      
         for (const r of formatted) {
           await saveRoute(r.destination, r.gateway);
         }
@@ -221,8 +220,17 @@ export default function TelaPrinc() {
       </View>
     );
 
+  // -------------------------
+  // Paginação IPs bloqueados
+  // -------------------------
   const paginatedIPs = firewallData?.blocked?.slice((firewallPage - 1) * ipsPerPage, firewallPage * ipsPerPage) ?? [];
   const totalPages = firewallData?.blocked ? Math.ceil(firewallData.blocked.length / ipsPerPage) : 1;
+
+  // -------------------------
+  // Paginação Regras/Rotas
+  // -------------------------
+  const paginatedRules = rules.slice((rulesPage - 1) * rulesPerPage, rulesPage * rulesPerPage);
+  const totalRulesPages = Math.ceil(rules.length / rulesPerPage);
 
   return (
     <>
@@ -239,24 +247,24 @@ export default function TelaPrinc() {
                 <View style={{ flex: 1, marginRight: 8 }}>
                   <Text style={[styles.description,{color:'#facc15',fontWeight:'bold'}]}>IPs Bloqueados</Text>
                   {paginatedIPs.map((ip: string, idx: number) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
+                  {totalPages > 1 && (
+                    <View style={{flexDirection:'row',justifyContent:'center',marginTop:4}}>
+                      <TouchableOpacity disabled={firewallPage<=1} onPress={()=>setFirewallPage(prev=>prev-1)} style={{marginHorizontal:8}}>
+                        <Text style={{color: firewallPage>1 ? '#50fa7b':'#888'}}>◀</Text>
+                      </TouchableOpacity>
+                      <Text style={{color:'#fff'}}>{firewallPage} / {totalPages}</Text>
+                      <TouchableOpacity disabled={firewallPage>=totalPages} onPress={()=>setFirewallPage(prev=>prev+1)} style={{marginHorizontal:8}}>
+                        <Text style={{color: firewallPage<totalPages ? '#50fa7b':'#888'}}>▶</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
+
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={[styles.description,{color:'#38bdf8',fontWeight:'bold'}]}>Potential IPs</Text>
                   {potentialIPs.map((ip, idx) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
                 </View>
               </View>
-
-              {totalPages>1 && (
-                <View style={{flexDirection:'row',justifyContent:'center',marginTop:8}}>
-                  <TouchableOpacity disabled={firewallPage<=1} onPress={()=>setFirewallPage(prev=>prev-1)} style={{marginHorizontal:8}}>
-                    <Text style={{color: firewallPage>1 ? '#50fa7b':'#888'}}>◀</Text>
-                  </TouchableOpacity>
-                  <Text style={{color:'#fff'}}>{firewallPage} / {totalPages}</Text>
-                  <TouchableOpacity disabled={firewallPage>=totalPages} onPress={()=>setFirewallPage(prev=>prev+1)} style={{marginHorizontal:8}}>
-                    <Text style={{color: firewallPage<totalPages ? '#50fa7b':'#888'}}>▶</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
 
               {/* Botão para abrir modal */}
               <TouchableOpacity
@@ -266,13 +274,25 @@ export default function TelaPrinc() {
                 <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Adicionar Rota</Text>
               </TouchableOpacity>
 
-              {/* Exibe rotas e regras criadas */}
+              {/* Exibe rotas e regras criadas com paginação */}
               <View style={{marginTop:16}}>
                 <Text style={[styles.description,{color:'#34d399',fontWeight:'bold'}]}>Regras e Rotas Criadas</Text>
-                {rules.length > 0 ? (
-                  rules.map((r, idx) => (<Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>))
+                {paginatedRules.length > 0 ? (
+                  paginatedRules.map((r, idx) => (<Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>))
                 ) : (
                   <Text style={styles.description}>Nenhuma rota aplicada ainda.</Text>
+                )}
+
+                {totalRulesPages > 1 && (
+                  <View style={{flexDirection:'row',justifyContent:'center',marginTop:4}}>
+                    <TouchableOpacity disabled={rulesPage<=1} onPress={()=>setRulesPage(prev=>prev-1)} style={{marginHorizontal:8}}>
+                      <Text style={{color: rulesPage>1 ? '#50fa7b':'#888'}}>◀</Text>
+                    </TouchableOpacity>
+                    <Text style={{color:'#fff'}}>{rulesPage} / {totalRulesPages}</Text>
+                    <TouchableOpacity disabled={rulesPage>=totalRulesPages} onPress={()=>setRulesPage(prev=>prev+1)} style={{marginHorizontal:8}}>
+                      <Text style={{color: rulesPage<totalRulesPages ? '#50fa7b':'#888'}}>▶</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
 
