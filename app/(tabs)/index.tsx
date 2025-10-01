@@ -57,7 +57,9 @@ export default function TelaPrinc() {
       const results = await Promise.all(domains.map(resolveDomainA));
       const aggregated: string[] = [];
       for (const arr of results) {
-        for (const ip of arr) if (!aggregated.includes(ip)) aggregated.push(ip);
+        for (const ip of arr) if (!aggregated.includes(ip)) {
+                                aggregated.push(ip);
+                              }
       }
       if (aggregated.length === 0) {
         aggregated.push('142.250.190.14','172.217.169.78','140.82.121.4','104.16.133.229');
@@ -99,7 +101,9 @@ export default function TelaPrinc() {
   // Dados do firewall e bloqueios automáticos
   // -------------------------
   useEffect(() => {
-    if (!accessCode || accessCode.trim() === '') return;
+    if (!accessCode || accessCode.trim() === '') {
+      return;
+    }
 
     const fetchFirewallData = async () => {
       try {

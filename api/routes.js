@@ -1,16 +1,26 @@
 // api/routes.js
+import fetch from "node-fetch";
+
 export default async function handler(req, res) {
   try {
-    // Aqui você chama o seu servidor Windows que expõe as rotas via Node/Python
-    const response = await fetch("https://hive-chi-woad.vercel.app/api/routes");
+    // Chama a API do firewall para obter informações completas
+    const response = await fetch("https://hive-chi-woad.vercel.app/api/firewall?action=info");
     const data = await response.json();
 
-    res.status(200).json({
+    if (data.success && data.data?.routingTable) {
+      return res.status(200).json({
+        success: true,
+        routes: data.data.routingTable,
+      });
+    }
+
+    // Caso não existam rotas ainda
+    return res.status(200).json({
       success: true,
-      routes: data,
+      routes: [],
     });
   } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: err.message,
     });
