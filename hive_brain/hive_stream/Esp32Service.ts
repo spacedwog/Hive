@@ -10,41 +10,31 @@ export type Esp32Status = {
 };
 
 export default class Esp32Service {
-  static SOFTAP_IP = "http://192.168.4.1";
-  static STA_IP = "http://192.168.15.188";
-
+  static SOFTAP_FALLBACK = "http://192.168.4.1"; // fallback Soft-AP
   status: Esp32Status;
-  mode: "Soft-AP" | "STA";
   private reconnectInterval?: NodeJS.Timeout;
 
   constructor() {
-    this.mode = "Soft-AP";
     this.status = {
       sensor_db: 0,
       led_builtin: "off",
       led_opposite: "on",
-      ip_ap: Esp32Service.SOFTAP_IP,
+      ip_ap: Esp32Service.SOFTAP_FALLBACK,
       ip_sta: "desconectado",
       auto_off_ms: 5000,
     };
   }
 
-  switchMode(): "Soft-AP" | "STA" {
-    this.mode = this.mode === "Soft-AP" ? "STA" : "Soft-AP";
-    console.log(`🔄 Modo alterado para ${this.mode}`);
-    return this.mode;
-  }
-
+  // Retorna o IP atual (STA se disponível, senão fallback Soft-AP)
   private getCurrentIP(): string {
     return this.status.ip_sta !== "desconectado"
       ? `http://${this.status.ip_sta}`
-      : Esp32Service.SOFTAP_IP;
+      : Esp32Service.SOFTAP_FALLBACK;
   }
 
   private async request(path: string, timeoutMs = 4000) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
     try {
       const res = await fetch(`${this.getCurrentIP()}/${path}`, {
         signal: controller.signal,
@@ -80,12 +70,13 @@ export default class Esp32Service {
           ...json,
           ip_ap: json.ip_ap ?? this.status.ip_ap,
           ip_sta: json.ip_sta ?? this.status.ip_sta,
+          auto_off_ms: json.auto_off_ms ?? this.status.auto_off_ms,
         };
         this.stopReconnectLoop();
       } catch {
         console.warn(`⏳ Tentativa ${attempts}/${maxRetries} falhou em ${this.getCurrentIP()}...`);
         if (attempts >= maxRetries) {
-          console.error("❌ Máximo de tentativas atingido, mantendo último estado.");
+          console.error(`❌ Máximo de tentativas atingido, mantendo último estado.`);
           this.stopReconnectLoop();
         }
       }
@@ -101,11 +92,9 @@ export default class Esp32Service {
   }
 
   async toggleLed(turnOn?: boolean) {
-    // Define estado on/off baseado no parâmetro ou estado atual
-    const ledState: LedStatus = typeof turnOn === "boolean"
-      ? (turnOn ? "on" : "off")
-      : (this.status.led_builtin === "on" ? "off" : "on");
-    const endpoint = ledState === "on" ? "led/on" : "led/off";
+    const endpoint = turnOn !== undefined
+      ? turnOn ? "led/on" : "led/off"
+      : this.status.led_builtin === "on" ? "led/off" : "led/on";
 
     try {
       const json = await this.request(endpoint);
@@ -116,7 +105,7 @@ export default class Esp32Service {
         ip_sta: json.ip_sta ?? this.status.ip_sta,
       };
     } catch (err) {
-      console.error(`⚠️ Erro ao alternar LED para '${ledState}':`, err);
+      console.error(`⚠️ Erro ao alternar LED:`, err);
       try {
         const json = await this.tryReconnectOnce(endpoint);
         this.status = {
@@ -126,11 +115,10 @@ export default class Esp32Service {
           ip_sta: json.ip_sta ?? this.status.ip_sta,
         };
       } catch {
-        // Inicia loop de reconexão
         this.startReconnectLoop(endpoint, 5000, 5);
-        // Fallback manual
-        this.status.led_builtin = ledState;
-        this.status.led_opposite = ledState === "on" ? "off" : "on";
+        // fallback manual
+        this.status.led_builtin = this.status.led_builtin === "on" ? "off" : "on";
+        this.status.led_opposite = this.status.led_opposite === "on" ? "off" : "on";
       }
     }
   }
@@ -176,7 +164,6 @@ export default class Esp32Service {
       }
       const text = await res.text();
 
-      // Extrai JSON do multipart
       const jsonMatch = text.match(/\{.*\}/s);
       const json = jsonMatch ? JSON.parse(jsonMatch[0]) : this.status;
 
