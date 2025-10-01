@@ -1,6 +1,17 @@
+// eslint-disable-next-line import/no-unresolved
+import { VERCEL_URL } from "@env";
 import { Camera, CameraView } from "expo-camera";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Button,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service";
 
 export default function StreamScreen() {
@@ -12,8 +23,11 @@ export default function StreamScreen() {
   const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
   const cameraRef = useRef<CameraView>(null);
-  const VERCEL_API_URL = "https://hive-chi-woad.vercel.app/api/esp32-camera";
+  const VERCEL_API_URL = `${VERCEL_URL}/api/esp32-camera`;
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -36,16 +50,22 @@ export default function StreamScreen() {
     try {
       await esp32Service.toggleLed();
       setStatus({ ...esp32Service.status });
-    } catch (error) {
-      console.error("Erro ao acessar ESP32:", error);
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Erro ao acessar ESP32.");
+      setModalVisible(true);
     }
   };
 
   // Alterna entre Soft-AP e STA
   const switchMode = async () => {
-    esp32Service.switchMode();
-    setMode(esp32Service.mode);
-    setStatus({ ...esp32Service.status });
+    try {
+      esp32Service.switchMode();
+      setMode(esp32Service.mode);
+      setStatus({ ...esp32Service.status });
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Erro ao alternar modo de conexão.");
+      setModalVisible(true);
+    }
   };
 
   // Atualiza status do ESP32 a cada 2s
@@ -54,8 +74,9 @@ export default function StreamScreen() {
       try {
         const newStatus = await esp32Service.fetchStatus();
         setStatus({ ...newStatus });
-      } catch (err) {
-        console.error("Erro ao atualizar status ESP32:", err);
+      } catch (err: any) {
+        setErrorMessage(err?.message || "Erro ao atualizar status do ESP32.");
+        setModalVisible(true);
       }
     }, 2000);
     return () => clearInterval(interval);
@@ -80,10 +101,11 @@ export default function StreamScreen() {
         if (result.success) {
           console.log("✅ Dados enviados para Vercel com sucesso!", result.logData);
         } else {
-          console.warn("⚠️ Falha ao enviar dados para Vercel:", result);
+          throw new Error("Falha ao enviar dados para Vercel.");
         }
-      } catch (err) {
-        console.error("Erro ao enviar dados para Vercel:", err);
+      } catch (err: any) {
+        setErrorMessage(err?.message || "Erro ao enviar dados para Vercel.");
+        setModalVisible(true);
       }
     },
     [status, VERCEL_API_URL]
@@ -104,8 +126,9 @@ export default function StreamScreen() {
 
         // Envia status + foto para Vercel
         await sendDataToVercel(photo.base64);
-      } catch (err) {
-        console.error("Erro ao capturar/enviar foto:", err);
+      } catch (err: any) {
+        setErrorMessage(err?.message || "Erro ao capturar/enviar foto.");
+        setModalVisible(true);
       }
     }
   };
@@ -195,6 +218,27 @@ export default function StreamScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Modal de Erros */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>⚠️ Erro</Text>
+            <Text style={styles.modalMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.closeButtonText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -243,4 +287,41 @@ const styles = StyleSheet.create({
   },
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalContent: {
+    backgroundColor: "#222",
+    padding: 20,
+    borderRadius: 12,
+    width: "80%",
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#f33",
+    marginBottom: 10,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#fff",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  closeButton: {
+    backgroundColor: "#0af",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  closeButtonText: {
+    fontSize: 16,
+    color: "#fff",
+    fontWeight: "bold",
+  },
 });
