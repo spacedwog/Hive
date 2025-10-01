@@ -11,7 +11,7 @@ bool ledOn = false;
 // --- Sensor de som ---
 #define SOUND_SENSOR_PIN 34
 #define SOUND_THRESHOLD 1000
-unsigned long LED_AUTO_OFF_MS = 5000; // Variável, não #define
+unsigned long LED_AUTO_OFF_MS = 5000; // Variável
 unsigned long lastSoundTime = 0;
 
 // --- Configurações Wi-Fi ---
@@ -26,7 +26,7 @@ WiFiServer server(80);
 // --- Imagem .JPG simulada ---
 const unsigned char sampleImage[] PROGMEM = {
   0xFF, 0xD8, 0xFF, 0xE0,
-  // (...) bytes reais da imagem aqui
+  // (...) bytes reais da imagem
   0xFF, 0xD9
 };
 const size_t sampleImageLen = sizeof(sampleImage);
@@ -37,11 +37,13 @@ String getStatusJSON() {
   IPAddress ipSTA = WiFi.localIP();
   int soundLevel = analogRead(SOUND_SENSOR_PIN);
 
+  String ipSTAString = (ipSTA.toString() == "0.0.0.0") ? "desconectado" : ipSTA.toString();
+
   String json = "{";
   json += "\"led_builtin\":\"" + String(ledOn ? "on" : "off") + "\",";
   json += "\"led_opposite\":\"" + String(ledOn ? "off" : "on") + "\",";
   json += "\"ip_ap\":\"" + ipAP.toString() + "\",";
-  json += "\"ip_sta\":\"" + (ipSTA.toString() == "0.0.0.0" ? "desconectado" : ipSTA.toString()) + "\",";
+  json += "\"ip_sta\":\"" + ipSTAString + "\",";
   json += "\"sound_level\":" + String(soundLevel) + ",";
   json += "\"auto_off_ms\":" + String(LED_AUTO_OFF_MS);
   json += "}";
@@ -119,7 +121,7 @@ void handleClientRequest(WiFiClient &client) {
     if (pos > 0) {
       String value = request.substring(pos + 12);
       value.trim();
-      LED_AUTO_OFF_MS = value.toInt(); // Agora funciona corretamente
+      LED_AUTO_OFF_MS = value.toInt();
       Serial.print("⏱️ LED_AUTO_OFF_MS atualizado para: ");
       Serial.println(LED_AUTO_OFF_MS);
     }
@@ -152,7 +154,7 @@ void setup() {
   WiFi.begin(sta_ssid, sta_password);
   Serial.print("🔄 Conectando à STA...");
   unsigned long startAttemptTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) { // aguarda 20s
     Serial.print(".");
     delay(500);
   }

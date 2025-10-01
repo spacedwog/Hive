@@ -1,3 +1,6 @@
+// eslint-disable-next-line import/no-unresolved
+import { ESP32_SOFTAP_IP, ESP32_STA_IP } from "@env";
+
 export type LedStatus = "on" | "off";
 
 export type Esp32Status = {
@@ -10,35 +13,44 @@ export type Esp32Status = {
 };
 
 export default class Esp32Service {
-  static SOFTAP_FALLBACK = "http://192.168.4.1"; // fallback Soft-AP
+  static SOFTAP_IP = ESP32_SOFTAP_IP;
+  static STA_IP = ESP32_STA_IP;
+
   status: Esp32Status;
+  mode: "Soft-AP" | "STA";
   private reconnectInterval?: NodeJS.Timeout;
 
   constructor() {
+    this.mode = "Soft-AP";
     this.status = {
       sensor_db: 0,
       led_builtin: "off",
       led_opposite: "on",
-      ip_ap: Esp32Service.SOFTAP_FALLBACK,
+      ip_ap: Esp32Service.SOFTAP_IP,
       ip_sta: "desconectado",
       auto_off_ms: 5000,
     };
   }
 
-  // Retorna o IP atual (STA se disponível, senão fallback Soft-AP)
+  switchMode(): "Soft-AP" | "STA" {
+    this.mode = this.mode === "Soft-AP" ? "STA" : "Soft-AP";
+    console.log(`🔄 Modo alterado para ${this.mode}`);
+    return this.mode;
+  }
+
   private getCurrentIP(): string {
+    // Usa STA se conectada, senão fallback para Soft-AP
     return this.status.ip_sta !== "desconectado"
       ? `http://${this.status.ip_sta}`
-      : Esp32Service.SOFTAP_FALLBACK;
+      : Esp32Service.SOFTAP_IP;
   }
 
   private async request(path: string, timeoutMs = 4000) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      const res = await fetch(`${this.getCurrentIP()}/${path}`, {
-        signal: controller.signal,
-      });
+      const res = await fetch(`${this.getCurrentIP()}/${path}`, { signal: controller.signal });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -70,7 +82,6 @@ export default class Esp32Service {
           ...json,
           ip_ap: json.ip_ap ?? this.status.ip_ap,
           ip_sta: json.ip_sta ?? this.status.ip_sta,
-          auto_off_ms: json.auto_off_ms ?? this.status.auto_off_ms,
         };
         this.stopReconnectLoop();
       } catch {

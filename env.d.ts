@@ -5,4 +5,7 @@ declare module '@env' {
   export const GITHUB_OWNER: string;
   export const GITHUB_REPO: string;
   export const VERCEL_URL: string;
+  export const ESP32_SOFTAP_IP: string;
+  export const ESP32_STA_IP: string;
+  export const VERCEL_TOKEN: string;
 }
