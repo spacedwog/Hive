@@ -106,12 +106,13 @@ export default function TelaPrinc() {
   const [newDestination, setNewDestination] = useState('');
   const [newGateway, setNewGateway] = useState('');
 
+  // Modal de erro
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
   const ipsPerPage = 10;
   const rulesPerPage = 5;
 
-  // -------------------------
-  // Resolve domínio via Google DNS
-  // -------------------------
   const resolveDomainA = async (domain: string): Promise<string[]> => {
     try {
       const resp = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
@@ -130,9 +131,6 @@ export default function TelaPrinc() {
     }
   };
 
-  // -------------------------
-  // Pré-carrega IPs potenciais
-  // -------------------------
   useEffect(() => {
     const loadPotentialIPs = async () => {
       const domains = [
@@ -140,22 +138,24 @@ export default function TelaPrinc() {
         'microsoft.com','cloudflare.com','twitter.com',
         'instagram.com','amazon.com'
       ];
-      const results = await Promise.all(domains.map(resolveDomainA));
-      const aggregated: string[] = [];
-      for (const arr of results) {
-        for (const ip of arr) if (!aggregated.includes(ip)) aggregated.push(ip);
+      try {
+        const results = await Promise.all(domains.map(resolveDomainA));
+        const aggregated: string[] = [];
+        for (const arr of results) {
+          for (const ip of arr) if (!aggregated.includes(ip)) aggregated.push(ip);
+        }
+        if (aggregated.length === 0) {
+          aggregated.push('142.250.190.14','172.217.169.78','140.82.121.4','104.16.133.229');
+        }
+        setPotentialIPs(aggregated);
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Falha ao carregar IPs potenciais');
+        setErrorModalVisible(true);
       }
-      if (aggregated.length === 0) {
-        aggregated.push('142.250.190.14','172.217.169.78','140.82.121.4','104.16.133.229');
-      }
-      setPotentialIPs(aggregated);
     };
     if (accessCode && potentialIPs.length === 0) loadPotentialIPs();
   }, [accessCode, potentialIPs.length]);
 
-  // -------------------------
-  // Salvar rota no firewall do VERCEL
-  // -------------------------
   const saveRoute = async (destination: string, gateway: string) => {
     try {
       const resp = await fetch(`${VERCEL_URL}/api/routes`, {
@@ -170,13 +170,11 @@ export default function TelaPrinc() {
         setRules(prev => [...prev, { destination, gateway }]);
       }
     } catch (err: any) {
-      console.error("Erro ao salvar rota:", err.message);
+      setErrorMessage(err.message || 'Falha ao salvar rota');
+      setErrorModalVisible(true);
     }
   };
 
-  // -------------------------
-  // Buscar e salvar rotas automaticamente
-  // -------------------------
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchAndSaveRoutes = async () => {
     try {
@@ -196,16 +194,14 @@ export default function TelaPrinc() {
       } else setRules([]);
     } catch (err: any) {
       setRawJson((prev: any) => ({ ...prev, routesError: err?.message || "Falha ao buscar rotas" }));
+      setErrorMessage(err?.message || "Falha ao buscar rotas");
+      setErrorModalVisible(true);
       setRules([]);
     }
   };
 
-  // -------------------------
-  // Avaliação de risco interna
-  // -------------------------
   const calculateRiskLevel = (firewall: any) => {
     if (!firewall) return { level: 'Desconhecido', color: '#888', tentativas: 0, regras: 0 };
-
     const tentativas = firewall.tentativasBloqueadas || 0;
     const regras = firewall.regrasAplicadas || 0;
 
@@ -221,9 +217,6 @@ export default function TelaPrinc() {
     return { level: nivel, color: cor, tentativas, regras };
   };
 
-  // -------------------------
-  // Dados do firewall e bloqueios automáticos com rotina de risco
-  // -------------------------
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '') return;
 
@@ -239,10 +232,8 @@ export default function TelaPrinc() {
         }
 
         setFirewallData(data.data);
-
         const risk = calculateRiskLevel(data.data);
 
-        // Bloqueio automático incremental dependendo do nível de risco
         if (risk.level === 'Alto' || risk.level === 'Crítico') {
           const ipParaBloquear =
             data.data.ip ||
@@ -267,6 +258,8 @@ export default function TelaPrinc() {
       } catch (err: any) {
         setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
         setFirewallData(null);
+        setErrorMessage(err?.message || 'Falha no fetch firewall');
+        setErrorModalVisible(true);
       }
     };
 
@@ -278,7 +271,7 @@ export default function TelaPrinc() {
   if (!accessCode || accessCode.trim() === '')
     return (
       <View style={styles.loginContainer}>
-        <Text style={{ color: '#fff', fontSize: 16 }}>Efetue o login no HIVE PROJECT:</Text>
+        <Text style={{ color: '#fff', fontSize: 16 }}>Acesse o HIVE Project</Text>
         <TouchableOpacity onPress={() => setAccessCode('ACESSO_LIBERADO')} style={styles.loginBtn}>
           <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Login</Text>
         </TouchableOpacity>
@@ -347,6 +340,7 @@ export default function TelaPrinc() {
       </ScrollView>
       <BottomNav />
 
+      {/* Modal para adicionar rota */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -384,6 +378,24 @@ export default function TelaPrinc() {
                 <Text style={{ fontWeight: 'bold', color: '#fff' }}>Cancelar</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de erro global */}
+      <Modal
+        visible={errorModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: '#f87171' }]}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12, color:'#fff' }}>Erro</Text>
+            <Text style={{ color:'#fff', marginBottom: 16 }}>{errorMessage}</Text>
+            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#0f172a' }]} onPress={() => setErrorModalVisible(false)}>
+              <Text style={{ fontWeight: 'bold', color: '#fff' }}>Fechar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
