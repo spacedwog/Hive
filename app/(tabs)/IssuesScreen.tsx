@@ -80,7 +80,6 @@ export default function IssuesScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Minhas Issues do GitHub</Text>
       {loading ? (
         <ActivityIndicator size="large" color="#facc15" />
       ) : (
@@ -244,7 +243,6 @@ export default function IssuesScreen() {
 
 const styles = StyleSheet.create({
   container: { padding: 24, backgroundColor: '#0f172a', alignItems: 'center' },
-  title: { fontSize: 24, color: '#facc15', fontWeight: 'bold', marginBottom: 20 },
   issueCard: { backgroundColor: '#1f2937', borderRadius: 10, padding: 8, marginBottom: 8, width: '100%' },
   issueTitle: { fontSize: 15, color: '#50fa7b', fontWeight: 'bold', marginBottom: 4 },
   issueBody: { fontSize: 12, color: '#e2e8f0', marginBottom: 4 },

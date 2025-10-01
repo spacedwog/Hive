@@ -187,8 +187,6 @@ export default function TelaPrinc() {
   return (
     <>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>🧱 HIVE FIREWALL 🧱</Text>
-
         <AnimatedView style={[styles.card, animatedCardStyle]}>
           {firewallData ? (
             <>
@@ -326,7 +324,6 @@ export default function TelaPrinc() {
 
 const styles = StyleSheet.create({
   container: { padding: 24, backgroundColor: "#0f172a", alignItems: "center" },
-  title: { fontSize: 28, color: "#facc15", fontWeight: "bold", marginBottom: 20 },
   card: {
     borderRadius: 16,
     padding: 20,

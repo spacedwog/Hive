@@ -158,7 +158,6 @@ export default function StreamScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
       <Text style={styles.connectionText}>
         {status.ip ?? "" ? "✅ Conectado ao ESP32" : "❌ Desconectado"}
       </Text>
@@ -218,12 +217,12 @@ export default function StreamScreen() {
                   onPress={() => setType(type === "back" ? "front" : "back")}
                   color="#0af"
                 />
-                <Button
-                  title="📸 Capturar & Enviar"
-                  onPress={captureAndUploadPhoto}
-                  color="#4caf50"
-                />
               </View>
+              <Button
+                title="📸 Tirar Foto"
+                onPress={captureAndUploadPhoto}
+                color="#4caf50"
+              />
               {capturedPhoto && (
                 <Image source={{ uri: capturedPhoto }} style={{ width: "100%", height: 240, marginTop: 10 }} />
               )}
@@ -298,8 +297,7 @@ export default function StreamScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#121212", alignItems: "center", justifyContent: "flex-start"},
-  title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 15, textAlign: "center" },
+  container: { flex: 1, padding: 42, backgroundColor: "#121212", alignItems: "center", justifyContent: "flex-start"},
   connectionText: { fontSize: 16, fontWeight: "bold", color: "#0af", marginBottom: 10, textAlign: "center" },
   text: { fontSize: 16, color: "#fff", marginVertical: 5, textAlign: "center" },
   dataBox: { width: "90%", maxWidth: 400, padding: 10, backgroundColor: "#222", borderRadius: 8, marginBottom: 15 },
