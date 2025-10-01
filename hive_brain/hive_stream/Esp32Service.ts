@@ -4,6 +4,7 @@ import { ESP32_SOFTAP_IP, ESP32_STA_IP } from "@env";
 export type LedStatus = "on" | "off";
 
 export type Esp32Status = {
+  ip: string;
   sensor_db: number;
   led_builtin: LedStatus;
   led_opposite: LedStatus;
@@ -21,36 +22,42 @@ export default class Esp32Service {
   private reconnectInterval?: NodeJS.Timeout;
 
   constructor() {
-    this.mode = "Soft-AP";
+    this.mode = "STA"; // Inicializa no STA por padrão
     this.status = {
+      ip: this.mode === "STA" ? Esp32Service.STA_IP : Esp32Service.SOFTAP_IP,
       sensor_db: 0,
       led_builtin: "off",
       led_opposite: "on",
       ip_ap: Esp32Service.SOFTAP_IP,
-      ip_sta: "desconectado",
+      ip_sta: Esp32Service.STA_IP,
       auto_off_ms: 5000,
     };
+
+    console.log("📡 ESP32 Service iniciado");
+    console.log("STA_IP do .env:", Esp32Service.STA_IP);
+    console.log("SOFTAP_IP do .env:", Esp32Service.SOFTAP_IP);
   }
 
   switchMode(): "Soft-AP" | "STA" {
-    this.mode = this.mode === "Soft-AP" ? "STA" : "Soft-AP";
-    console.log(`🔄 Modo alterado para ${this.mode}`);
+    this.mode = this.mode === "STA" ? "Soft-AP" : "STA";
+    this.status.ip = this.mode === "STA" ? Esp32Service.STA_IP : Esp32Service.SOFTAP_IP;
+    console.log(`🔄 Modo alterado para ${this.mode}, IP atual: ${this.status.ip}`);
     return this.mode;
   }
 
   private getCurrentIP(): string {
-    // Usa STA se conectada, senão fallback para Soft-AP
-    return this.status.ip_sta !== "desconectado"
-      ? `http://${this.status.ip_sta}`
-      : Esp32Service.SOFTAP_IP;
+    return this.status.ip;
   }
 
-  private async request(path: string, timeoutMs = 4000) {
+  private async request(path: string, timeoutMs = 15000) {
+    const url = `${this.getCurrentIP()}/${path}`;
+    console.log(`🌐 Fazendo request para: ${url}`);
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const res = await fetch(`${this.getCurrentIP()}/${path}`, { signal: controller.signal });
+      const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -77,12 +84,7 @@ export default class Esp32Service {
       try {
         const json = await this.request(path);
         console.log(`✅ Reconectado via ${this.getCurrentIP()}`);
-        this.status = {
-          ...this.status,
-          ...json,
-          ip_ap: json.ip_ap ?? this.status.ip_ap,
-          ip_sta: json.ip_sta ?? this.status.ip_sta,
-        };
+        this.syncStatus(json);
         this.stopReconnectLoop();
       } catch {
         console.warn(`⏳ Tentativa ${attempts}/${maxRetries} falhou em ${this.getCurrentIP()}...`);
@@ -109,56 +111,46 @@ export default class Esp32Service {
 
     try {
       const json = await this.request(endpoint);
-      this.status = {
-        ...this.status,
-        ...json,
-        ip_ap: json.ip_ap ?? this.status.ip_ap,
-        ip_sta: json.ip_sta ?? this.status.ip_sta,
-      };
+      this.syncStatus(json);
     } catch (err) {
       console.error(`⚠️ Erro ao alternar LED:`, err);
       try {
         const json = await this.tryReconnectOnce(endpoint);
-        this.status = {
-          ...this.status,
-          ...json,
-          ip_ap: json.ip_ap ?? this.status.ip_ap,
-          ip_sta: json.ip_sta ?? this.status.ip_sta,
-        };
+        this.syncStatus(json);
       } catch {
         this.startReconnectLoop(endpoint, 5000, 5);
-        // fallback manual
         this.status.led_builtin = this.status.led_builtin === "on" ? "off" : "on";
         this.status.led_opposite = this.status.led_opposite === "on" ? "off" : "on";
       }
     }
   }
 
+  private syncStatus(json: Partial<Esp32Status>) {
+    this.status.led_builtin = json.led_builtin ?? this.status.led_builtin;
+    this.status.led_opposite = json.led_opposite ?? this.status.led_opposite;
+    this.status.sensor_db = json.sensor_db ?? this.status.sensor_db;
+    this.status.ip_ap = json.ip_ap ?? this.status.ip_ap;
+    this.status.ip_sta = json.ip_sta ?? this.status.ip_sta;
+    this.status.auto_off_ms = json.auto_off_ms ?? this.status.auto_off_ms;
+  }
+
   async fetchStatus(): Promise<Esp32Status> {
     try {
       const json = await this.request("status");
-      this.status = {
-        ...this.status,
+      this.syncStatus({
         ...json,
         sensor_db: json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1)),
-        ip_ap: json.ip_ap ?? this.status.ip_ap,
-        ip_sta: json.ip_sta ?? this.status.ip_sta,
-        auto_off_ms: json.auto_off_ms ?? this.status.auto_off_ms,
-      };
+      });
       this.stopReconnectLoop();
       return this.status;
     } catch (err) {
       console.error(`⚠️ Erro ao buscar status:`, err);
       try {
         const json = await this.tryReconnectOnce("status");
-        this.status = {
-          ...this.status,
+        this.syncStatus({
           ...json,
           sensor_db: json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1)),
-          ip_ap: json.ip_ap ?? this.status.ip_ap,
-          ip_sta: json.ip_sta ?? this.status.ip_sta,
-          auto_off_ms: json.auto_off_ms ?? this.status.auto_off_ms,
-        };
+        });
         return this.status;
       } catch {
         this.startReconnectLoop("status", 5000, 5);
@@ -173,19 +165,13 @@ export default class Esp32Service {
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      const text = await res.text();
 
+      const text = await res.text();
       const jsonMatch = text.match(/\{.*\}/s);
       const json = jsonMatch ? JSON.parse(jsonMatch[0]) : this.status;
-
       const imageBlob = new Blob([text], { type: "image/jpeg" });
 
-      this.status = {
-        ...this.status,
-        ...json,
-        ip_ap: json.ip_ap ?? this.status.ip_ap,
-        ip_sta: json.ip_sta ?? this.status.ip_sta,
-      };
+      this.syncStatus(json);
       return { json: this.status, image: imageBlob };
     } catch (err) {
       console.error("⚠️ Erro ao buscar snapshot:", err);
