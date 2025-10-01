@@ -76,14 +76,20 @@ export default function StreamScreen() {
   // GET status do Vercel
   const fetchStatusFromVercel = useCallback(async () => {
     try {
-      const response = await fetch(`${VERCEL_API_URL}/status`, { method: "GET" });
-      const result = await response.json();
+      const response = await fetch(`${VERCEL_URL}/status`, { method: "GET" });
+      const text = await response.text(); // lê como texto primeiro
+      let result;
+      try {
+        result = JSON.parse(text); // tenta converter para JSON
+      } catch {
+        throw new Error("Resposta não é JSON: " + text);
+      }
       setStatus(result);
       console.log("📄 Status obtido do Vercel:", result);
     } catch (err) {
       showError(err);
     }
-  }, [VERCEL_API_URL]);
+  }, []);
 
   // POST dados para Vercel
   const sendDataToVercel = useCallback(
