@@ -1,5 +1,5 @@
 // eslint-disable-next-line import/no-unresolved
-import { AUTH_PASSWORD, AUTH_USERNAME } from '@env';
+import { AUTH_PASSWORD, AUTH_USERNAME, VERCEL_URL } from '@env';
 import Slider from "@react-native-community/slider";
 import axios from "axios";
 import * as Location from "expo-location";
@@ -16,8 +16,6 @@ import {
 import MapView, { Callout, Marker } from "react-native-maps";
 
 import { FALLBACK_LAT, FALLBACK_LON, MAX_POINTS, NodeStatus } from "../../hive_brain/hive_prime/EspManager";
-
-const VERCEL_URL = 'https://hive-chi-woad.vercel.app';
 
 // ==================================
 // Componente gráfico de barras
