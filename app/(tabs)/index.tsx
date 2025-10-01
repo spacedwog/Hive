@@ -13,7 +13,7 @@ import {
   View
 } from 'react-native';
 import BottomNav from '../../hive_body/BottomNav.tsx';
-import { FirewallUtils, Rule } from '../../hive_brain/hive_master/hive_firewall.tsx';
+import { FirewallUtils, Rule } from '../../hive_security/hive_ip/hive_firewall.tsx';
 
 export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
@@ -232,6 +232,7 @@ export default function TelaPrinc() {
             />
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+              {/* Salvar */}
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#50fa7b' }]} onPress={async () => {
                 if (!newDestination.trim() || !newGateway.trim()) {
                   setErrorMessage("Destino e Gateway são obrigatórios!");
@@ -243,6 +244,37 @@ export default function TelaPrinc() {
               }}>
                 <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>Salvar</Text>
               </TouchableOpacity>
+
+              {/* Deletar */}
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#fbbf24' }]} onPress={async () => {
+                if (!newDestination.trim()) {
+                  setErrorMessage("Informe o destino para deletar!");
+                  setErrorModalVisible(true);
+                  return;
+                }
+                try {
+                  const resp = await fetch(`${VERCEL_URL}/api/routes`, {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ destination: newDestination.trim() }),
+                  });
+                  const data = await resp.json();
+                  if (!data.success) {
+                    setErrorMessage(data.error || "Falha ao deletar a rota");
+                    setErrorModalVisible(true);
+                  } else {
+                    setRules(prev => prev.filter(r => r.destination !== newDestination.trim()));
+                    hideModal();
+                  }
+                } catch (err: any) {
+                  setErrorMessage(err.message || "Falha ao deletar a rota");
+                  setErrorModalVisible(true);
+                }
+              }}>
+                <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>Deletar</Text>
+              </TouchableOpacity>
+
+              {/* Cancelar */}
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#f87171' }]} onPress={hideModal}>
                 <Text style={{ fontWeight: 'bold', color: '#fff' }}>Cancelar</Text>
               </TouchableOpacity>
