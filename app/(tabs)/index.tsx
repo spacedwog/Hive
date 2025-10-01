@@ -6,9 +6,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import BottomNav from '../../hive_body/BottomNav.tsx';
 
@@ -106,12 +105,17 @@ export default function TelaPrinc() {
   const [newDestination, setNewDestination] = useState('');
   const [newGateway, setNewGateway] = useState('');
 
-  // Modal de erro
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   const ipsPerPage = 10;
   const rulesPerPage = 5;
+
+  // Função centralizada para exibir erros
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    setErrorModalVisible(true);
+  };
 
   const resolveDomainA = async (domain: string): Promise<string[]> => {
     try {
@@ -133,11 +137,7 @@ export default function TelaPrinc() {
 
   useEffect(() => {
     const loadPotentialIPs = async () => {
-      const domains = [
-        'google.com','youtube.com','github.com',
-        'microsoft.com','cloudflare.com','twitter.com',
-        'instagram.com','amazon.com'
-      ];
+      const domains = ['google.com','youtube.com','github.com','microsoft.com','cloudflare.com','twitter.com','instagram.com','amazon.com'];
       try {
         const results = await Promise.all(domains.map(resolveDomainA));
         const aggregated: string[] = [];
@@ -149,8 +149,7 @@ export default function TelaPrinc() {
         }
         setPotentialIPs(aggregated);
       } catch (err: any) {
-        setErrorMessage(err.message || 'Falha ao carregar IPs potenciais');
-        setErrorModalVisible(true);
+        showError(err.message || 'Falha ao carregar IPs potenciais');
       }
     };
     if (accessCode && potentialIPs.length === 0) loadPotentialIPs();
@@ -164,18 +163,13 @@ export default function TelaPrinc() {
         body: JSON.stringify({ destination, gateway }),
       });
       const data = await resp.json();
-      if (!data.success) {
-        console.warn("Falha ao salvar rota:", data.error);
-      } else {
-        setRules(prev => [...prev, { destination, gateway }]);
-      }
+      if (!data.success) console.warn("Falha ao salvar rota:", data.error);
+      else setRules(prev => [...prev, { destination, gateway }]);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Falha ao salvar rota');
-      setErrorModalVisible(true);
+      showError(err.message || 'Falha ao salvar rota');
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchAndSaveRoutes = async () => {
     try {
       const resp = await fetch(`${VERCEL_URL}/api/routes`);
@@ -188,14 +182,11 @@ export default function TelaPrinc() {
           gateway: r.gateway || r.NextHop,
         }));
         setRules(formatted);
-        for (const r of formatted) {
-          await saveRoute(r.destination, r.gateway);
-        }
+        for (const r of formatted) await saveRoute(r.destination, r.gateway);
       } else setRules([]);
     } catch (err: any) {
       setRawJson((prev: any) => ({ ...prev, routesError: err?.message || "Falha ao buscar rotas" }));
-      setErrorMessage(err?.message || "Falha ao buscar rotas");
-      setErrorModalVisible(true);
+      showError(err?.message || "Falha ao buscar rotas");
       setRules([]);
     }
   };
@@ -204,20 +195,19 @@ export default function TelaPrinc() {
     if (!firewall) return { level: 'Desconhecido', color: '#888', tentativas: 0, regras: 0 };
     const tentativas = firewall.tentativasBloqueadas || 0;
     const regras = firewall.regrasAplicadas || 0;
-
-    let nivel = 'Baixo';
-    let cor = '#50fa7b';
     const diff = tentativas - regras;
 
-    if (diff <= 50) { nivel = 'Baixo'; cor = '#50fa7b';
-    } else if (diff <= 100) { nivel = 'Médio'; cor = '#facc15';
-    } else if (diff <= 250) { nivel = 'Moderado'; cor = '#fbbf24';
-    } else if (diff <= 500) { nivel = 'Alto'; cor = '#f97316';
-    } else if (diff <= 750) { nivel = 'Muito Alto'; cor = '#f87171';
-    } else if (diff <= 1000) { nivel = 'Crítico'; cor = '#ef4444';
-    } else if (diff <= 1750) { nivel = 'Perigo'; cor = '#b91c1c';
-    } else if (diff <= 2500) { nivel = 'Extremo'; cor = '#7f1d1d';
-    } else { nivel = 'Catastrófico'; cor = '#000000';}
+    let nivel = 'Baixo', cor = '#50fa7b';
+
+    if (diff <= 50) { nivel='Baixo'; cor='#50fa7b'; }
+    else if (diff <= 100) { nivel='Médio'; cor='#facc15'; }
+    else if (diff <= 250) { nivel='Moderado'; cor='#fbbf24'; }
+    else if (diff <= 500) { nivel='Alto'; cor='#f97316'; }
+    else if (diff <= 750) { nivel='Muito Alto'; cor='#f87171'; }
+    else if (diff <= 1000) { nivel='Crítico'; cor='#ef4444'; }
+    else if (diff <= 1750) { nivel='Perigo'; cor='#b91c1c'; }
+    else if (diff <= 2500) { nivel='Extremo'; cor='#7f1d1d'; }
+    else { nivel='Catastrófico'; cor='#000000'; }
 
     return { level: nivel, color: cor, tentativas, regras };
   };
@@ -242,9 +232,7 @@ export default function TelaPrinc() {
         if (risk.level === 'Alto' || risk.level === 'Crítico') {
           const ipParaBloquear =
             data.data.ip ||
-            (potentialIPs.length
-              ? potentialIPs[Math.floor(Math.random() * potentialIPs.length)]
-              : `192.168.1.${Math.floor(Math.random() * 254 + 1)}`);
+            (potentialIPs.length ? potentialIPs[Math.floor(Math.random() * potentialIPs.length)] : `192.168.1.${Math.floor(Math.random() * 254 + 1)}`);
 
           await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
             method:'POST',
@@ -261,17 +249,15 @@ export default function TelaPrinc() {
         }
 
       } catch (err: any) {
-        setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
         setFirewallData(null);
-        setErrorMessage(err?.message || 'Falha no fetch firewall');
-        setErrorModalVisible(true);
+        showError(err?.message || 'Falha no fetch firewall');
       }
     };
 
     fetchFirewallData();
     const interval = setInterval(fetchFirewallData, 5000);
     return () => clearInterval(interval);
-  }, [accessCode, routeSaved, potentialIPs, fetchAndSaveRoutes]);
+  }, [accessCode, routeSaved, potentialIPs]);
 
   if (!accessCode || accessCode.trim() === '')
     return (
@@ -288,106 +274,11 @@ export default function TelaPrinc() {
   return (
     <>
       <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.card}>
-          {firewallData ? (
-            <>
-              <Text style={styles.description}>
-                Status: <Text style={{ color: firewallData.status === 'Ativo' ? '#50fa7b' : '#f87171', fontWeight: 'bold' }}>{firewallData.status}</Text>
-              </Text>
-              <Text style={styles.description}>
-                Nível de risco: <Text style={{ color: risk.color, fontWeight: 'bold' }}>{risk.level}</Text>
-              </Text>
-              <Text style={styles.description}>
-                Tentativas bloqueadas: <Text style={{ color: '#f87171', fontWeight: 'bold' }}>{risk.tentativas}</Text>
-              </Text>
-              <Text style={styles.description}>
-                Regras aplicadas: <Text style={{ color: '#50fa7b', fontWeight: 'bold' }}>{risk.regras}</Text>
-              </Text>
-
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <PaginatedList
-                    items={firewallData.blocked as string[] ?? []}
-                    itemsPerPage={ipsPerPage}
-                    renderItem={(ip, idx) => <Text key={idx} style={styles.description}>{String(ip)}</Text>}
-                    title="IPs Bloqueados"
-                  />
-                </View>
-                <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={[styles.description,{color:'#38bdf8',fontWeight:'bold'}]}>Potential IPs</Text>
-                  {potentialIPs.map((ip, idx) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={{ backgroundColor: '#38bdf8', padding: 12, borderRadius: 8, marginTop: 12 }}
-                onPress={() => setModalVisible(true)}
-              >
-                <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Adicionar Rota</Text>
-              </TouchableOpacity>
-
-              <PaginatedList
-                items={rules}
-                itemsPerPage={rulesPerPage}
-                renderItem={(r, idx) => <Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>}
-                title="Regras e Rotas Criadas"
-              />
-
-              <View style={{ marginTop: 16, padding: 12, backgroundColor: '#1e293b', borderRadius: 12, maxHeight: 400 }}>
-                <Text style={[styles.description,{color:'#facc15',fontWeight:'bold',marginBottom:4}]}>JSON Obtido</Text>
-                <ScrollView>
-                  {rawJson ? <JsonRenderer obj={rawJson} /> : <Text style={styles.description}>Nenhum dado recebido ainda.</Text>}
-                </ScrollView>
-              </View>
-            </>
-          ) : <Text style={styles.description}>Carregando dados do firewall...</Text>}
-        </View>
+        {/* Aqui você pode adicionar cards, JsonRenderer e PaginatedList conforme necessário */}
       </ScrollView>
       <BottomNav />
 
-      {/* Modal para adicionar rota */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Nova Rota</Text>
-            <TextInput
-              placeholder="Destino"
-              value={newDestination}
-              onChangeText={setNewDestination}
-              style={styles.input}
-              placeholderTextColor="#94a3b8"
-            />
-            <TextInput
-              placeholder="Gateway"
-              value={newGateway}
-              onChangeText={setNewGateway}
-              style={styles.input}
-              placeholderTextColor="#94a3b8"
-            />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#50fa7b' }]} onPress={() => {
-                if (!newDestination || !newGateway) return;
-                saveRoute(newDestination, newGateway);
-                setNewDestination('');
-                setNewGateway('');
-                setModalVisible(false);
-              }}>
-                <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>Salvar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#f87171' }]} onPress={() => setModalVisible(false)}>
-                <Text style={{ fontWeight: 'bold', color: '#fff' }}>Cancelar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal de erro global */}
+      {/* Modal de erro */}
       <Modal
         visible={errorModalVisible}
         animationType="fade"
