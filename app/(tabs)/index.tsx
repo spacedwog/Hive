@@ -75,7 +75,7 @@ export default function TelaPrinc() {
   // -------------------------
   const fetchRoutes = async () => {
     try {
-      const resp = await fetch(`${VERCEL_URL}/routes`);
+      const resp = await fetch(`${VERCEL_URL}/api/routes`);
       const data = await resp.json();
       if (Array.isArray(data)) {
         const formatted = data.map((r: any) => ({
