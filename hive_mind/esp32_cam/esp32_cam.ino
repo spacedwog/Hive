@@ -11,7 +11,7 @@ bool ledOn = false;
 // --- Sensor de som ---
 #define SOUND_SENSOR_PIN 34
 #define SOUND_THRESHOLD 1000
-#define LED_AUTO_OFF_MS 5000
+unsigned long LED_AUTO_OFF_MS = 5000; // Variável, não #define
 unsigned long lastSoundTime = 0;
 
 // --- Configurações Wi-Fi ---
@@ -56,7 +56,7 @@ void setLED(bool state) {
   if (state) lastSoundTime = millis();
 }
 
-// --- Função para lidar com LED por som ---
+// --- LED por som ---
 void handleSoundLED() {
   int soundLevel = analogRead(SOUND_SENSOR_PIN);
   if (soundLevel > SOUND_THRESHOLD && !ledOn) {
@@ -119,7 +119,7 @@ void handleClientRequest(WiFiClient &client) {
     if (pos > 0) {
       String value = request.substring(pos + 12);
       value.trim();
-      LED_AUTO_OFF_MS = value.toInt();
+      LED_AUTO_OFF_MS = value.toInt(); // Agora funciona corretamente
       Serial.print("⏱️ LED_AUTO_OFF_MS atualizado para: ");
       Serial.println(LED_AUTO_OFF_MS);
     }
