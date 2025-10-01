@@ -201,7 +201,28 @@ export default function TelaPrinc() {
   };
 
   // -------------------------
-  // Dados do firewall e bloqueios automáticos
+  // Avaliação de risco interna
+  // -------------------------
+  const calculateRiskLevel = (firewall: any) => {
+    if (!firewall) return { level: 'Desconhecido', color: '#888', tentativas: 0, regras: 0 };
+
+    const tentativas = firewall.tentativasBloqueadas || 0;
+    const regras = firewall.regrasAplicadas || 0;
+
+    let nivel = 'Baixo';
+    let cor = '#50fa7b';
+    const diff = tentativas - regras;
+
+    if (diff <= 50) { nivel = 'Baixo'; cor = '#50fa7b'; }
+    else if (diff <= 100) { nivel = 'Médio'; cor = '#facc15'; }
+    else if (diff <= 500) { nivel = 'Alto'; cor = '#f97316'; }
+    else { nivel = 'Crítico'; cor = '#f87171'; }
+
+    return { level: nivel, color: cor, tentativas, regras };
+  };
+
+  // -------------------------
+  // Dados do firewall e bloqueios automáticos com rotina de risco
   // -------------------------
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '') return;
@@ -219,7 +240,10 @@ export default function TelaPrinc() {
 
         setFirewallData(data.data);
 
-        if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
+        const risk = calculateRiskLevel(data.data);
+
+        // Bloqueio automático incremental dependendo do nível de risco
+        if (risk.level === 'Alto' || risk.level === 'Crítico') {
           const ipParaBloquear =
             data.data.ip ||
             (potentialIPs.length
@@ -261,16 +285,26 @@ export default function TelaPrinc() {
       </View>
     );
 
+  const risk = calculateRiskLevel(firewallData);
+
   return (
     <>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.card}>
           {firewallData ? (
             <>
-              <Text style={styles.description}>Status: <Text style={{ color: firewallData.status === 'Ativo' ? '#50fa7b' : '#f87171', fontWeight: 'bold' }}>{firewallData.status}</Text></Text>
-              <Text style={styles.description}>Última atualização: <Text style={{ color: '#fff' }}>{firewallData.ultimaAtualizacao ? new Date(firewallData.ultimaAtualizacao).toLocaleString('pt-BR') : '-'}</Text></Text>
-              <Text style={styles.description}>Tentativas bloqueadas: <Text style={{ color: '#f87171', fontWeight: 'bold' }}>{firewallData.tentativasBloqueadas ?? '-'}</Text></Text>
-              <Text style={styles.description}>Regras aplicadas: <Text style={{ color: '#50fa7b' }}>{firewallData.regrasAplicadas ?? '-'}</Text></Text>
+              <Text style={styles.description}>
+                Status: <Text style={{ color: firewallData.status === 'Ativo' ? '#50fa7b' : '#f87171', fontWeight: 'bold' }}>{firewallData.status}</Text>
+              </Text>
+              <Text style={styles.description}>
+                Nível de risco: <Text style={{ color: risk.color, fontWeight: 'bold' }}>{risk.level}</Text>
+              </Text>
+              <Text style={styles.description}>
+                Tentativas bloqueadas: <Text style={{ color: '#f87171', fontWeight: 'bold' }}>{risk.tentativas}</Text>
+              </Text>
+              <Text style={styles.description}>
+                Regras aplicadas: <Text style={{ color: '#50fa7b', fontWeight: 'bold' }}>{risk.regras}</Text>
+              </Text>
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
                 <View style={{ flex: 1, marginRight: 8 }}>
@@ -294,7 +328,6 @@ export default function TelaPrinc() {
                 <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Adicionar Rota</Text>
               </TouchableOpacity>
 
-              {/* Regras e Rotas com paginação */}
               <PaginatedList
                 items={rules}
                 itemsPerPage={rulesPerPage}
@@ -302,7 +335,6 @@ export default function TelaPrinc() {
                 title="Regras e Rotas Criadas"
               />
 
-              {/* JSON Avançado */}
               <View style={{ marginTop: 16, padding: 12, backgroundColor: '#1e293b', borderRadius: 12, maxHeight: 400 }}>
                 <Text style={[styles.description,{color:'#facc15',fontWeight:'bold',marginBottom:4}]}>JSON Obtido</Text>
                 <ScrollView>
@@ -315,7 +347,6 @@ export default function TelaPrinc() {
       </ScrollView>
       <BottomNav />
 
-      {/* Modal para adicionar rota */}
       <Modal
         visible={modalVisible}
         animationType="slide"
