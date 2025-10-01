@@ -15,6 +15,7 @@ type Rule = { destination: string; gateway: string };
 export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [firewallData, setFirewallData] = useState<any | null>(null);
+  const [rawJson, setRawJson] = useState<any | null>(null);
   const [firewallPage, setFirewallPage] = useState(1);
   const [routeSaved, setRouteSaved] = useState(false);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -56,9 +57,7 @@ export default function TelaPrinc() {
       const results = await Promise.all(domains.map(resolveDomainA));
       const aggregated: string[] = [];
       for (const arr of results) {
-        for (const ip of arr) if (!aggregated.includes(ip)) {
-                                aggregated.push(ip);
-                              }
+        for (const ip of arr) if (!aggregated.includes(ip)) aggregated.push(ip);
       }
       if (aggregated.length === 0) {
         aggregated.push('142.250.190.14','172.217.169.78','140.82.121.4','104.16.133.229');
@@ -71,21 +70,28 @@ export default function TelaPrinc() {
   }, [accessCode, potentialIPs.length]);
 
   // -------------------------
-  // Buscar rotas reais do servidor (PowerShell -> API /routes)
+  // Buscar rotas diretamente do VERCEL
   // -------------------------
   const fetchRoutes = async () => {
     try {
       const resp = await fetch(`${VERCEL_URL}/api/routes`);
       const data = await resp.json();
-      if (Array.isArray(data)) {
-        const formatted = data.map((r: any) => ({
+
+      // Salva JSON cru completo
+      setRawJson((prev: any) => ({ ...prev, routes: data }));
+
+      if (data.success && Array.isArray(data.routes)) {
+        const formatted = data.routes.map((r: any) => ({
           destination: r.DestinationPrefix,
-          gateway: r.NextHop
+          gateway: r.NextHop,
         }));
         setRules(formatted);
+      } else {
+        setRules([]);
       }
-    } catch {
-      // se falhar, não altera rules
+    } catch (err: any) {
+      setRawJson((prev: any) => ({ ...prev, routesError: err?.message || 'Falha ao buscar rotas' }));
+      setRules([]);
     }
   };
 
@@ -93,15 +99,21 @@ export default function TelaPrinc() {
   // Dados do firewall e bloqueios automáticos
   // -------------------------
   useEffect(() => {
-    if (!accessCode || accessCode.trim() === '') {
-      return;
-    }
+    if (!accessCode || accessCode.trim() === '') return;
 
     const fetchFirewallData = async () => {
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
         const data = await response.json();
-        if (!data.success) { setFirewallData(null); return; }
+
+        // Sempre salvar o JSON cru (mesmo que falhe)
+        setRawJson((prev: any) => ({ ...prev, firewall: data }));
+
+        if (!data.success) {
+          setFirewallData(null);
+          return;
+        }
+
         setFirewallData(data.data);
 
         // Bloquear IP automaticamente
@@ -118,7 +130,6 @@ export default function TelaPrinc() {
             body:JSON.stringify({ ip: ipParaBloquear })
           });
 
-          // Atualizar rotas reais do PowerShell
           await fetchRoutes();
         }
 
@@ -128,7 +139,8 @@ export default function TelaPrinc() {
           setRouteSaved(true);
         }
 
-      } catch {
+      } catch (err: any) {
+        setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
         setFirewallData(null);
       }
     };
@@ -210,7 +222,7 @@ export default function TelaPrinc() {
                 </View>
               )}
 
-              {/* Exibe rotas e regras criadas dinamicamente via PowerShell */}
+              {/* Exibe rotas e regras criadas */}
               <View style={{marginTop:16}}>
                 <Text style={[styles.description,{color:'#34d399',fontWeight:'bold'}]}>Regras e Rotas Criadas</Text>
                 {rules.length > 0 ? (
@@ -222,6 +234,14 @@ export default function TelaPrinc() {
                 ) : (
                   <Text style={styles.description}>Nenhuma rota aplicada ainda.</Text>
                 )}
+              </View>
+
+              {/* Exibe JSON cru */}
+              <View style={{marginTop:16}}>
+                <Text style={[styles.description,{color:'#facc15',fontWeight:'bold'}]}>JSON Obtido</Text>
+                <Text style={[styles.description,{fontSize:12,color:'#94a3b8'}]}>
+                  {rawJson ? JSON.stringify(rawJson, null, 2) : 'Nenhum dado recebido ainda.'}
+                </Text>
               </View>
             </>
           ) : (
