@@ -72,9 +72,31 @@ export default function TelaPrinc() {
   }, [accessCode, potentialIPs.length]);
 
   // -------------------------
-  // Buscar rotas diretamente do VERCEL
+  // Salvar rota no firewall do VERCEL
   // -------------------------
-  const fetchRoutes = async () => {
+  const saveRoute = async (destination: string, gateway: string) => {
+    try {
+      const resp = await fetch(`${VERCEL_URL}/api/firewall?action=route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destination, gateway }),
+      });
+      const data = await resp.json();
+      if (!data.success) {
+        console.warn("Falha ao salvar rota:", data.error);
+      } else {
+        console.log(`Rota ${destination} ➝ ${gateway} salva com sucesso.`);
+      }
+    } catch (err: any) {
+      console.error("Erro ao salvar rota:", err.message);
+    }
+  };
+
+  // -------------------------
+  // Buscar e salvar rotas automaticamente
+  // -------------------------
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fetchAndSaveRoutes = async () => {
     try {
       const resp = await fetch(`${VERCEL_URL}/api/routes`);
       const data = await resp.json();
@@ -83,16 +105,22 @@ export default function TelaPrinc() {
       setRawJson((prev: any) => ({ ...prev, routes: data }));
 
       if (data.success && Array.isArray(data.routes)) {
-        const formatted = data.routes.map((r: any) => ({
-          destination: r.DestinationPrefix,
-          gateway: r.NextHop,
+        const formatted: Rule[] = data.routes.map((r: any) => ({
+          destination: r.destination || r.DestinationPrefix,
+          gateway: r.gateway || r.NextHop,
         }));
+
         setRules(formatted);
+
+        // Salva cada rota na API firewall se ainda não estiver salva
+        for (const r of formatted) {
+          await saveRoute(r.destination, r.gateway);
+        }
       } else {
         setRules([]);
       }
     } catch (err: any) {
-      setRawJson((prev: any) => ({ ...prev, routesError: err?.message || 'Falha ao buscar rotas' }));
+      setRawJson((prev: any) => ({ ...prev, routesError: err?.message || "Falha ao buscar rotas" }));
       setRules([]);
     }
   };
@@ -134,12 +162,12 @@ export default function TelaPrinc() {
             body:JSON.stringify({ ip: ipParaBloquear })
           });
 
-          await fetchRoutes();
+          await fetchAndSaveRoutes();
         }
 
         // Salvar rota automaticamente quando tentativas = regras
         if (data.data.tentativasBloqueadas === data.data.regrasAplicadas && !routeSaved) {
-          await fetchRoutes();
+          await fetchAndSaveRoutes();
           setRouteSaved(true);
         }
 
@@ -152,7 +180,7 @@ export default function TelaPrinc() {
     fetchFirewallData();
     const interval = setInterval(fetchFirewallData, 5000);
     return () => clearInterval(interval);
-  }, [accessCode, routeSaved, potentialIPs]);
+  }, [accessCode, routeSaved, potentialIPs, fetchAndSaveRoutes]);
 
   if (!accessCode || accessCode.trim() === '')
     return (
