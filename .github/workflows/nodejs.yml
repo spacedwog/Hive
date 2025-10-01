@@ -14,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18, 20]
+        node-version: [20.21.0] # Node >=20.19.4, compatível com metro e RN
 
     steps:
       - name: Checkout código
@@ -59,7 +59,7 @@ jobs:
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20.21.0
 
       - name: Verificar vulnerabilidades
         run: npm audit --audit-level=moderate
