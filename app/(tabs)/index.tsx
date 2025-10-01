@@ -236,6 +236,16 @@ export default function TelaPrinc() {
                 <Text style={{ color: "#50fa7b" }}>{firewallData.regrasAplicadas ?? "-"}</Text>
               </Text>
 
+              {/* ------------------------- */}
+              {/* Botão Modal Regras (acima dos IPs) */}
+              {/* ------------------------- */}
+              <TouchableOpacity
+                onPress={() => setModalVisible(true)}
+                style={[styles.loginBtn, { marginTop: 12, alignSelf: 'flex-start' }]}
+              >
+                <Text style={{ color: "#0f172a", fontWeight: "bold" }}>Ver Regras / Rotas</Text>
+              </TouchableOpacity>
+
               {paginatedIPs.length > 0 && (
                 <View style={{ marginTop: 10 }}>
                   <Text style={[styles.description, { color: "#facc15", fontWeight: "bold" }]}>
@@ -283,16 +293,6 @@ export default function TelaPrinc() {
                   ))}
                 </View>
               )}
-
-              {/* ------------------------- */}
-              {/* Botão Modal Regras */}
-              {/* ------------------------- */}
-              <TouchableOpacity
-                onPress={() => setModalVisible(true)}
-                style={[styles.loginBtn, { marginTop: 16 }]}
-              >
-                <Text style={{ color: "#0f172a", fontWeight: "bold" }}>Ver Regras / Rotas</Text>
-              </TouchableOpacity>
             </>
           ) : (
             <Text style={styles.description}>Carregando dados do firewall...</Text>
