@@ -1,11 +1,9 @@
-export type LedStatus = "on" | "off";
-
-export type Esp32Status = {
+export interface Esp32Status {
   sensor_db: number;
-  led_builtin: LedStatus;
-  led_opposite: LedStatus;
+  led_builtin: "on" | "off";
+  led_opposite: "on" | "off";
   ip: string;
-};
+}
 
 export default class Esp32Service {
   static SOFTAP_IP = "http://192.168.4.1";
@@ -45,31 +43,37 @@ export default class Esp32Service {
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      return await res.json(); // sempre JSON
+      return await res.json();
     } finally {
       clearTimeout(timeout);
     }
   }
 
   private async tryReconnectOnce(path: string) {
-    this.switchMode();
     return this.request(path);
   }
 
-  private startReconnectLoop(path: string, intervalMs = 5000) {
-    if (this.reconnectInterval) return; // já rodando
+  private startReconnectLoop(path: string, intervalMs = 5000, maxRetries = 5) {
+    if (this.reconnectInterval) {
+      return;
+    }
 
-    console.warn("🔁 Iniciando loop de reconexão automática...");
+    let attempts = 0;
+    console.warn(`🔁 Iniciando loop de reconexão automática em ${this.status.ip}...`);
 
     this.reconnectInterval = setInterval(async () => {
+      attempts++;
       try {
-        this.switchMode();
         const json = await this.request(path);
-        console.log(`✅ Reconectado via ${this.mode}`);
+        console.log(`✅ Reconectado via ${this.mode} (${this.status.ip})`);
         this.status = { ...this.status, ...json };
         this.stopReconnectLoop();
       } catch {
-        console.warn(`⏳ Tentando reconexão via ${this.mode}...`);
+        console.warn(`⏳ Tentativa ${attempts}/${maxRetries} falhou em ${this.status.ip}...`);
+        if (attempts >= maxRetries) {
+          console.error(`❌ Máximo de tentativas atingido em ${this.status.ip}, mantendo último estado.`);
+          this.stopReconnectLoop();
+        }
       }
     }, intervalMs);
   }
@@ -88,18 +92,15 @@ export default class Esp32Service {
       const json = await this.request(endpoint);
       this.status = { ...this.status, ...json };
     } catch (err) {
-      console.error(
-        `⚠️ Erro ao alternar LED em ${this.mode} (${this.status.ip}):`,
-        err
-      );
+      console.error(`⚠️ Erro ao alternar LED em ${this.mode} (${this.status.ip}):`, err);
 
       try {
         const json = await this.tryReconnectOnce(endpoint);
         this.status = { ...this.status, ...json };
       } catch {
-        this.startReconnectLoop(endpoint);
+        this.startReconnectLoop(endpoint, 5000, 5);
 
-        // fallback manual até reconectar
+        // fallback visual imediato
         this.status.led_builtin =
           this.status.led_builtin === "on" ? "off" : "on";
         this.status.led_opposite =
@@ -111,31 +112,23 @@ export default class Esp32Service {
   async fetchStatus(): Promise<Esp32Status> {
     try {
       const json = await this.request("status");
-
       const sensor_db =
         json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1));
 
       this.status = { ...this.status, ...json, sensor_db };
-
       this.stopReconnectLoop();
       return this.status;
     } catch (err) {
-      console.error(
-        `⚠️ Erro ao buscar status do ESP32 em ${this.mode} (${this.status.ip}):`,
-        err
-      );
+      console.error(`⚠️ Erro ao buscar status do ESP32 em ${this.mode} (${this.status.ip}):`, err);
 
       try {
         const json = await this.tryReconnectOnce("status");
-
         const sensor_db =
           json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1));
-
         this.status = { ...this.status, ...json, sensor_db };
-
         return this.status;
       } catch {
-        this.startReconnectLoop("status");
+        this.startReconnectLoop("status", 5000, 5);
         console.error("❌ Reconexão falhou, mantendo último estado.");
         return this.status;
       }
