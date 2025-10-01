@@ -122,6 +122,11 @@ export default function StreamScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
 
+      {/* Campo de status da conexão */}
+      <Text style={styles.connectionText}>
+        {status.ip ? "✅ Conectado ao ESP32" : "❌ Desconectado"}
+      </Text>
+
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
         <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
         <View style={[styles.dataBox, { alignSelf: "center" }]}>
@@ -207,6 +212,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
     marginBottom: 15,
+    textAlign: "center",
+  },
+  connectionText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#0af",
+    marginBottom: 10,
     textAlign: "center",
   },
   text: { fontSize: 16, color: "#fff", marginVertical: 5, textAlign: "center" },
