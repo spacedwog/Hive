@@ -1,6 +1,6 @@
 // eslint-disable-next-line import/no-unresolved
 import { VERCEL_URL } from '@env';
-import React, { useEffect, useState } from 'react';
+import React, { JSX, useEffect, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -57,18 +57,16 @@ export default function TelaPrinc() {
       const results = await Promise.all(domains.map(resolveDomainA));
       const aggregated: string[] = [];
       for (const arr of results) {
-        for (const ip of arr) if (!aggregated.includes(ip)) {
-                                aggregated.push(ip);
-                              }
+        // sourcery skip: use-braces
+        for (const ip of arr) if (!aggregated.includes(ip)) aggregated.push(ip);
       }
       if (aggregated.length === 0) {
         aggregated.push('142.250.190.14','172.217.169.78','140.82.121.4','104.16.133.229');
       }
       setPotentialIPs(aggregated);
     };
-    if (accessCode && potentialIPs.length === 0) {
-      loadPotentialIPs();
-    }
+    // sourcery skip: use-braces
+    if (accessCode && potentialIPs.length === 0) loadPotentialIPs();
   }, [accessCode, potentialIPs.length]);
 
   // -------------------------
@@ -82,11 +80,9 @@ export default function TelaPrinc() {
         body: JSON.stringify({ destination, gateway }),
       });
       const data = await resp.json();
-      if (!data.success) {
-        console.warn("Falha ao salvar rota:", data.error);
-      } else {
-        console.log(`Rota ${destination} ➝ ${gateway} salva com sucesso.`);
-      }
+      // sourcery skip: use-braces
+      if (!data.success) console.warn("Falha ao salvar rota:", data.error);
+      else console.log(`Rota ${destination} ➝ ${gateway} salva com sucesso.`);
     } catch (err: any) {
       console.error("Erro ao salvar rota:", err.message);
     }
@@ -129,9 +125,8 @@ export default function TelaPrinc() {
   // Dados do firewall e bloqueios automáticos
   // -------------------------
   useEffect(() => {
-    if (!accessCode || accessCode.trim() === '') {
-      return;
-    }
+    // sourcery skip: use-braces
+    if (!accessCode || accessCode.trim() === '') return;
 
     const fetchFirewallData = async () => {
       try {
@@ -181,6 +176,47 @@ export default function TelaPrinc() {
     const interval = setInterval(fetchFirewallData, 5000);
     return () => clearInterval(interval);
   }, [accessCode, routeSaved, potentialIPs, fetchAndSaveRoutes]);
+
+  // -------------------------
+  // Render JSON cru em Text separados
+  // -------------------------
+  const renderJson = (obj: any, level = 0): JSX.Element => {
+    const margin = level * 12;
+
+    if (obj === null || obj === undefined) {
+      return <Text style={{ marginLeft: margin, color: '#94a3b8' }}>null</Text>;
+    }
+
+    if (typeof obj !== 'object') {
+      return <Text style={{ marginLeft: margin, color: '#94a3b8' }}>{obj.toString()}</Text>;
+    }
+
+    if (Array.isArray(obj)) {
+      return (
+        <View style={{ marginLeft: margin }}>
+          {obj.map((item, idx) => (
+            <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              <Text style={{ color: '#38bdf8', marginRight: 4 }}>[{idx}] :</Text>
+              {renderJson(item, level + 1)}
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+    return (
+      <View style={{ marginLeft: margin }}>
+        {Object.entries(obj).map(([key, value], idx) => (
+          <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 2 }}>
+            <Text style={{ color: '#facc15', marginRight: 4 }}>{key} :</Text>
+            {typeof value === 'object' ? renderJson(value, level + 1) : (
+              <Text style={{ color: '#94a3b8' }}>{value?.toString()}</Text>
+            )}
+          </View>
+        ))}
+      </View>
+    );
+  };
 
   if (!accessCode || accessCode.trim() === '')
     return (
@@ -268,12 +304,10 @@ export default function TelaPrinc() {
                 )}
               </View>
 
-              {/* Exibe JSON cru */}
+              {/* Exibe JSON cru com key/value separados */}
               <View style={{marginTop:16}}>
                 <Text style={[styles.description,{color:'#facc15',fontWeight:'bold'}]}>JSON Obtido</Text>
-                <Text style={[styles.description,{fontSize:12,color:'#94a3b8'}]}>
-                  {rawJson ? JSON.stringify(rawJson, null, 2) : 'Nenhum dado recebido ainda.'}
-                </Text>
+                {rawJson ? renderJson(rawJson) : <Text style={styles.description}>Nenhum dado recebido ainda.</Text>}
               </View>
             </>
           ) : (
