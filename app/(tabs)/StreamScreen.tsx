@@ -77,6 +77,7 @@ export default function StreamScreen() {
   const fetchStatusFromVercel = useCallback(async () => {
     try {
       const response = await fetch(`${VERCEL_URL}/status`, { method: "GET" });
+      alert(response.url);
       const text = await response.text(); // lê como texto primeiro
       let result;
       try {
