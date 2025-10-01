@@ -29,5 +29,5 @@
     "**/*.ts",
     "**/*.tsx",
     "api/lib/sensor/SensorApiHandler.js"
-  ]
+, "api/firewall.js"  ]
 }
