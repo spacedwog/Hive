@@ -3,6 +3,8 @@ import { VERCEL_URL } from '@env';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View as AnimatedView,
+  FlatList,
+  Modal,
   Animated as RNAnimated,
   ScrollView,
   StyleSheet,
@@ -13,12 +15,19 @@ import {
 import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import BottomNav from '../../hive_body/BottomNav.tsx';
 
+interface Rule {
+  destination: string;
+  gateway: string;
+}
+
 export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [firewallData, setFirewallData] = useState<any | null>(null);
   const [firewallPage, setFirewallPage] = useState(1);
   const [routeSaved, setRouteSaved] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
   const ipsPerPage = 10;
 
   const previousAttemptsRef = useRef<number>(0);
@@ -86,6 +95,9 @@ export default function TelaPrinc() {
                 body: JSON.stringify({ destination, gateway }),
               });
 
+              // Salva regra localmente
+              setRules(prev => [...prev, { destination, gateway }]);
+
               setAlertMsg(prev => [
                 `IP bloqueado automaticamente: ${ipParaBloquear}`,
                 `Nova regra criada: ${destination} -> ${gateway}`,
@@ -120,6 +132,8 @@ export default function TelaPrinc() {
               const result = await routeResponse.json();
               console.log("Rota salva automaticamente:", result);
               setRouteSaved(true);
+
+              setRules(prev => [...prev, { destination, gateway }]);
 
               setAlertMsg(prev => [
                 `Rota automática salva: ${destination} -> ${gateway}`,
@@ -187,6 +201,8 @@ export default function TelaPrinc() {
   return (
     <>
       <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>📊 Data Science Dashboard</Text>
+
         <AnimatedView style={[styles.card, animatedCardStyle]}>
           {firewallData ? (
             <>
@@ -267,6 +283,16 @@ export default function TelaPrinc() {
                   ))}
                 </View>
               )}
+
+              {/* ------------------------- */}
+              {/* Botão Modal Regras */}
+              {/* ------------------------- */}
+              <TouchableOpacity
+                onPress={() => setModalVisible(true)}
+                style={[styles.loginBtn, { marginTop: 16 }]}
+              >
+                <Text style={{ color: "#0f172a", fontWeight: "bold" }}>Ver Regras / Rotas</Text>
+              </TouchableOpacity>
             </>
           ) : (
             <Text style={styles.description}>Carregando dados do firewall...</Text>
@@ -316,6 +342,41 @@ export default function TelaPrinc() {
             <Text style={{ fontSize: 48 }}>🐝 (Aplicada)</Text>
           </RNAnimated.View>
         )}
+
+        {/* ------------------------- */}
+        {/* Modal Regras e Rotas */}
+        {/* ------------------------- */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Regras e Rotas</Text>
+              {rules.length > 0 ? (
+                <FlatList
+                  data={rules}
+                  keyExtractor={(item, index) => index.toString()}
+                  renderItem={({ item }) => (
+                    <Text style={styles.description}>
+                      {item.destination} → {item.gateway}
+                    </Text>
+                  )}
+                />
+              ) : (
+                <Text style={styles.description}>Nenhuma regra criada ainda.</Text>
+              )}
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={[styles.loginBtn, { marginTop: 16 }]}
+              >
+                <Text style={{ color: "#0f172a", fontWeight: "bold" }}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
       <BottomNav />
     </>
@@ -324,6 +385,7 @@ export default function TelaPrinc() {
 
 const styles = StyleSheet.create({
   container: { padding: 24, backgroundColor: "#0f172a", alignItems: "center" },
+  title: { fontSize: 28, color: "#facc15", fontWeight: "bold", marginBottom: 20 },
   card: {
     borderRadius: 16,
     padding: 20,
@@ -337,4 +399,7 @@ const styles = StyleSheet.create({
   description: { fontSize: 16, color: "#e2e8f0", lineHeight: 24 },
   loginContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0f172a" },
   loginBtn: { backgroundColor: "#50fa7b", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 24, marginTop: 12 },
+  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
+  modalContent: { backgroundColor: "#1a1a2e", padding: 24, borderRadius: 16, width: "90%" },
+  modalTitle: { fontSize: 20, color: "#facc15", fontWeight: "bold", marginBottom: 12 },
 });
