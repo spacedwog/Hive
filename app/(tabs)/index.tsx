@@ -2,9 +2,11 @@
 import { VERCEL_URL } from '@env';
 import React, { JSX, useEffect, useState } from 'react';
 import {
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -16,10 +18,14 @@ export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [firewallData, setFirewallData] = useState<any | null>(null);
   const [rawJson, setRawJson] = useState<any | null>(null);
-  const [firewallPage, setFirewallPage] = useState(1);
   const [routeSaved, setRouteSaved] = useState(false);
   const [rules, setRules] = useState<Rule[]>([]);
   const [potentialIPs, setPotentialIPs] = useState<string[]>([]);
+  const [firewallPage, setFirewallPage] = useState(1);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newDestination, setNewDestination] = useState('');
+  const [newGateway, setNewGateway] = useState('');
 
   const ipsPerPage = 10;
 
@@ -57,16 +63,18 @@ export default function TelaPrinc() {
       const results = await Promise.all(domains.map(resolveDomainA));
       const aggregated: string[] = [];
       for (const arr of results) {
-        // sourcery skip: use-braces
-        for (const ip of arr) if (!aggregated.includes(ip)) aggregated.push(ip);
+        for (const ip of arr) if (!aggregated.includes(ip)) {
+                                aggregated.push(ip);
+                              }
       }
       if (aggregated.length === 0) {
         aggregated.push('142.250.190.14','172.217.169.78','140.82.121.4','104.16.133.229');
       }
       setPotentialIPs(aggregated);
     };
-    // sourcery skip: use-braces
-    if (accessCode && potentialIPs.length === 0) loadPotentialIPs();
+    if (accessCode && potentialIPs.length === 0) {
+      loadPotentialIPs();
+    }
   }, [accessCode, potentialIPs.length]);
 
   // -------------------------
@@ -74,15 +82,18 @@ export default function TelaPrinc() {
   // -------------------------
   const saveRoute = async (destination: string, gateway: string) => {
     try {
-      const resp = await fetch(`${VERCEL_URL}/api/firewall?action=route`, {
+      const resp = await fetch(`${VERCEL_URL}/api/routes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ destination, gateway }),
       });
       const data = await resp.json();
-      // sourcery skip: use-braces
-      if (!data.success) console.warn("Falha ao salvar rota:", data.error);
-      else console.log(`Rota ${destination} ➝ ${gateway} salva com sucesso.`);
+      if (!data.success) {
+        console.warn("Falha ao salvar rota:", data.error);
+      } else {
+              console.log(`Rota ${destination} ➝ ${gateway} salva com sucesso.`);
+              setRules(prev => [...prev, { destination, gateway }]);
+            }
     } catch (err: any) {
       console.error("Erro ao salvar rota:", err.message);
     }
@@ -96,8 +107,6 @@ export default function TelaPrinc() {
     try {
       const resp = await fetch(`${VERCEL_URL}/api/routes`);
       const data = await resp.json();
-
-      // Salva JSON cru completo
       setRawJson((prev: any) => ({ ...prev, routes: data }));
 
       if (data.success && Array.isArray(data.routes)) {
@@ -105,10 +114,9 @@ export default function TelaPrinc() {
           destination: r.destination || r.DestinationPrefix,
           gateway: r.gateway || r.NextHop,
         }));
-
+      
         setRules(formatted);
-
-        // Salva cada rota na API firewall se ainda não estiver salva
+      
         for (const r of formatted) {
           await saveRoute(r.destination, r.gateway);
         }
@@ -125,15 +133,14 @@ export default function TelaPrinc() {
   // Dados do firewall e bloqueios automáticos
   // -------------------------
   useEffect(() => {
-    // sourcery skip: use-braces
-    if (!accessCode || accessCode.trim() === '') return;
+    if (!accessCode || accessCode.trim() === '') {
+      return;
+    }
 
     const fetchFirewallData = async () => {
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
         const data = await response.json();
-
-        // Sempre salvar o JSON cru (mesmo que falhe)
         setRawJson((prev: any) => ({ ...prev, firewall: data }));
 
         if (!data.success) {
@@ -143,7 +150,6 @@ export default function TelaPrinc() {
 
         setFirewallData(data.data);
 
-        // Bloquear IP automaticamente
         if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
           const ipParaBloquear =
             data.data.ip ||
@@ -160,7 +166,6 @@ export default function TelaPrinc() {
           await fetchAndSaveRoutes();
         }
 
-        // Salvar rota automaticamente quando tentativas = regras
         if (data.data.tentativasBloqueadas === data.data.regrasAplicadas && !routeSaved) {
           await fetchAndSaveRoutes();
           setRouteSaved(true);
@@ -182,36 +187,24 @@ export default function TelaPrinc() {
   // -------------------------
   const renderJson = (obj: any, level = 0): JSX.Element => {
     const margin = level * 12;
-
-    if (obj === null || obj === undefined) {
-      return <Text style={{ marginLeft: margin, color: '#94a3b8' }}>null</Text>;
-    }
-
-    if (typeof obj !== 'object') {
-      return <Text style={{ marginLeft: margin, color: '#94a3b8' }}>{obj.toString()}</Text>;
-    }
-
-    if (Array.isArray(obj)) {
-      return (
-        <View style={{ marginLeft: margin }}>
-          {obj.map((item, idx) => (
-            <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              <Text style={{ color: '#38bdf8', marginRight: 4 }}>[{idx}] :</Text>
-              {renderJson(item, level + 1)}
-            </View>
-          ))}
-        </View>
-      );
-    }
-
+    if (obj === null || obj === undefined) return <Text style={{ marginLeft: margin, color: '#94a3b8' }}>null</Text>;
+    if (typeof obj !== 'object') return <Text style={{ marginLeft: margin, color: '#94a3b8' }}>{obj.toString()}</Text>;
+    if (Array.isArray(obj)) return (
+      <View style={{ marginLeft: margin }}>
+        {obj.map((item, idx) => (
+          <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            <Text style={{ color: '#38bdf8', marginRight: 4 }}>[{idx}] :</Text>
+            {renderJson(item, level + 1)}
+          </View>
+        ))}
+      </View>
+    );
     return (
       <View style={{ marginLeft: margin }}>
         {Object.entries(obj).map(([key, value], idx) => (
           <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 2 }}>
             <Text style={{ color: '#facc15', marginRight: 4 }}>{key} :</Text>
-            {typeof value === 'object' ? renderJson(value, level + 1) : (
-              <Text style={{ color: '#94a3b8' }}>{value?.toString()}</Text>
-            )}
+            {typeof value === 'object' ? renderJson(value, level + 1) : <Text style={{ color: '#94a3b8' }}>{value?.toString()}</Text>}
           </View>
         ))}
       </View>
@@ -237,44 +230,19 @@ export default function TelaPrinc() {
         <View style={styles.card}>
           {firewallData ? (
             <>
-              <Text style={styles.description}>
-                Status:{" "}
-                <Text style={{ color: firewallData.status === 'Ativo' ? '#50fa7b' : '#f87171', fontWeight: 'bold' }}>
-                  {firewallData.status}
-                </Text>
-              </Text>
-              <Text style={styles.description}>
-                Última atualização:{" "}
-                <Text style={{ color: '#fff' }}>
-                  {firewallData.ultimaAtualizacao ? new Date(firewallData.ultimaAtualizacao).toLocaleString('pt-BR') : '-'}
-                </Text>
-              </Text>
-              <Text style={styles.description}>
-                Tentativas bloqueadas:{" "}
-                <Text style={{ color: '#f87171', fontWeight: 'bold' }}>
-                  {firewallData.tentativasBloqueadas ?? '-'}
-                </Text>
-              </Text>
-              <Text style={styles.description}>
-                Regras aplicadas:{" "}
-                <Text style={{ color: '#50fa7b' }}>
-                  {firewallData.regrasAplicadas ?? '-'}
-                </Text>
-              </Text>
+              <Text style={styles.description}>Status: <Text style={{ color: firewallData.status === 'Ativo' ? '#50fa7b' : '#f87171', fontWeight: 'bold' }}>{firewallData.status}</Text></Text>
+              <Text style={styles.description}>Última atualização: <Text style={{ color: '#fff' }}>{firewallData.ultimaAtualizacao ? new Date(firewallData.ultimaAtualizacao).toLocaleString('pt-BR') : '-'}</Text></Text>
+              <Text style={styles.description}>Tentativas bloqueadas: <Text style={{ color: '#f87171', fontWeight: 'bold' }}>{firewallData.tentativasBloqueadas ?? '-'}</Text></Text>
+              <Text style={styles.description}>Regras aplicadas: <Text style={{ color: '#50fa7b' }}>{firewallData.regrasAplicadas ?? '-'}</Text></Text>
 
-              {/* IPs bloqueados + Potential IPs lado a lado */}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
                 <View style={{ flex: 1, marginRight: 8 }}>
                   <Text style={[styles.description,{color:'#facc15',fontWeight:'bold'}]}>IPs Bloqueados</Text>
-                  {paginatedIPs.map((ip: string, idx: number) => (
-                    <Text key={idx} style={styles.description}>{ip}</Text>
-                  ))}
+                  {paginatedIPs.map((ip: string, idx: number) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
                 </View>
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={[styles.description,{color:'#38bdf8',fontWeight:'bold'}]}>Potential IPs</Text>
-                  {potentialIPs.map((ip, idx) => (
-                    <Text key={idx} style={styles.description}>{ip}</Text>
-                  ))}
+                  {potentialIPs.map((ip, idx) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
                 </View>
               </View>
 
@@ -290,32 +258,78 @@ export default function TelaPrinc() {
                 </View>
               )}
 
+              {/* Botão para abrir modal */}
+              <TouchableOpacity
+                style={{ backgroundColor: '#38bdf8', padding: 12, borderRadius: 8, marginTop: 12 }}
+                onPress={() => setModalVisible(true)}
+              >
+                <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Adicionar Rota</Text>
+              </TouchableOpacity>
+
               {/* Exibe rotas e regras criadas */}
               <View style={{marginTop:16}}>
                 <Text style={[styles.description,{color:'#34d399',fontWeight:'bold'}]}>Regras e Rotas Criadas</Text>
                 {rules.length > 0 ? (
-                  rules.map((r, idx) => (
-                    <Text key={idx} style={styles.description}>
-                      {r.destination} ➝ {r.gateway}
-                    </Text>
-                  ))
+                  rules.map((r, idx) => (<Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>))
                 ) : (
                   <Text style={styles.description}>Nenhuma rota aplicada ainda.</Text>
                 )}
               </View>
 
-              {/* Exibe JSON cru com key/value separados */}
+              {/* Exibe JSON cru */}
               <View style={{marginTop:16}}>
                 <Text style={[styles.description,{color:'#facc15',fontWeight:'bold'}]}>JSON Obtido</Text>
                 {rawJson ? renderJson(rawJson) : <Text style={styles.description}>Nenhum dado recebido ainda.</Text>}
               </View>
             </>
-          ) : (
-            <Text style={styles.description}>Carregando dados do firewall...</Text>
-          )}
+          ) : <Text style={styles.description}>Carregando dados do firewall...</Text>}
         </View>
       </ScrollView>
       <BottomNav />
+
+      {/* Modal para adicionar rota */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Nova Rota</Text>
+            <TextInput
+              placeholder="Destino"
+              value={newDestination}
+              onChangeText={setNewDestination}
+              style={styles.input}
+              placeholderTextColor="#94a3b8"
+            />
+            <TextInput
+              placeholder="Gateway"
+              value={newGateway}
+              onChangeText={setNewGateway}
+              style={styles.input}
+              placeholderTextColor="#94a3b8"
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#50fa7b' }]} onPress={() => {
+                if (!newDestination || !newGateway) {
+                  return;
+                }
+                saveRoute(newDestination, newGateway);
+                setNewDestination('');
+                setNewGateway('');
+                setModalVisible(false);
+              }}>
+                <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>Salvar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#f87171' }]} onPress={() => setModalVisible(false)}>
+                <Text style={{ fontWeight: 'bold', color: '#fff' }}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -326,4 +340,8 @@ const styles = StyleSheet.create({
   description:{ fontSize:16,color:'#e2e8f0',lineHeight:24 },
   loginContainer:{ flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#0f172a' },
   loginBtn:{ backgroundColor:'#50fa7b',borderRadius:8,paddingVertical:8,paddingHorizontal:24,marginTop:12 },
+  modalOverlay:{ flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(0,0,0,0.5)' },
+  modalContent:{ backgroundColor:'#0f172a', padding:24, borderRadius:16, width:'80%' },
+  input:{ borderWidth:1, borderColor:'#94a3b8', borderRadius:8, padding:8, color:'#fff', marginTop:8 },
+  modalBtn:{ flex:1, padding:12, borderRadius:8, alignItems:'center', marginHorizontal:4 },
 });
