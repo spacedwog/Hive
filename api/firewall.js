@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
+// Classe para padronizar respostas
 class ApiResponse {
   static success(message, data = {}) {
     return { success: true, message, data, timestamp: Date.now() };
@@ -17,6 +18,7 @@ class ApiResponse {
   }
 }
 
+// Classe principal do firewall
 class FirewallInfo {
   static blockedIPs = [];
   static attemptsBlocked = 0;
@@ -28,18 +30,14 @@ class FirewallInfo {
   static activeConnections = [];
   static vpnStatus = false;
 
-  // -------------------------
-  // Logs e IPs bloqueados
-  // -------------------------
+  // Simula tentativas bloqueadas e atualiza logs
   static simulateFailedAttempts() {
     const failed = Math.floor(Math.random() * 4);
     this.attemptsBlocked += failed;
-    if (failed > 0) {
-      for (let i = 0; i < failed; i++) {
-        const ip = `192.168.1.${Math.floor(Math.random() * 254 + 1)}`;
-        if (!this.blockedIPs.includes(ip)) {
-          this.blockedIPs.push(ip);
-        }
+    for (let i = 0; i < failed; i++) {
+      const ip = `192.168.1.${Math.floor(Math.random() * 254 + 1)}`;
+      if (!this.blockedIPs.includes(ip)) {
+        this.blockedIPs.push(ip);
       }
     }
     this.lastUpdate = new Date().toISOString();
@@ -69,9 +67,6 @@ class FirewallInfo {
     }
   }
 
-  // -------------------------
-  // Bloqueio e desbloqueio
-  // -------------------------
   static block(ip) {
     if (!ip) {
       return ApiResponse.error("INVALID_IP", "IP é obrigatório.");
@@ -99,9 +94,6 @@ class FirewallInfo {
     return ApiResponse.error("NOT_FOUND", "IP não encontrado na lista de bloqueio.");
   }
 
-  // -------------------------
-  // Informações gerais
-  // -------------------------
   static getInfo() {
     this.loadBlockedFromLogs();
     this.simulateFailedAttempts();
@@ -128,9 +120,6 @@ class FirewallInfo {
     return ApiResponse.success("IPs bloqueados", { blocked: this.blockedIPs });
   }
 
-  // -------------------------
-  // Routing
-  // -------------------------
   static addRoute(destination, gateway) {
     if (!destination || !gateway) {
       return ApiResponse.error("INVALID_ROUTE", "Destino e Gateway são obrigatórios.");
@@ -139,9 +128,6 @@ class FirewallInfo {
     return ApiResponse.success("Rota adicionada.", { routingTable: this.routingTable });
   }
 
-  // -------------------------
-  // NAT
-  // -------------------------
   static addNAT(internalIP, externalIP) {
     if (!internalIP || !externalIP) {
       return ApiResponse.error("INVALID_NAT", "IP interno e externo são obrigatórios.");
@@ -150,17 +136,11 @@ class FirewallInfo {
     return ApiResponse.success("NAT configurado.", { natTable: this.natTable });
   }
 
-  // -------------------------
-  // VPN
-  // -------------------------
   static setVPN(enable) {
     this.vpnStatus = enable === true;
     return ApiResponse.success(`VPN ${enable ? "ativada" : "desativada"}.`, { vpnStatus: this.vpnStatus });
   }
 
-  // -------------------------
-  // Conexões ativas (reais)
-  // -------------------------
   static async getConnections() {
     return new Promise((resolve) => {
       const cmd = process.platform === "win32" ? "netstat -n -p tcp" : "netstat -tun";
@@ -169,7 +149,7 @@ class FirewallInfo {
           return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err.message }));
         }
 
-        const lines = stdout.split("\n").slice(4); // Ignora cabeçalho
+        const lines = stdout.split("\n").slice(4);
         const connections = [];
 
         lines.forEach((line) => {
@@ -243,3 +223,6 @@ export default async function handler(req, res) {
     return res.status(500).json(ApiResponse.error("INTERNAL_ERROR", "Erro interno no servidor.", { message: err.message, stack: err.stack }));
   }
 }
+
+// Exporta a classe para uso em outras APIs
+export { FirewallInfo };
