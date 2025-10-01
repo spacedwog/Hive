@@ -26,20 +26,22 @@ export default function StreamScreen() {
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [vercelModalVisible, setVercelModalVisible] = useState(false);
+  const [vercelStatus, setVercelStatus] = useState<any>(null);
 
   const cameraRef = useRef<CameraView>(null);
   const VERCEL_API_URL = `${VERCEL_URL}/api/esp32-camera`;
 
-  // Exibe erro em modal
+  // Função para exibir erros
   const showError = (err: any) => {
     let msg = "";
     if (typeof err === "string") {
       msg = err;
     } else if (err instanceof Error) {
-             msg = err.message;
-           } else {
-                     try { msg = JSON.stringify(err, null, 2); } catch { msg = String(err); }
-                   }
+      msg = err.message;
+    } else {
+      try { msg = JSON.stringify(err, null, 2); } catch { msg = String(err); }
+    }
     setErrorMessage(msg);
     setErrorModalVisible(true);
   };
@@ -73,26 +75,26 @@ export default function StreamScreen() {
     }
   };
 
-  // GET status do Vercel
-  const fetchStatusFromVercel = useCallback(async () => {
+  // GET status do Vercel (somente para modal)
+  const fetchStatusFromVercel = async () => {
     try {
-      const response = await fetch(`${VERCEL_URL}/status`, { method: "GET" });
-      alert(response.url);
-      const text = await response.text(); // lê como texto primeiro
+      const response = await fetch(`${VERCEL_URL}/api/status?info=server`);
+      const text = await response.text();
       let result;
       try {
-        result = JSON.parse(text); // tenta converter para JSON
+        result = JSON.parse(text);
       } catch {
         throw new Error("Resposta não é JSON: " + text);
       }
-      setStatus(result);
-      console.log("📄 Status obtido do Vercel:", result);
+      setVercelStatus(result);
+      setVercelModalVisible(true);
+      console.log("🌐 Status Vercel:", result);
     } catch (err) {
       showError(err);
     }
-  }, []);
+  };
 
-  // POST dados para Vercel
+  // POST dados/foto para Vercel
   const sendDataToVercel = useCallback(
     async (photoBase64?: string) => {
       try {
@@ -102,7 +104,13 @@ export default function StreamScreen() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        const result = await response.json();
+        const text = await response.text();
+        let result;
+        try {
+          result = JSON.parse(text);
+        } catch {
+          throw new Error("Resposta não é JSON: " + text);
+        }
         if (result.success) {
           console.log("✅ Dados enviados!", result.logData);
         } else {
@@ -135,25 +143,24 @@ export default function StreamScreen() {
     }
   };
 
-  // Atualiza status local e do Vercel a cada 2s
+  // Atualiza status local a cada 2s
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const newStatus = await esp32Service.fetchStatus();
         setStatus({ ...newStatus });
-        await fetchStatusFromVercel();
       } catch (err) {
         showError(err);
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [esp32Service, fetchStatusFromVercel]);
+  }, [esp32Service]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📡 HIVE SNAPSHOT 📡</Text>
+      <Text style={styles.title}>📡 HIVE STREAM 📡</Text>
       <Text style={styles.connectionText}>
-        {status.ip ? "✅ Conectado ao ESP32" : "❌ Desconectado"}
+        {status.ip ?? "" ? "✅ Conectado ao ESP32" : "❌ Desconectado"}
       </Text>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
@@ -161,13 +168,21 @@ export default function StreamScreen() {
         <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
         <View style={[styles.dataBox, { alignSelf: "center" }]}>
           <Text style={styles.overlayText}>
-            LED Built-in: <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>{status.led_builtin.toUpperCase()}</Text>
+            LED Built-in:{" "}
+            <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
+              {(status.led_builtin ?? "off").toUpperCase()}
+            </Text>
           </Text>
           <Text style={styles.overlayText}>
-            LED Opposite: <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>{status.led_opposite.toUpperCase()}</Text>
+            LED Opposite:{" "}
+            <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
+              {(status.led_opposite ?? "off").toUpperCase()}
+            </Text>
           </Text>
-          <Text style={styles.overlayText}>IP: {status.ip}</Text>
-          <Text style={styles.overlayText}>🔊 Sensor de Som: {status.sensor_db.toFixed(1)} dB</Text>
+          <Text style={styles.overlayText}>IP: {status.ip ?? "N/A"}</Text>
+          <Text style={styles.overlayText}>
+            🔊 Sensor de Som: {(status.sensor_db ?? 0).toFixed(1)} dB
+          </Text>
           <View style={styles.buttonRow}>
             <Button
               title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
@@ -178,12 +193,17 @@ export default function StreamScreen() {
               onPress={switchMode}
               color="#facc15"
             />
-            <Button
-              title="📄 Exibir JSON"
-              onPress={() => setStatusModalVisible(true)}
-              color="#0af"
-            />
           </View>
+          <Button
+            title="📄 Exibir JSON"
+            onPress={() => setStatusModalVisible(true)}
+            color="#0af"
+          />
+          <Button
+            title="🌐 Ver JSON do Vercel"
+            onPress={fetchStatusFromVercel}
+            color="#ff9900"
+          />
         </View>
 
         {/* Câmera iOS */}
@@ -193,8 +213,16 @@ export default function StreamScreen() {
             <>
               <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={type} />
               <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 5 }}>
-                <Button title="🔄 Trocar câmera" onPress={() => setType(type === "back" ? "front" : "back")} color="#0af" />
-                <Button title="📸 Capturar & Enviar" onPress={captureAndUploadPhoto} color="#4caf50" />
+                <Button
+                  title="🔄 Trocar câmera"
+                  onPress={() => setType(type === "back" ? "front" : "back")}
+                  color="#0af"
+                />
+                <Button
+                  title="📸 Capturar & Enviar"
+                  onPress={captureAndUploadPhoto}
+                  color="#4caf50"
+                />
               </View>
               {capturedPhoto && (
                 <Image source={{ uri: capturedPhoto }} style={{ width: "100%", height: 240, marginTop: 10 }} />
@@ -226,7 +254,7 @@ export default function StreamScreen() {
         </View>
       </Modal>
 
-      {/* Modal de status JSON */}
+      {/* Modal de status JSON ESP32 */}
       <Modal
         visible={statusModalVisible}
         transparent
@@ -235,11 +263,31 @@ export default function StreamScreen() {
       >
         <View style={styles.modalBackground}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>📄 Status JSON</Text>
+            <Text style={styles.modalTitle}>📄 Status ESP32 JSON</Text>
             <ScrollView style={{ maxHeight: 300 }}>
               <Text style={styles.modalText}>{JSON.stringify(status, null, 2)}</Text>
             </ScrollView>
             <TouchableOpacity style={styles.modalButton} onPress={() => setStatusModalVisible(false)}>
+              <Text style={{ color: "#fff", fontWeight: "bold" }}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de status JSON Vercel */}
+      <Modal
+        visible={vercelModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setVercelModalVisible(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>🌐 Status Vercel JSON</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              <Text style={styles.modalText}>{JSON.stringify(vercelStatus, null, 2)}</Text>
+            </ScrollView>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setVercelModalVisible(false)}>
               <Text style={{ color: "#fff", fontWeight: "bold" }}>Fechar</Text>
             </TouchableOpacity>
           </View>
@@ -250,7 +298,7 @@ export default function StreamScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#121212", alignItems: "center", justifyContent: "flex-start" },
+  container: { flex: 1, padding: 20, backgroundColor: "#121212", alignItems: "center", justifyContent: "flex-start"},
   title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginBottom: 15, textAlign: "center" },
   connectionText: { fontSize: 16, fontWeight: "bold", color: "#0af", marginBottom: 10, textAlign: "center" },
   text: { fontSize: 16, color: "#fff", marginVertical: 5, textAlign: "center" },
