@@ -23,11 +23,11 @@ const char* sta_password = "6z2h1j3k9f";
 // --- Servidor HTTP ---
 WiFiServer server(80);
 
-// --- Imagem .JPG simulada (pode colocar bytes de uma imagem real convertida em array) ---
+// --- Imagem .JPG simulada ---
 const unsigned char sampleImage[] PROGMEM = {
-  0xFF, 0xD8, 0xFF, 0xE0, // SOI e header JPEG
-  // (...) aqui você deve inserir os bytes do arquivo JPG real
-  0xFF, 0xD9              // EOI
+  0xFF, 0xD8, 0xFF, 0xE0,
+  // (...) bytes reais da imagem aqui
+  0xFF, 0xD9
 };
 const size_t sampleImageLen = sizeof(sampleImage);
 
@@ -56,6 +56,82 @@ void setLED(bool state) {
   if (state) lastSoundTime = millis();
 }
 
+// --- Função para lidar com LED por som ---
+void handleSoundLED() {
+  int soundLevel = analogRead(SOUND_SENSOR_PIN);
+  if (soundLevel > SOUND_THRESHOLD && !ledOn) {
+    Serial.println("🔊 Som detectado! Ligando LED...");
+    setLED(true);
+  }
+  if (ledOn && millis() - lastSoundTime > LED_AUTO_OFF_MS) {
+    Serial.println("⏱️ Sem som por tempo limite. Desligando LED...");
+    setLED(false);
+  }
+}
+
+// --- Reconexão automática STA ---
+void maintainWiFiConnection() {
+  if (WiFi.status() != WL_CONNECTED) {
+    static unsigned long lastAttempt = 0;
+    if (millis() - lastAttempt > 5000) {
+      Serial.println("🔄 Tentando reconectar à STA...");
+      WiFi.begin(sta_ssid, sta_password);
+      lastAttempt = millis();
+    }
+  }
+}
+
+// --- Manipulação de requisições HTTP ---
+void handleClientRequest(WiFiClient &client) {
+  String request = client.readStringUntil('\n');
+  request.trim();
+  client.flush();
+
+  if (request.indexOf("GET /led/on") >= 0) {
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
+    setLED(true);
+    client.print("{\"success\":true,\"led\":\"on\",\"message\":\"LED ligado\"}");
+  }
+  else if (request.indexOf("GET /led/off") >= 0) {
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
+    setLED(false);
+    client.print("{\"success\":true,\"led\":\"off\",\"message\":\"LED desligado\"}");
+  }
+  else if (request.indexOf("GET /status") >= 0) {
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
+    client.print(getStatusJSON());
+  }
+  else if (request.indexOf("GET /image") >= 0) {
+    Serial.println("🖼️ Cliente requisitou /image");
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nConnection: close\r\n\r\n");
+    client.write(sampleImage, sampleImageLen);
+  }
+  else if (request.indexOf("GET /snapshot") >= 0) {
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: multipart/mixed; boundary=ESP32BOUNDARY\r\n\r\n");
+    client.print("--ESP32BOUNDARY\r\nContent-Type: application/json\r\n\r\n");
+    client.print(getStatusJSON());
+    client.print("\r\n--ESP32BOUNDARY\r\nContent-Type: image/jpeg\r\n\r\n");
+    client.write(sampleImage, sampleImageLen);
+    client.print("\r\n--ESP32BOUNDARY--\r\n");
+  }
+  else if (request.indexOf("GET /config") >= 0) {
+    int pos = request.indexOf("auto_off_ms=");
+    if (pos > 0) {
+      String value = request.substring(pos + 12);
+      value.trim();
+      LED_AUTO_OFF_MS = value.toInt();
+      Serial.print("⏱️ LED_AUTO_OFF_MS atualizado para: ");
+      Serial.println(LED_AUTO_OFF_MS);
+    }
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
+    client.print(getStatusJSON());
+  }
+  else {
+    client.print("HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
+    client.print("{\"success\":false,\"message\":\"Endpoint não encontrado\"}");
+  }
+}
+
 // --- Setup ---
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -68,6 +144,7 @@ void setup() {
   Serial.println("🚀 Iniciando HIVE STREAM (ESP32)...");
 
   WiFi.mode(WIFI_AP_STA);
+
   if (WiFi.softAP(ap_ssid, ap_password)) {
     Serial.print("📡 AP iniciado. IP: "); Serial.println(WiFi.softAPIP());
   }
@@ -94,45 +171,10 @@ void setup() {
 void loop() {
   WiFiClient client = server.available();
   if (client) {
-    String request = client.readStringUntil('\r');
-    client.flush();
-
-    if (request.indexOf("GET /led/on") >= 0) {
-      client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
-      setLED(true);
-      client.print("{\"success\":true,\"led\":\"on\",\"message\":\"LED ligado\"}");
-    }
-    else if (request.indexOf("GET /led/off") >= 0) {
-      client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
-      setLED(false);
-      client.print("{\"success\":true,\"led\":\"off\",\"message\":\"LED desligado\"}");
-    }
-    else if (request.indexOf("GET /status") >= 0) {
-      client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
-      client.print(getStatusJSON());
-    }
-    // --- Nova rota para enviar imagem fixa ---
-    else if (request.indexOf("GET /image") >= 0) {
-      Serial.println("🖼️ Cliente requisitou /image");
-      client.print("HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nConnection: close\r\n\r\n");
-      client.write(sampleImage, sampleImageLen);
-    }
-    else {
-      client.print("HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
-      client.print("{\"success\":false,\"message\":\"Endpoint não encontrado\"}");
-    }
+    handleClientRequest(client);
   }
 
-  int soundLevel = analogRead(SOUND_SENSOR_PIN);
-  if (soundLevel > SOUND_THRESHOLD && !ledOn) {
-    Serial.println("🔊 Som detectado! Ligando LED...");
-    setLED(true);
-  }
-
-  if (ledOn && millis() - lastSoundTime > LED_AUTO_OFF_MS) {
-    Serial.println("⏱️ Sem som por 5s. Desligando LED...");
-    setLED(false);
-  }
-
+  handleSoundLED();
+  maintainWiFiConnection();
   delay(10);
 }
