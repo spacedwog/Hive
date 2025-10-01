@@ -209,10 +209,15 @@ export default function TelaPrinc() {
     let cor = '#50fa7b';
     const diff = tentativas - regras;
 
-    if (diff <= 50) { nivel = 'Baixo'; cor = '#50fa7b'; }
-    else if (diff <= 100) { nivel = 'Médio'; cor = '#facc15'; }
-    else if (diff <= 500) { nivel = 'Alto'; cor = '#f97316'; }
-    else { nivel = 'Crítico'; cor = '#f87171'; }
+    if (diff <= 50) { nivel = 'Baixo'; cor = '#50fa7b';
+    } else if (diff <= 100) { nivel = 'Médio'; cor = '#facc15';
+    } else if (diff <= 250) { nivel = 'Moderado'; cor = '#fbbf24';
+    } else if (diff <= 500) { nivel = 'Alto'; cor = '#f97316';
+    } else if (diff <= 750) { nivel = 'Muito Alto'; cor = '#f87171';
+    } else if (diff <= 1000) { nivel = 'Crítico'; cor = '#ef4444';
+    } else if (diff <= 1750) { nivel = 'Perigo'; cor = '#b91c1c';
+    } else if (diff <= 2500) { nivel = 'Extremo'; cor = '#7f1d1d';
+    } else { nivel = 'Catastrófico'; cor = '#000000';}
 
     return { level: nivel, color: cor, tentativas, regras };
   };
