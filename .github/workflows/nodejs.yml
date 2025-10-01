@@ -14,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.20.0] # Versão próxima disponível
+        node-version: [20] # versão mais recente estável do Node 20
 
     steps:
       - name: Checkout código
@@ -59,7 +59,7 @@ jobs:
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.20.0
+          node-version: 20
 
       - name: Verificar vulnerabilidades
         run: npm audit --audit-level=moderate
