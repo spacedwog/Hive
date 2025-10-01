@@ -3,6 +3,7 @@ import { VERCEL_URL } from '@env';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View as AnimatedView,
+  Animated as RNAnimated,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,11 +18,31 @@ export default function TelaPrinc() {
   const [firewallData, setFirewallData] = useState<any | null>(null);
   const [firewallPage, setFirewallPage] = useState(1);
   const [routeSaved, setRouteSaved] = useState(false);
-  const [alertMsg, setAlertMsg] = useState<string[]>([]); // lista de alertas
+  const [alertMsg, setAlertMsg] = useState<string[]>([]);
   const ipsPerPage = 10;
 
   const previousAttemptsRef = useRef<number>(0);
   const flashAnim = useSharedValue(0);
+
+  // -------------------------
+  // HIVE Animations
+  // -------------------------
+  const [showHiveCreated, setShowHiveCreated] = useState(false);
+  const [showHiveApplied, setShowHiveApplied] = useState(false);
+  const hiveCreatedAnim = useRef(new RNAnimated.Value(0)).current;
+  const hiveAppliedAnim = useRef(new RNAnimated.Value(0)).current;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const triggerHiveAnimation = (type: 'created' | 'applied') => {
+    const anim = type === 'created' ? hiveCreatedAnim : hiveAppliedAnim;
+    const setter = type === 'created' ? setShowHiveCreated : setShowHiveApplied;
+
+    setter(true);
+    RNAnimated.sequence([
+      RNAnimated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      RNAnimated.timing(anim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setter(false));
+  };
 
   // -------------------------
   // Dados do Firewall em tempo real
@@ -44,10 +65,8 @@ export default function TelaPrinc() {
           // -------------------------
           if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
             try {
-              // Alerta
               await fetch(`${VERCEL_URL}/api/firewall?action=alert`);
 
-              // Bloqueio do IP (usar último bloqueado ou aleatório)
               const ipParaBloquear =
                 data.data.ip || `192.168.1.${Math.floor(Math.random() * 254 + 1)}`;
               await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
@@ -56,7 +75,9 @@ export default function TelaPrinc() {
                 body: JSON.stringify({ ip: ipParaBloquear }),
               });
 
-              // Gerar nova regra automática
+              // -------------------------
+              // Regra criada
+              // -------------------------
               const destination = `10.0.${Math.floor(Math.random() * 255)}.0/24`;
               const gateway = "192.168.1.1";
               await fetch(`${VERCEL_URL}/api/firewall?action=route`, {
@@ -65,12 +86,15 @@ export default function TelaPrinc() {
                 body: JSON.stringify({ destination, gateway }),
               });
 
-              // Atualiza mensagens de alerta
               setAlertMsg(prev => [
                 `IP bloqueado automaticamente: ${ipParaBloquear}`,
                 `Nova regra criada: ${destination} -> ${gateway}`,
                 ...prev,
               ]);
+
+              // Trigger HIVE "Regra Criada"
+              triggerHiveAnimation('created');
+
             } catch (err) {
               console.error("Erro ao bloquear IP ou criar regra:", err);
               setAlertMsg(prev => [
@@ -83,10 +107,7 @@ export default function TelaPrinc() {
           // -------------------------
           // Salvar rota automaticamente quando tentativas = regras
           // -------------------------
-          if (
-            data.data.tentativasBloqueadas === data.data.regrasAplicadas &&
-            !routeSaved
-          ) {
+          if (data.data.tentativasBloqueadas === data.data.regrasAplicadas && !routeSaved) {
             try {
               const destination = "192.168.15.166/24";
               const gateway = "192.168.1.1";
@@ -104,6 +125,10 @@ export default function TelaPrinc() {
                 `Rota automática salva: ${destination} -> ${gateway}`,
                 ...prev,
               ]);
+
+              // Trigger HIVE "Regra Aplicada"
+              triggerHiveAnimation('applied');
+
             } catch (err) {
               console.error("Erro ao salvar rota:", err);
               setAlertMsg(prev => [
@@ -135,7 +160,7 @@ export default function TelaPrinc() {
     fetchFirewallData();
     const interval = setInterval(fetchFirewallData, 5000);
     return () => clearInterval(interval);
-  }, [accessCode, flashAnim, routeSaved]);
+  }, [accessCode, flashAnim, routeSaved, triggerHiveAnimation]);
 
   const animatedCardStyle = useAnimatedStyle(() => ({
     backgroundColor: flashAnim.value === 1 ? "#f87171" : "#22223b",
@@ -162,18 +187,9 @@ export default function TelaPrinc() {
   return (
     <>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>📊 Data Science Dashboard</Text>
+        <Text style={styles.title}>🧱 HIVE FIREWALL 🧱</Text>
 
-        {/* ------------------------- */}
-        {/* Card Firewall */}
-        {/* ------------------------- */}
-        
-        <AnimatedView
-          style={[
-            styles.card,
-            animatedCardStyle,
-          ]}
-        >
+        <AnimatedView style={[styles.card, animatedCardStyle]}>
           {firewallData ? (
             <>
               <Text style={styles.description}>
@@ -258,6 +274,50 @@ export default function TelaPrinc() {
             <Text style={styles.description}>Carregando dados do firewall...</Text>
           )}
         </AnimatedView>
+
+        {/* ------------------------- */}
+        {/* Sprite HIVE Animations */}
+        {/* ------------------------- */}
+        {showHiveCreated && (
+          <RNAnimated.View
+            style={{
+              position: "absolute",
+              top: 100,
+              right: 24,
+              opacity: hiveCreatedAnim,
+              transform: [
+                {
+                  scale: hiveCreatedAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 1.2],
+                  }),
+                },
+              ],
+            }}
+          >
+            <Text style={{ fontSize: 48 }}>🐝 (Criada)</Text>
+          </RNAnimated.View>
+        )}
+        {showHiveApplied && (
+          <RNAnimated.View
+            style={{
+              position: "absolute",
+              top: 160,
+              right: 24,
+              opacity: hiveAppliedAnim,
+              transform: [
+                {
+                  scale: hiveAppliedAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 1.2],
+                  }),
+                },
+              ],
+            }}
+          >
+            <Text style={{ fontSize: 48 }}>🐝 (Aplicada)</Text>
+          </RNAnimated.View>
+        )}
       </ScrollView>
       <BottomNav />
     </>
