@@ -2,16 +2,16 @@
 import { VERCEL_URL } from '@env';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View as AnimatedView,
   Modal,
-  Animated as RNAnimated,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import PushNotification from 'react-native-push-notification';
 import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { AnimatedView } from 'react-native-reanimated/lib/typescript/component/View';
 import BottomNav from '../../hive_body/BottomNav.tsx';
 
 export default function TelaPrinc() {
@@ -20,116 +20,86 @@ export default function TelaPrinc() {
   const [firewallPage, setFirewallPage] = useState(1);
   const [routeSaved, setRouteSaved] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string[]>([]);
-  const [rules, setRules] = useState<{ destination: string; gateway: string }[]>([]);
+  const [rules, setRules] = useState<{destination:string, gateway:string}[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalPage, setModalPage] = useState(1);
   const [retroModalVisible, setRetroModalVisible] = useState(false);
   const [errorModal, setErrorModal] = useState<string | null>(null);
-  const [potentialIPs, setPotentialIPs] = useState<string[]>([]); // Cache IPs de domínios reais
 
   const ipsPerPage = 10;
   const rulesPerPage = 5;
-
   const previousAttemptsRef = useRef<number>(0);
   const flashAnim = useSharedValue(0);
 
-  // -------------------------
-  // HIVE Animations
-  // -------------------------
-  const [showHiveCreated, setShowHiveCreated] = useState(false);
-  const [showHiveApplied, setShowHiveApplied] = useState(false);
-  const hiveCreatedAnim = useRef(new RNAnimated.Value(0)).current;
-  const hiveAppliedAnim = useRef(new RNAnimated.Value(0)).current;
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const triggerHiveAnimation = (type: 'created' | 'applied') => {
-    const anim = type === 'created' ? hiveCreatedAnim : hiveAppliedAnim;
-    const setter = type === 'created' ? setShowHiveCreated : setShowHiveApplied;
-
-    setter(true);
-    RNAnimated.sequence([
-      RNAnimated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      RNAnimated.timing(anim, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start(() => setter(false));
-  };
-
-  // -------------------------
-  // Função para obter IPs de domínios reais
-  // -------------------------
-  const getPotentialIPs = async (): Promise<string[]> => {
-    const domains = [
-      "google.com",
-      "github.com",
-      "microsoft.com",
-      "youtube.com",
-      "twitter.com",
-      "cloudflare.com",
-    ];
-    const ips: string[] = [];
-
-    for (const domain of domains) {
-      try {
-        const response = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
-        const data = await response.json();
-        if (data.Answer) {
-          data.Answer.forEach((answer: any) => {
-            if (answer.data) {
-              ips.push(answer.data);
-            }
-          });
-        }
-      } catch (err) {
-        console.warn(`Não foi possível obter IP de ${domain}:`, err);
+  // Configuração do PushNotification
+  useEffect(() => {
+    PushNotification.configure({
+      onNotification: function(notification) {
+        console.log("Notificação recebida:", notification);
+      },
+      requestPermissions: true,
+    });
+    PushNotification.createChannel(
+      {
+        channelId: "firewall-alerts",
+        channelName: "Firewall Alerts",
+        importance: 4,
+      },
+      (created: boolean) => {
+        console.log(`Channel 'firewall-alerts' created: ${created}`);
       }
-    }
-    return ips;
+    );
+  }, []);
+
+  const triggerNotification = (title: string, message: string) => {
+    PushNotification.localNotification({
+      channelId: "firewall-alerts",
+      title,
+      message,
+      playSound: true,
+      soundName: 'default',
+    });
   };
 
-  // -------------------------
-  // Dados do Firewall em tempo real
-  // -------------------------
+  // Lista de potenciais IPs para bloqueio (exemplo gerado dinamicamente)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const potentialIPs = [
+    "192.168.0.101",
+    "192.168.0.102",
+    "192.168.0.103",
+    "192.168.0.104",
+    "192.168.0.105",
+  ];
+
+  // ------------------------- Dados do Firewall -------------------------
   useEffect(() => {
     if (!accessCode || accessCode.trim() === "") {
       return;
-    }
-
-    // Precarregar IPs de domínios reais
-    if (potentialIPs.length === 0) {
-      getPotentialIPs().then(setPotentialIPs);
     }
 
     const fetchFirewallData = async () => {
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
         const data = await response.json();
-
         if (!data.success) {
           setFirewallData(null);
           return;
         }
-
         setFirewallData(data.data);
 
-        // -------------------------
-        // Bloqueio de IP e nova regra
-        // -------------------------
+        // ------------------------- Bloqueio de IP -------------------------
         if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
           try {
             await fetch(`${VERCEL_URL}/api/firewall?action=alert`);
 
-            const ipParaBloquear =
-              data.data.ip ||
-              (potentialIPs.length > 0
-                ? potentialIPs[Math.floor(Math.random() * potentialIPs.length)]
-                : `192.168.1.${Math.floor(Math.random() * 254 + 1)}`);
-
+            const ipParaBloquear = data.data.ip || potentialIPs[Math.floor(Math.random() * potentialIPs.length)];
             await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ ip: ipParaBloquear }),
             });
 
-            // Criação de nova regra
+            // ------------------------- Nova regra -------------------------
             const destination = `10.0.${Math.floor(Math.random() * 255)}.0/24`;
             const gatewayResp = await fetch(`${VERCEL_URL}/api/firewall?action=getGateway`);
             const gatewayData = await gatewayResp.json();
@@ -148,7 +118,8 @@ export default function TelaPrinc() {
               ...prev,
             ]);
 
-            triggerHiveAnimation('created');
+            triggerNotification("Firewall", `IP bloqueado: ${ipParaBloquear}`);
+            triggerNotification("Firewall", `Nova regra criada: ${destination} → ${gateway}`);
 
           } catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);
@@ -157,9 +128,7 @@ export default function TelaPrinc() {
           }
         }
 
-        // -------------------------
-        // Salvar rota automaticamente quando tentativas = regras
-        // -------------------------
+        // ------------------------- Salvar rota automática -------------------------
         if (data.data.tentativasBloqueadas === data.data.regrasAplicadas && !routeSaved) {
           try {
             const destination = "192.168.15.166/24";
@@ -180,9 +149,8 @@ export default function TelaPrinc() {
               ...prev,
             ]);
 
-            triggerHiveAnimation('applied');
+            triggerNotification("Firewall", `Rota automática salva: ${destination} → ${gateway}`);
 
-            // Abrir modal retroativo se houver diferença
             if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
               setRetroModalVisible(true);
             }
@@ -194,9 +162,7 @@ export default function TelaPrinc() {
           }
         }
 
-        // -------------------------
-        // Flash animation
-        // -------------------------
+        // ------------------------- Flash animation -------------------------
         if (previousAttemptsRef.current < data.data.tentativasBloqueadas) {
           flashAnim.value = withTiming(1, { duration: 300 }, () => {
             flashAnim.value = withTiming(0, { duration: 300 });
@@ -214,7 +180,7 @@ export default function TelaPrinc() {
     fetchFirewallData();
     const interval = setInterval(fetchFirewallData, 5000);
     return () => clearInterval(interval);
-  }, [accessCode, flashAnim, routeSaved, triggerHiveAnimation, potentialIPs]);
+  }, [accessCode, flashAnim, potentialIPs, routeSaved]);
 
   const animatedCardStyle = useAnimatedStyle(() => ({
     backgroundColor: flashAnim.value === 1 ? "#f87171" : "#22223b",
@@ -237,7 +203,6 @@ export default function TelaPrinc() {
     ? firewallData.blocked.slice((firewallPage - 1) * ipsPerPage, firewallPage * ipsPerPage)
     : [];
   const totalPages = firewallData?.blocked ? Math.ceil(firewallData.blocked.length / ipsPerPage) : 1;
-
   const paginatedRules = rules.slice((modalPage - 1) * rulesPerPage, modalPage * rulesPerPage);
   const totalModalPages = Math.ceil(rules.length / rulesPerPage);
 
@@ -247,32 +212,12 @@ export default function TelaPrinc() {
         <AnimatedView style={[styles.card, animatedCardStyle]}>
           {firewallData ? (
             <>
-              <Text style={styles.description}>
-                Status:{" "}
-                <Text style={{ color: firewallData.status === "Ativo" ? "#50fa7b" : "#f87171", fontWeight: "bold" }}>
-                  {firewallData.status}
-                </Text>
-              </Text>
-              <Text style={styles.description}>
-                Última atualização:{" "}
-                <Text style={{ color: "#fff" }}>
-                  {firewallData.ultimaAtualizacao ? new Date(firewallData.ultimaAtualizacao).toLocaleString("pt-BR") : "-"}
-                </Text>
-              </Text>
-              <Text style={styles.description}>
-                Tentativas bloqueadas:{" "}
-                <Text style={{ color: "#f87171", fontWeight: "bold" }}>
-                  {firewallData.tentativasBloqueadas ?? "-"}
-                </Text>
-              </Text>
-              <Text style={styles.description}>
-                Regras aplicadas:{" "}
-                <Text style={{ color: "#50fa7b" }}>{firewallData.regrasAplicadas ?? "-"}</Text>
-              </Text>
+              <Text style={styles.description}>Status: <Text style={{ color: firewallData.status === "Ativo" ? "#50fa7b" : "#f87171", fontWeight: "bold" }}>{firewallData.status}</Text></Text>
+              <Text style={styles.description}>Última atualização: <Text style={{ color: "#fff" }}>{firewallData.ultimaAtualizacao ? new Date(firewallData.ultimaAtualizacao).toLocaleString("pt-BR") : "-"}</Text></Text>
+              <Text style={styles.description}>Tentativas bloqueadas: <Text style={{ color: "#f87171", fontWeight: "bold" }}>{firewallData.tentativasBloqueadas ?? "-"}</Text></Text>
+              <Text style={styles.description}>Regras aplicadas: <Text style={{ color: "#50fa7b" }}>{firewallData.regrasAplicadas ?? "-"}</Text></Text>
 
-              {/* ------------------------- */}
               {/* Botão modal acima dos IPs */}
-              {/* ------------------------- */}
               <TouchableOpacity
                 style={[styles.loginBtn, { alignSelf: 'center', marginVertical: 12 }]}
                 onPress={() => setModalVisible(true)}
@@ -282,13 +227,8 @@ export default function TelaPrinc() {
 
               {paginatedIPs.length > 0 && (
                 <View style={{ marginTop: 10 }}>
-                  <Text style={[styles.description, { color: "#facc15", fontWeight: "bold" }]}>
-                    IPs bloqueados:
-                  </Text>
-                  {paginatedIPs.map((ip: string, idx: number) => (
-                    <Text key={idx} style={styles.description}>{ip}</Text>
-                  ))}
-
+                  <Text style={[styles.description, { color: "#facc15", fontWeight: "bold" }]}>IPs bloqueados:</Text>
+                  {paginatedIPs.map((ip: string, idx: number) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
                   {totalPages > 1 && (
                     <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 8 }}>
                       <TouchableOpacity disabled={firewallPage <= 1} onPress={() => setFirewallPage(prev => prev - 1)} style={{ marginHorizontal: 8 }}>
@@ -305,9 +245,7 @@ export default function TelaPrinc() {
 
               {alertMsg.length > 0 && (
                 <View style={{ marginTop: 12 }}>
-                  {alertMsg.map((msg, idx) => (
-                    <Text key={idx} style={[styles.description, { color: "#f87171" }]}>{msg}</Text>
-                  ))}
+                  {alertMsg.map((msg, idx) => (<Text key={idx} style={[styles.description, { color: "#f87171" }]}>{msg}</Text>))}
                 </View>
               )}
             </>
@@ -316,41 +254,16 @@ export default function TelaPrinc() {
           )}
         </AnimatedView>
 
-        {/* ------------------------- */}
-        {/* HIVE Animations */}
-        {/* ------------------------- */}
-        {showHiveCreated && (
-          <RNAnimated.View style={{
-            position: "absolute", top: 100, right: 24, opacity: hiveCreatedAnim,
-            transform: [{ scale: hiveCreatedAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.2] }) }],
-          }}>
-            <Text style={{ fontSize: 48 }}>🐝 (Criada)</Text>
-          </RNAnimated.View>
-        )}
-        {showHiveApplied && (
-          <RNAnimated.View style={{
-            position: "absolute", top: 160, right: 24, opacity: hiveAppliedAnim,
-            transform: [{ scale: hiveAppliedAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.2] }) }],
-          }}>
-            <Text style={{ fontSize: 48 }}>🐝 (Aplicada)</Text>
-          </RNAnimated.View>
-        )}
-
-        {/* ------------------------- */}
         {/* Modal Regras / Rotas */}
-        {/* ------------------------- */}
         <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Regras e Rotas</Text>
               {paginatedRules.length > 0 ? (
-                paginatedRules.map((item, idx) => (
-                  <Text key={idx} style={styles.description}>{item.destination} → {item.gateway}</Text>
-                ))
+                paginatedRules.map((item, idx) => (<Text key={idx} style={styles.description}>{item.destination} → {item.gateway}</Text>))
               ) : (
                 <Text style={styles.description}>Nenhuma regra criada ainda.</Text>
               )}
-
               {totalModalPages > 1 && (
                 <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
                   <TouchableOpacity disabled={modalPage <= 1} onPress={() => setModalPage(prev => prev - 1)} style={{ marginHorizontal: 8 }}>
@@ -362,7 +275,6 @@ export default function TelaPrinc() {
                   </TouchableOpacity>
                 </View>
               )}
-
               <TouchableOpacity onPress={() => setModalVisible(false)} style={[styles.loginBtn, { marginTop: 16 }]}>
                 <Text style={{ color: "#0f172a", fontWeight: "bold" }}>Fechar</Text>
               </TouchableOpacity>
@@ -370,9 +282,7 @@ export default function TelaPrinc() {
           </View>
         </Modal>
 
-        {/* ------------------------- */}
         {/* Modal Retroativo */}
-        {/* ------------------------- */}
         <Modal transparent visible={retroModalVisible}>
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
@@ -381,7 +291,7 @@ export default function TelaPrinc() {
                 Existem {firewallData?.tentativasBloqueadas ?? 0} tentativas bloqueadas e {firewallData?.regrasAplicadas ?? 0} regras aplicadas.
               </Text>
               <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-                <TouchableOpacity style={[styles.loginBtn, { paddingHorizontal: 16 }]} onPress={() => { setRetroModalVisible(false); /* aplicar retroativamente */ }}>
+                <TouchableOpacity style={[styles.loginBtn, { paddingHorizontal: 16 }]} onPress={() => { setRetroModalVisible(false); }}>
                   <Text style={{ color: "#0f172a", fontWeight: "bold" }}>Sim</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.loginBtn, { paddingHorizontal: 16 }]} onPress={() => setRetroModalVisible(false)}>
@@ -392,9 +302,7 @@ export default function TelaPrinc() {
           </View>
         </Modal>
 
-        {/* ------------------------- */}
         {/* Modal Erro */}
-        {/* ------------------------- */}
         <Modal transparent visible={!!errorModal} onRequestClose={() => setErrorModal(null)}>
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
@@ -415,15 +323,7 @@ export default function TelaPrinc() {
 
 const styles = StyleSheet.create({
   container: { padding: 24, backgroundColor: "#0f172a", alignItems: "center" },
-  card: {
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    width: "100%",
-    marginBottom: 20,
-  },
+  card: { borderRadius: 16, padding: 20, shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 12, width: "100%", marginBottom: 20 },
   description: { fontSize: 16, color: "#e2e8f0", lineHeight: 24 },
   loginContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0f172a" },
   loginBtn: { backgroundColor: "#50fa7b", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 24, marginTop: 12 },
