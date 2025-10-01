@@ -22,16 +22,15 @@ export default function StreamScreen() {
   const [type, setType] = useState<"front" | "back">("back");
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
-  // Modal de erros
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
 
-  // Modal de status JSON
   const [statusModalVisible, setStatusModalVisible] = useState(false);
 
   const cameraRef = useRef<CameraView>(null);
   const VERCEL_API_URL = `${VERCEL_URL}/api/esp32-camera`;
 
+  // Exibe erro em modal
   const showError = (err: any) => {
     let msg = "";
     if (typeof err === "string") {
@@ -53,6 +52,7 @@ export default function StreamScreen() {
     })();
   }, []);
 
+  // Toggle LED
   const toggleLed = async () => {
     try {
       await esp32Service.toggleLed();
@@ -62,6 +62,7 @@ export default function StreamScreen() {
     }
   };
 
+  // Troca modo Soft-AP <-> STA
   const switchMode = async () => {
     try {
       esp32Service.switchMode();
@@ -72,19 +73,19 @@ export default function StreamScreen() {
     }
   };
 
-  // Atualiza status do ESP32 a cada 2s
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const newStatus = await esp32Service.fetchStatus();
-        setStatus({ ...newStatus });
-      } catch (err) {
-        showError(err);
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [esp32Service]);
+  // GET status do Vercel
+  const fetchStatusFromVercel = useCallback(async () => {
+    try {
+      const response = await fetch(`${VERCEL_API_URL}/status`, { method: "GET" });
+      const result = await response.json();
+      setStatus(result);
+      console.log("📄 Status obtido do Vercel:", result);
+    } catch (err) {
+      showError(err);
+    }
+  }, [VERCEL_API_URL]);
 
+  // POST dados para Vercel
   const sendDataToVercel = useCallback(
     async (photoBase64?: string) => {
       try {
@@ -107,6 +108,7 @@ export default function StreamScreen() {
     [status, VERCEL_API_URL]
   );
 
+  // Captura e envia foto
   const captureAndUploadPhoto = async () => {
     if (!cameraRef.current) {
       return;
@@ -126,6 +128,20 @@ export default function StreamScreen() {
     }
   };
 
+  // Atualiza status local e do Vercel a cada 2s
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const newStatus = await esp32Service.fetchStatus();
+        setStatus({ ...newStatus });
+        await fetchStatusFromVercel();
+      } catch (err) {
+        showError(err);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [esp32Service, fetchStatusFromVercel]);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>📡 HIVE SNAPSHOT 📡</Text>
@@ -134,6 +150,7 @@ export default function StreamScreen() {
       </Text>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
+        {/* Status ESP32 */}
         <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
         <View style={[styles.dataBox, { alignSelf: "center" }]}>
           <Text style={styles.overlayText}>
@@ -162,6 +179,7 @@ export default function StreamScreen() {
           </View>
         </View>
 
+        {/* Câmera iOS */}
         <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera iOS:</Text>
         <View style={styles.nativeCamera}>
           {hasPermission ? (
