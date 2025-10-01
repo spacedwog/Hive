@@ -2,22 +2,16 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "jsx": "react-native",
-    "module": "node16",
-    "target": "esnext",
-    "moduleResolution": "node16",
+    "module": "NodeNext",
+    "target": "ES2021",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "forceConsistentCasingInFileNames": true,
-
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-
-    "typeRoots": [
-      "./src/types",
-      "./node_modules/@types"
-    ],
-
+    "typeRoots": ["./src/types", "./node_modules/@types"],
     "paths": {
       "@/*": ["./*"]
     }
@@ -28,6 +22,7 @@
     "victory-native.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    "api/lib/sensor/SensorApiHandler.js"
-, "api/firewall.js"  ]
+    "api/lib/sensor/SensorApiHandler.js",
+    "api/firewall.js"
+  ]
 }
