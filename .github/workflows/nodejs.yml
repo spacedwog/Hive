@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main ]
   schedule:
-    - cron: "0 3 * * 1" # Executa toda segunda-feira (teste periódico)
+    - cron: "0 3 * * 1" # Executa toda segunda-feira
 
 jobs:
   build:
@@ -34,6 +34,7 @@ jobs:
 
       - name: Rodar testes com cobertura
         run: npm run test -- --coverage
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
@@ -42,6 +43,7 @@ jobs:
 
       - name: Build do projeto
         run: npm run build
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -62,11 +64,13 @@ jobs:
       - name: Verificar vulnerabilidades
         run: npm audit --audit-level=moderate
 
-      - name: Executar CodeQL
+      - name: Inicializar CodeQL
         uses: github/codeql-action/init@v2
         with:
           languages: javascript
-      - run: github/codeql-action/analyze@v2
+
+      - name: Analisar com CodeQL
+        uses: github/codeql-action/analyze@v2
 
   deploy:
     needs: [build, security]
@@ -74,11 +78,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout código
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Instalar Vercel CLI
         run: npm install -g vercel
 
       - name: Deploy para Vercel (produção)
         run: vercel --prod --token=${{ secrets.VERCEL_TOKEN }}
-        # Certifique-se de adicionar o segredo VERCEL_TOKEN em Settings > Secrets and variables > Actions
