@@ -4,7 +4,7 @@ import fetch from "node-fetch";
 export default async function handler(req, res) {
   try {
     // Chama a API do firewall para obter informações completas
-    const response = await fetch("https://hive-chi-woad.vercel.app/api/firewall?action=info");
+    const response = await fetch("https://hive-chi-woad.vercel.app/api/firewall?action=route");
     const data = await response.json();
 
     if (data.success && data.data?.routingTable) {
