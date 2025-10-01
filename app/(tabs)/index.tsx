@@ -14,6 +14,86 @@ import BottomNav from '../../hive_body/BottomNav.tsx';
 
 type Rule = { destination: string; gateway: string };
 
+type PaginatedListProps<T> = {
+  items: T[];
+  itemsPerPage: number;
+  renderItem: (item: T, index: number) => JSX.Element;
+  title?: string;
+};
+
+function PaginatedList<T>({ items, itemsPerPage, renderItem, title }: PaginatedListProps<T>) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.ceil(items.length / itemsPerPage);
+  const paginatedItems = items.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  return (
+    <View style={{ marginTop: 16 }}>
+      {title && <Text style={[styles.description, { fontWeight: 'bold', color: '#34d399', marginBottom: 4 }]}>{title}</Text>}
+      {paginatedItems.length > 0 ? (
+        paginatedItems.map(renderItem)
+      ) : (
+        <Text style={styles.description}>Nenhum item encontrado.</Text>
+      )}
+      {totalPages > 1 && (
+        <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 4 }}>
+          <TouchableOpacity disabled={page <= 1} onPress={() => setPage(prev => prev - 1)} style={{ marginHorizontal: 8 }}>
+            <Text style={{ color: page > 1 ? '#50fa7b' : '#888' }}>◀</Text>
+          </TouchableOpacity>
+          <Text style={{ color: '#fff' }}>{page} / {totalPages}</Text>
+          <TouchableOpacity disabled={page >= totalPages} onPress={() => setPage(prev => prev + 1)} style={{ marginHorizontal: 8 }}>
+            <Text style={{ color: page < totalPages ? '#50fa7b' : '#888' }}>▶</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+type JsonRenderProps = { obj: any; level?: number };
+
+function JsonRenderer({ obj, level = 0 }: JsonRenderProps) {
+  const margin = level * 12;
+
+  const typeColor = (value: any) => {
+    if (value === null) return '#f87171';
+    if (typeof value === 'string') return '#34d399';
+    if (typeof value === 'number') return '#facc15';
+    if (typeof value === 'boolean') return '#38bdf8';
+    return '#94a3b8';
+  };
+
+  if (obj === null || obj === undefined)
+    return <Text style={{ marginLeft: margin, color: typeColor(null) }}>null</Text>;
+
+  if (typeof obj !== 'object')
+    return <Text style={{ marginLeft: margin, color: typeColor(obj) }}>{obj.toString()}</Text>;
+
+  if (Array.isArray(obj)) {
+    return (
+      <View style={{ marginLeft: margin }}>
+        {obj.map((item, idx) => (
+          <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 2 }}>
+            <Text style={{ color: '#38bdf8', marginRight: 4 }}>[{idx}] :</Text>
+            <JsonRenderer obj={item} level={level + 1} />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ marginLeft: margin }}>
+      {Object.entries(obj).map(([key, value], idx) => (
+        <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 2 }}>
+          <Text style={{ color: '#facc15', marginRight: 4 }}>{key} :</Text>
+          {typeof value === 'object' ? <JsonRenderer obj={value} level={level + 1} /> :
+            <Text style={{ color: typeColor(value) }}>{value?.toString()}</Text>}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [firewallData, setFirewallData] = useState<any | null>(null);
@@ -21,15 +101,13 @@ export default function TelaPrinc() {
   const [routeSaved, setRouteSaved] = useState(false);
   const [rules, setRules] = useState<Rule[]>([]);
   const [potentialIPs, setPotentialIPs] = useState<string[]>([]);
-  const [firewallPage, setFirewallPage] = useState(1);
-  const [rulesPage, setRulesPage] = useState(1);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [newDestination, setNewDestination] = useState('');
   const [newGateway, setNewGateway] = useState('');
 
   const ipsPerPage = 10;
-  const rulesPerPage = 5; // Quantas regras aparecem por página
+  const rulesPerPage = 5;
 
   // -------------------------
   // Resolve domínio via Google DNS
@@ -65,18 +143,14 @@ export default function TelaPrinc() {
       const results = await Promise.all(domains.map(resolveDomainA));
       const aggregated: string[] = [];
       for (const arr of results) {
-        for (const ip of arr) if (!aggregated.includes(ip)) {
-                                aggregated.push(ip);
-                              }
+        for (const ip of arr) if (!aggregated.includes(ip)) aggregated.push(ip);
       }
       if (aggregated.length === 0) {
         aggregated.push('142.250.190.14','172.217.169.78','140.82.121.4','104.16.133.229');
       }
       setPotentialIPs(aggregated);
     };
-    if (accessCode && potentialIPs.length === 0) {
-      loadPotentialIPs();
-    }
+    if (accessCode && potentialIPs.length === 0) loadPotentialIPs();
   }, [accessCode, potentialIPs.length]);
 
   // -------------------------
@@ -119,9 +193,7 @@ export default function TelaPrinc() {
         for (const r of formatted) {
           await saveRoute(r.destination, r.gateway);
         }
-      } else {
-        setRules([]);
-      }
+      } else setRules([]);
     } catch (err: any) {
       setRawJson((prev: any) => ({ ...prev, routesError: err?.message || "Falha ao buscar rotas" }));
       setRules([]);
@@ -132,9 +204,7 @@ export default function TelaPrinc() {
   // Dados do firewall e bloqueios automáticos
   // -------------------------
   useEffect(() => {
-    if (!accessCode || accessCode.trim() === '') {
-      return;
-    }
+    if (!accessCode || accessCode.trim() === '') return;
 
     const fetchFirewallData = async () => {
       try {
@@ -181,35 +251,6 @@ export default function TelaPrinc() {
     return () => clearInterval(interval);
   }, [accessCode, routeSaved, potentialIPs, fetchAndSaveRoutes]);
 
-  // -------------------------
-  // Render JSON cru em Text separados
-  // -------------------------
-  const renderJson = (obj: any, level = 0): JSX.Element => {
-    const margin = level * 12;
-    if (obj === null || obj === undefined) return <Text style={{ marginLeft: margin, color: '#94a3b8' }}>null</Text>;
-    if (typeof obj !== 'object') return <Text style={{ marginLeft: margin, color: '#94a3b8' }}>{obj.toString()}</Text>;
-    if (Array.isArray(obj)) return (
-      <View style={{ marginLeft: margin }}>
-        {obj.map((item, idx) => (
-          <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            <Text style={{ color: '#38bdf8', marginRight: 4 }}>[{idx}] :</Text>
-            {renderJson(item, level + 1)}
-          </View>
-        ))}
-      </View>
-    );
-    return (
-      <View style={{ marginLeft: margin }}>
-        {Object.entries(obj).map(([key, value], idx) => (
-          <View key={idx} style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 2 }}>
-            <Text style={{ color: '#facc15', marginRight: 4 }}>{key} :</Text>
-            {typeof value === 'object' ? renderJson(value, level + 1) : <Text style={{ color: '#94a3b8' }}>{value?.toString()}</Text>}
-          </View>
-        ))}
-      </View>
-    );
-  };
-
   if (!accessCode || accessCode.trim() === '')
     return (
       <View style={styles.loginContainer}>
@@ -219,18 +260,6 @@ export default function TelaPrinc() {
         </TouchableOpacity>
       </View>
     );
-
-  // -------------------------
-  // Paginação IPs bloqueados
-  // -------------------------
-  const paginatedIPs = firewallData?.blocked?.slice((firewallPage - 1) * ipsPerPage, firewallPage * ipsPerPage) ?? [];
-  const totalPages = firewallData?.blocked ? Math.ceil(firewallData.blocked.length / ipsPerPage) : 1;
-
-  // -------------------------
-  // Paginação Regras/Rotas
-  // -------------------------
-  const paginatedRules = rules.slice((rulesPage - 1) * rulesPerPage, rulesPage * rulesPerPage);
-  const totalRulesPages = Math.ceil(rules.length / rulesPerPage);
 
   return (
     <>
@@ -245,28 +274,19 @@ export default function TelaPrinc() {
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
                 <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={[styles.description,{color:'#facc15',fontWeight:'bold'}]}>IPs Bloqueados</Text>
-                  {paginatedIPs.map((ip: string, idx: number) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
-                  {totalPages > 1 && (
-                    <View style={{flexDirection:'row',justifyContent:'center',marginTop:4}}>
-                      <TouchableOpacity disabled={firewallPage<=1} onPress={()=>setFirewallPage(prev=>prev-1)} style={{marginHorizontal:8}}>
-                        <Text style={{color: firewallPage>1 ? '#50fa7b':'#888'}}>◀</Text>
-                      </TouchableOpacity>
-                      <Text style={{color:'#fff'}}>{firewallPage} / {totalPages}</Text>
-                      <TouchableOpacity disabled={firewallPage>=totalPages} onPress={()=>setFirewallPage(prev=>prev+1)} style={{marginHorizontal:8}}>
-                        <Text style={{color: firewallPage<totalPages ? '#50fa7b':'#888'}}>▶</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  <PaginatedList
+                    items={firewallData.blocked as string[] ?? []}
+                    itemsPerPage={ipsPerPage}
+                    renderItem={(ip, idx) => <Text key={idx} style={styles.description}>{String(ip)}</Text>}
+                    title="IPs Bloqueados"
+                  />
                 </View>
-
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={[styles.description,{color:'#38bdf8',fontWeight:'bold'}]}>Potential IPs</Text>
                   {potentialIPs.map((ip, idx) => (<Text key={idx} style={styles.description}>{ip}</Text>))}
                 </View>
               </View>
 
-              {/* Botão para abrir modal */}
               <TouchableOpacity
                 style={{ backgroundColor: '#38bdf8', padding: 12, borderRadius: 8, marginTop: 12 }}
                 onPress={() => setModalVisible(true)}
@@ -274,32 +294,20 @@ export default function TelaPrinc() {
                 <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Adicionar Rota</Text>
               </TouchableOpacity>
 
-              {/* Exibe rotas e regras criadas com paginação */}
-              <View style={{marginTop:16}}>
-                <Text style={[styles.description,{color:'#34d399',fontWeight:'bold'}]}>Regras e Rotas Criadas</Text>
-                {paginatedRules.length > 0 ? (
-                  paginatedRules.map((r, idx) => (<Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>))
-                ) : (
-                  <Text style={styles.description}>Nenhuma rota aplicada ainda.</Text>
-                )}
+              {/* Regras e Rotas com paginação */}
+              <PaginatedList
+                items={rules}
+                itemsPerPage={rulesPerPage}
+                renderItem={(r, idx) => <Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>}
+                title="Regras e Rotas Criadas"
+              />
 
-                {totalRulesPages > 1 && (
-                  <View style={{flexDirection:'row',justifyContent:'center',marginTop:4}}>
-                    <TouchableOpacity disabled={rulesPage<=1} onPress={()=>setRulesPage(prev=>prev-1)} style={{marginHorizontal:8}}>
-                      <Text style={{color: rulesPage>1 ? '#50fa7b':'#888'}}>◀</Text>
-                    </TouchableOpacity>
-                    <Text style={{color:'#fff'}}>{rulesPage} / {totalRulesPages}</Text>
-                    <TouchableOpacity disabled={rulesPage>=totalRulesPages} onPress={()=>setRulesPage(prev=>prev+1)} style={{marginHorizontal:8}}>
-                      <Text style={{color: rulesPage<totalRulesPages ? '#50fa7b':'#888'}}>▶</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              {/* Exibe JSON cru */}
-              <View style={{marginTop:16}}>
-                <Text style={[styles.description,{color:'#facc15',fontWeight:'bold'}]}>JSON Obtido</Text>
-                {rawJson ? renderJson(rawJson) : <Text style={styles.description}>Nenhum dado recebido ainda.</Text>}
+              {/* JSON Avançado */}
+              <View style={{ marginTop: 16, padding: 12, backgroundColor: '#1e293b', borderRadius: 12, maxHeight: 400 }}>
+                <Text style={[styles.description,{color:'#facc15',fontWeight:'bold',marginBottom:4}]}>JSON Obtido</Text>
+                <ScrollView>
+                  {rawJson ? <JsonRenderer obj={rawJson} /> : <Text style={styles.description}>Nenhum dado recebido ainda.</Text>}
+                </ScrollView>
               </View>
             </>
           ) : <Text style={styles.description}>Carregando dados do firewall...</Text>}
@@ -333,9 +341,7 @@ export default function TelaPrinc() {
             />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#50fa7b' }]} onPress={() => {
-                if (!newDestination || !newGateway) {
-                  return;
-                }
+                if (!newDestination || !newGateway) return;
                 saveRoute(newDestination, newGateway);
                 setNewDestination('');
                 setNewGateway('');
