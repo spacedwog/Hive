@@ -30,8 +30,6 @@ export default class Esp32Service {
     this.status.ip =
       this.mode === "Soft-AP" ? Esp32Service.SOFTAP_IP : Esp32Service.STA_IP;
 
-    this.status.ip += "/status";
-
     console.log(`🔄 Modo alterado para ${this.mode} (${this.status.ip})`);
     return this.mode;
   }
@@ -47,7 +45,7 @@ export default class Esp32Service {
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      return await res.json();
+      return await res.json(); // sempre JSON
     } finally {
       clearTimeout(timeout);
     }
@@ -59,9 +57,7 @@ export default class Esp32Service {
   }
 
   private startReconnectLoop(path: string, intervalMs = 5000) {
-    if (this.reconnectInterval) {
-      return;
-    } // já rodando
+    if (this.reconnectInterval) return; // já rodando
 
     console.warn("🔁 Iniciando loop de reconexão automática...");
 
@@ -90,10 +86,7 @@ export default class Esp32Service {
     const endpoint = this.status.led_builtin === "on" ? "L" : "H";
     try {
       const json = await this.request(endpoint);
-      this.status = {
-        ...this.status,
-        ...json,
-      };
+      this.status = { ...this.status, ...json };
     } catch (err) {
       console.error(
         `⚠️ Erro ao alternar LED em ${this.mode} (${this.status.ip}):`,
@@ -122,11 +115,7 @@ export default class Esp32Service {
       const sensor_db =
         json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1));
 
-      this.status = {
-        ...this.status,
-        ...json,
-        sensor_db,
-      };
+      this.status = { ...this.status, ...json, sensor_db };
 
       this.stopReconnectLoop();
       return this.status;
@@ -142,11 +131,7 @@ export default class Esp32Service {
         const sensor_db =
           json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1));
 
-        this.status = {
-          ...this.status,
-          ...json,
-          sensor_db,
-        };
+        this.status = { ...this.status, ...json, sensor_db };
 
         return this.status;
       } catch {

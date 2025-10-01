@@ -23,11 +23,30 @@ export default function StreamScreen() {
   const [frameUrl, setFrameUrl] = useState(`${status.ip}/stream?${Date.now()}`);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  // estados do modal de erro
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   const cameraRef = useRef<CameraView>(null);
   const VERCEL_API_URL = `${VERCEL_URL}/api/esp32-camera`;
+
+  // Exibir erro no modal
+  const showError = (err: any) => {
+    let msg = "";
+    if (typeof err === "string") {
+      msg = err;
+    } else if (err instanceof Error) {
+             msg = err.message;
+           } else {
+                     try {
+                       msg = JSON.stringify(err, null, 2);
+                     } catch {
+                       msg = String(err);
+                     }
+                   }
+    setErrorMessage(msg);
+    setErrorModalVisible(true);
+  };
 
   // Solicita permissão para câmera
   useEffect(() => {
@@ -50,9 +69,8 @@ export default function StreamScreen() {
     try {
       await esp32Service.toggleLed();
       setStatus({ ...esp32Service.status });
-    } catch (error: any) {
-      setErrorMessage(error?.message || "Erro ao acessar ESP32.");
-      setModalVisible(true);
+    } catch (error) {
+      showError(error);
     }
   };
 
@@ -62,9 +80,8 @@ export default function StreamScreen() {
       esp32Service.switchMode();
       setMode(esp32Service.mode);
       setStatus({ ...esp32Service.status });
-    } catch (error: any) {
-      setErrorMessage(error?.message || "Erro ao alternar modo de conexão.");
-      setModalVisible(true);
+    } catch (error) {
+      showError(error);
     }
   };
 
@@ -74,9 +91,8 @@ export default function StreamScreen() {
       try {
         const newStatus = await esp32Service.fetchStatus();
         setStatus({ ...newStatus });
-      } catch (err: any) {
-        setErrorMessage(err?.message || "Erro ao atualizar status do ESP32.");
-        setModalVisible(true);
+      } catch (err) {
+        showError(err);
       }
     }, 2000);
     return () => clearInterval(interval);
@@ -101,11 +117,10 @@ export default function StreamScreen() {
         if (result.success) {
           console.log("✅ Dados enviados para Vercel com sucesso!", result.logData);
         } else {
-          throw new Error("Falha ao enviar dados para Vercel.");
+          showError(result);
         }
-      } catch (err: any) {
-        setErrorMessage(err?.message || "Erro ao enviar dados para Vercel.");
-        setModalVisible(true);
+      } catch (err) {
+        showError(err);
       }
     },
     [status, VERCEL_API_URL]
@@ -124,11 +139,9 @@ export default function StreamScreen() {
         setCapturedPhoto(photo.uri);
         console.log("📸 Foto capturada:", photo.uri);
 
-        // Envia status + foto para Vercel
         await sendDataToVercel(photo.base64);
-      } catch (err: any) {
-        setErrorMessage(err?.message || "Erro ao capturar/enviar foto.");
-        setModalVisible(true);
+      } catch (err) {
+        showError(err);
       }
     }
   };
@@ -136,7 +149,11 @@ export default function StreamScreen() {
   // Envio periódico do status ESP32 (sem foto)
   useEffect(() => {
     const interval = setInterval(async () => {
-      await sendDataToVercel();
+      try {
+        await sendDataToVercel();
+      } catch (err) {
+        showError(err);
+      }
     }, 5000); // a cada 5s
     return () => clearInterval(interval);
   }, [sendDataToVercel, status]);
@@ -219,22 +236,24 @@ export default function StreamScreen() {
         </View>
       </ScrollView>
 
-      {/* Modal de Erros */}
+      {/* Modal de erros */}
       <Modal
-        visible={modalVisible}
+        visible={errorModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => setErrorModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>⚠️ Erro</Text>
-            <Text style={styles.modalMessage}>{errorMessage}</Text>
+        <View style={styles.modalBackground}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>⚠️ Erro capturado</Text>
+            <ScrollView style={{ maxHeight: 200 }}>
+              <Text style={styles.modalText}>{errorMessage}</Text>
+            </ScrollView>
             <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setModalVisible(false)}
+              style={styles.modalButton}
+              onPress={() => setErrorModalVisible(false)}
             >
-              <Text style={styles.closeButtonText}>Fechar</Text>
+              <Text style={{ color: "#fff", fontWeight: "bold" }}>Fechar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -288,40 +307,30 @@ const styles = StyleSheet.create({
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
 
-  modalOverlay: {
+  modalBackground: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    alignItems: "center",
     justifyContent: "center",
-  },
-  modalContent: {
-    backgroundColor: "#222",
-    padding: 20,
-    borderRadius: 12,
-    width: "80%",
     alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.7)",
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#f33",
-    marginBottom: 10,
+  modalBox: {
+    width: "85%",
+    backgroundColor: "#1e1e1e",
+    borderRadius: 10,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 5,
   },
-  modalMessage: {
-    fontSize: 16,
-    color: "#fff",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  closeButton: {
-    backgroundColor: "#0af",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#f55", marginBottom: 10 },
+  modalText: { color: "#fff", fontSize: 14 },
+  modalButton: {
+    marginTop: 15,
+    backgroundColor: "#f55",
+    padding: 10,
     borderRadius: 8,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    color: "#fff",
-    fontWeight: "bold",
+    alignItems: "center",
   },
 });
