@@ -1,0 +1,20 @@
+name: Remover Workflows
+
+on:
+  workflow_dispatch: # dispara manualmente para evitar loops automáticos
+
+jobs:
+  delete-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Remover todos os workflows e commitar
+        run: |
+          rm -rf .github/workflows/*
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -a -m "Commited" || echo "Nenhuma alteração para commitar"
+          git push origin main
