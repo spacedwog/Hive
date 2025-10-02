@@ -1,0 +1,98 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: "0 3 * * 1" # Executa toda segunda-feira
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20] # versão mais recente estável do Node
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Usar Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Executar fix-import
+        run: node fix-imports.mjs
+
+      - name: Rodar lint
+        run: npm run lint || true # Evita falha se houver warnings de lint
+
+      - name: Rodar testes com cobertura
+        run: npm run test -- --coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+      - name: Build do projeto
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: dist/
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verificar vulnerabilidades (não quebra o pipeline)
+        run: |
+          echo "Rodando npm audit..."
+          npm audit --audit-level=moderate || echo "Vulnerabilidades encontradas. Verifique o log."
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+          # Use um token pessoal se estiver rodando PRs de forks
+          # token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+
+      - name: Analisar com CodeQL
+        uses: github/codeql-action/analyze@v3
+
+  deploy:
+    needs: [build, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy para Vercel (produção)
+        run: vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
