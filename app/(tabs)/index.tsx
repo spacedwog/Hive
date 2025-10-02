@@ -1,9 +1,9 @@
 // eslint-disable-next-line import/no-unresolved
 import { VERCEL_URL } from '@env';
+import { useAsyncStorage } from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import {
-  Animated,
-  Easing,
+  Animated, Easing,
   Modal,
   ScrollView,
   StyleSheet,
@@ -15,13 +15,19 @@ import {
 import BottomNav from '../../hive_body/BottomNav.tsx';
 import { FirewallUtils, Rule } from '../../hive_security/hive_ip/hive_firewall.tsx';
 
+interface BlockedEntry {
+  ip: string;
+  reason?: string;
+  timestamp: string;
+}
+
 export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [firewallData, setFirewallData] = useState<any | null>(null);
   const [, setRawJson] = useState<any | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
   const [potentialIPs, setPotentialIPs] = useState<string[]>([]);
-  const [blockedHistory, setBlockedHistory] = useState<string[]>([]);
+  const [blockedHistory, setBlockedHistory] = useState<BlockedEntry[]>([]);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [newDestination, setNewDestination] = useState('');
@@ -57,7 +63,37 @@ export default function TelaPrinc() {
     });
   };
 
-  // Carrega Potential IPs
+  // --- Persistência do histórico de bloqueios com AsyncStorage correto ---
+  const blockedHistoryStorage = useAsyncStorage('blockedHistory');
+
+  useEffect(() => {
+    const loadBlockedHistory = async () => {
+      try {
+        const json = await blockedHistoryStorage.getItem();
+        if (json) setBlockedHistory(JSON.parse(json));
+      } catch (err: any) {
+        console.error('Erro ao carregar blockedHistory:', err);
+        setErrorMessage(err?.message || 'Falha ao carregar histórico de bloqueios');
+        setErrorModalVisible(true);
+      }
+    };
+    loadBlockedHistory();
+  }, []);
+
+  useEffect(() => {
+    const saveBlockedHistory = async () => {
+      try {
+        await blockedHistoryStorage.setItem(JSON.stringify(blockedHistory));
+      } catch (err: any) {
+        console.error('Erro ao salvar blockedHistory:', err);
+        setErrorMessage(err?.message || 'Falha ao salvar histórico de bloqueios');
+        setErrorModalVisible(true);
+      }
+    };
+    saveBlockedHistory();
+  }, [blockedHistory]);
+
+  // --- Carrega Potential IPs ---
   useEffect(() => {
     const loadPotentialIPs = async () => {
       const domains = [
@@ -84,7 +120,7 @@ export default function TelaPrinc() {
     if (accessCode && potentialIPs.length === 0) loadPotentialIPs();
   }, [accessCode, potentialIPs.length]);
 
-  // Verifica firewall, risco e bloqueios automáticos
+  // --- Verifica firewall, risco e bloqueios automáticos ---
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '') return;
 
@@ -93,9 +129,7 @@ export default function TelaPrinc() {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
         const text = await response.text();
         let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
+        try { data = JSON.parse(text); } catch {
           console.error('Resposta inválida da API:', text);
           setErrorMessage('Erro: resposta da API inválida');
           setErrorModalVisible(true);
@@ -112,11 +146,10 @@ export default function TelaPrinc() {
 
         setFirewallData(data.data);
         const risk = FirewallUtils.calculateRiskLevel(data.data);
-
-        // Avalia rotas automáticas usando IP conectado + Potential IPs
         const connectedIP = data.data.ipConectado; 
+
         for (const potentialIP of potentialIPs) {
-          if (blockedHistory.includes(potentialIP)) continue;
+          if (blockedHistory.find(b => b.ip === potentialIP)) continue;
 
           const routeRisk = FirewallUtils.evaluateRouteRisk({
             destination: connectedIP,
@@ -125,7 +158,7 @@ export default function TelaPrinc() {
 
           if (routeRisk.level !== 'Baixo') {
             // Deleta rota antiga
-            await fetch(`${VERCEL_URL}/api/routes`, {
+            await fetch(`${VERCEL_URL}/api/firewall?action=routes`, {
               method: "DELETE",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ destination: connectedIP })
@@ -138,19 +171,22 @@ export default function TelaPrinc() {
               body: JSON.stringify({ ip: potentialIP })
             });
 
-            setBlockedHistory(prev => [...prev, potentialIP]);
+            // Adiciona ao histórico detalhado
+            setBlockedHistory(prev => [
+              ...prev,
+              {
+                ip: potentialIP,
+                reason: routeRisk.level !== 'Baixo' ? routeRisk.level : 'Automático',
+                timestamp: new Date().toISOString(),
+              }
+            ]);
+
             await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
           }
         }
 
-        // Caso tentativas bloqueadas >= regras aplicadas
-        if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
-          // Cria nova regra e encripta os dados
-          const dest = `Encrypted-${Date.now()}`;
-          const gateway = `192.0.2.${Math.floor(Math.random() * 255)}`;
-          await FirewallUtils.saveRoute(dest, gateway, setRules, setErrorModalVisible, setErrorMessage);
-        } else if (data.data.tentativasBloqueadas === data.data.regrasAplicadas) {
-          // Cria nova rota normal
+        // Criação de novas rotas caso necessário
+        if (data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
           const dest = `Route-${Date.now()}`;
           const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
           await FirewallUtils.saveRoute(dest, gateway, setRules, setErrorModalVisible, setErrorMessage);
@@ -168,7 +204,6 @@ export default function TelaPrinc() {
     checkAndBlockHighRiskRoutes();
     const interval = setInterval(checkAndBlockHighRiskRoutes, 5000);
     return () => clearInterval(interval);
-
   }, [accessCode, potentialIPs, blockedHistory]);
 
   if (!accessCode || accessCode.trim() === '')
@@ -209,7 +244,7 @@ export default function TelaPrinc() {
                   <FirewallUtils.PaginatedList
                     items={firewallData.blocked as string[] ?? []}
                     itemsPerPage={ipsPerPage}
-                    renderItem={(ip: any, idx) => <Text key={idx} style={styles.description}>{String(ip)}</Text>}
+                    renderItem={(ip: string, idx: number) => <Text key={idx} style={styles.description}>{ip}</Text>}
                     title="IPs Bloqueados"
                   />
                 </View>
@@ -226,17 +261,30 @@ export default function TelaPrinc() {
                 <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Adicionar Rota</Text>
               </TouchableOpacity>
 
+              {/* Histórico de bloqueios detalhado */}
               <FirewallUtils.PaginatedList
                 items={blockedHistory}
                 itemsPerPage={5}
-                renderItem={(ip, idx) => <Text key={idx} style={styles.description}>{ip}</Text>}
+                renderItem={(entry: BlockedEntry, idx: number) => (
+                  <View key={idx} style={{ marginBottom: 6 }}>
+                    <Text style={styles.description}>
+                      IP: <Text style={{ fontWeight: 'bold' }}>{entry.ip}</Text>
+                    </Text>
+                    <Text style={[styles.description, { color: '#f87171' }]}>
+                      Motivo: {entry.reason}
+                    </Text>
+                    <Text style={[styles.description, { color: '#94a3b8' }]}>
+                      Bloqueado em: {new Date(entry.timestamp).toLocaleString()}
+                    </Text>
+                  </View>
+                )}
                 title="Histórico de bloqueios"
               />
 
               <FirewallUtils.PaginatedList
                 items={rules}
                 itemsPerPage={rulesPerPage}
-                renderItem={(r, idx) => <Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>}
+                renderItem={(r: Rule, idx: number) => <Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>}
                 title="Regras e Rotas Criadas"
               />
             </>
@@ -293,12 +341,11 @@ export default function TelaPrinc() {
                   return;
                 }
                 try {
-                  const resp = await fetch(`${VERCEL_URL}/api/routes`, {
+                  const resp = await fetch(`${VERCEL_URL}/api/firewall?action=routes`, {
                     method: "DELETE",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ destination: newDestination.trim() }),
                   });
-
                   const text = await resp.text();
                   let data;
                   try { data = JSON.parse(text); } 
