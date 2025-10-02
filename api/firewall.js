@@ -154,9 +154,7 @@ class FirewallInfo {
 
         lines.forEach((line) => {
           const parts = line.trim().split(/\s+/);
-          if (parts.length < 4) {
-            return;
-          }
+          if (parts.length < 4) return;
 
           let protocol = parts[0].toUpperCase();
           let src, dst, status;
@@ -188,33 +186,97 @@ export default async function handler(req, res) {
   const { method, query, body } = req;
   const { action } = query;
 
+  let parsedBody = body;
+  if (typeof body === "string") {
+    try { parsedBody = JSON.parse(body); } catch { parsedBody = {}; }
+  }
+
   try {
-    if (method === "GET" && action === "blocked") {
-      return res.status(200).json(FirewallInfo.getBlocked());
-    }
+    // GET informações do firewall
     if (method === "GET" && action === "info") {
       return res.status(200).json(FirewallInfo.getInfo());
     }
+
+    // GET IPs bloqueados
+    if (method === "GET" && action === "blocked") {
+      return res.status(200).json(FirewallInfo.getBlocked());
+    }
+
+    // POST block
     if (method === "POST" && action === "block") {
-      return res.status(200).json(FirewallInfo.block(body?.ip));
+      return res.status(200).json(FirewallInfo.block(parsedBody?.ip));
     }
+
+    // POST unblock
     if (method === "POST" && action === "unblock") {
-      return res.status(200).json(FirewallInfo.unblock(body?.ip));
+      return res.status(200).json(FirewallInfo.unblock(parsedBody?.ip));
     }
-    if (method === "POST" && action === "route") {
-      return res.status(200).json(FirewallInfo.addRoute(body?.destination, body?.gateway));
-    }
+
+    // POST NAT
     if (method === "POST" && action === "nat") {
-      return res.status(200).json(FirewallInfo.addNAT(body?.internalIP, body?.externalIP));
+      return res.status(200).json(FirewallInfo.addNAT(parsedBody?.internalIP, parsedBody?.externalIP));
     }
+
+    // POST VPN
     if (method === "POST" && action === "vpn") {
-      return res.status(200).json(FirewallInfo.setVPN(body?.enable));
+      return res.status(200).json(FirewallInfo.setVPN(parsedBody?.enable));
     }
+
+    // GET conexões
     if (method === "GET" && action === "connections") {
       return res.status(200).json(await FirewallInfo.getConnections());
     }
-    if (method === "GET" && !action) {
-      return res.status(200).json(ApiResponse.success("Bem-vindo! Seu acesso foi permitido pelo firewall.", { project: "HIVE PROJECT", version: "1.2.0", platform: os.platform() }));
+
+    // Rotas: GET, POST, DELETE
+    if (action === "routes") {
+      if (method === "GET") {
+        return res.status(200).json({
+          success: true,
+          routes: FirewallInfo.routingTable,
+          rules: FirewallInfo.rules || FirewallInfo.routingTable,
+        });
+      }
+
+      if (method === "POST") {
+        const { destination, gateway } = parsedBody || {};
+        if (!destination || !gateway) {
+          return res.status(400).json({ success: false, error: { code: "INVALID_INPUT", message: "Destination e gateway são obrigatórios." } });
+        }
+        const result = FirewallInfo.addRoute(destination, gateway);
+        return res.status(200).json(result);
+      }
+
+      if (method === "DELETE") {
+        const { destination } = parsedBody || {};
+        if (!destination) {
+          return res.status(400).json({ success: false, error: { code: "INVALID_ROUTE", message: "Destination é obrigatório para remoção." } });
+        }
+        const index = FirewallInfo.routingTable.findIndex(r => r.destination === destination);
+        if (index === -1) {
+          return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Rota não encontrada." } });
+        }
+        FirewallInfo.routingTable.splice(index, 1);
+        if (FirewallInfo.rules) {
+          FirewallInfo.rules = FirewallInfo.rules.filter(r => r.destination !== destination);
+        }
+        return res.status(200).json({
+          success: true,
+          message: `Rota ${destination} removida.`,
+          routes: FirewallInfo.routingTable,
+          rules: FirewallInfo.rules || FirewallInfo.routingTable,
+        });
+      }
+
+      return res.status(405).json({ success: false, error: { code: "METHOD_NOT_ALLOWED", message: `Método ${method} não permitido para routes.` } });
+    }
+
+    // Rota padrão sem action
+    if (!action && method === "GET") {
+      return res.status(200).json(ApiResponse.success("Bem-vindo! Seu acesso foi permitido pelo firewall.", {
+        project: "HIVE PROJECT",
+        version: "1.2.0",
+        platform: os.platform(),
+      }));
     }
 
     return res.status(404).json(ApiResponse.error("NOT_FOUND", "Rota não encontrada."));
@@ -224,5 +286,5 @@ export default async function handler(req, res) {
   }
 }
 
-// Exporta a classe para uso em outras APIs
+// Exporta a classe para uso externo
 export { FirewallInfo };

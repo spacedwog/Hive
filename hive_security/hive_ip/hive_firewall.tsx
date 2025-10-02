@@ -152,7 +152,7 @@ export class FirewallUtils {
   // -------- Save Route --------
   static async saveRoute(destination: string, gateway: string, setRules: any, setErrorModalVisible: any, setErrorMessage: any) {
     try {
-      const resp = await fetch(`${VERCEL_URL}/api/routes`, {
+      const resp = await fetch(`${VERCEL_URL}/api/firewall?action=routes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ destination, gateway }),
@@ -173,7 +173,7 @@ export class FirewallUtils {
   // -------- Fetch and Save Routes --------
   static async fetchAndSaveRoutes(setRules: any, setRawJson: any, setErrorMessage: any, setErrorModalVisible: any) {
     try {
-      const resp = await fetch(`${VERCEL_URL}/api/routes`);
+      const resp = await fetch(`${VERCEL_URL}/api/firewall?action=routes`, { method: "GET" });
       const data = await resp.json();
       setRawJson((prev: any) => ({ ...prev, routes: data }));
 
