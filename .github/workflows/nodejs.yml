@@ -74,7 +74,7 @@ jobs:
           npm audit --audit-level=moderate || echo "Vulnerabilidades encontradas. Verifique o log."
 
       - name: Inicializar CodeQL
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript
           # Use um token pessoal se estiver rodando PRs de forks
@@ -95,4 +95,4 @@ jobs:
         run: npm install -g vercel
 
       - name: Deploy para Vercel (produção)
-        run: vercel --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
