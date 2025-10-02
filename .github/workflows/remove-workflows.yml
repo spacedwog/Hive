@@ -14,21 +14,21 @@ jobs:
       - name: Instalar jq
         run: sudo apt-get install -y jq
 
-      - name: Deletar todos os workflow runs (exceto o atual)
+      - name: Deletar todos os workflow runs
         run: |
-          REPO=${Hive}
-          TOKEN=${{ secrets.GITHUB_TOKEN }}
-          CURRENT_RUN_ID=${209}
+          REPO="$spacedwog/Hive"
+          TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          CURRENT_RUN_ID="$209"
 
           echo "Repositório: $REPO"
           echo "Run atual: $CURRENT_RUN_ID"
 
-          # Busca todos os workflow runs
+          # Busca todos os workflow runs (últimos 100)
           runs=$(curl -s -H "Authorization: Bearer $TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/actions/runs?per_page=100")
 
-          # Percorre todos os IDs dos runs
+          # Percorre todos os IDs dos runs e deleta
           echo "$runs" | jq -r '.workflow_runs[].id' | while read run_id; do
             if [ "$run_id" != "$CURRENT_RUN_ID" ]; then
               echo "Deletando run $run_id..."
