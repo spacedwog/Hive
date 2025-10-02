@@ -13,7 +13,10 @@
     "skipLibCheck": true,
     "typeRoots": ["./src/types", "./node_modules/@types"],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "/components/*": ["./app/components/*"],
+      "/hooks/*": ["./app/hooks/*"],
+      "/constants/*": ["./app/constants/*"]
     }
   },
   "include": [
@@ -23,6 +26,7 @@
     "**/*.ts",
     "**/*.tsx",
     "api/lib/sensor/SensorApiHandler.js",
-    "api/firewall.js"
+    "api/firewall.js",
+    "src/types/**/*.d.ts"
   ]
 }
