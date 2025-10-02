@@ -2,11 +2,9 @@ name: CI/CD
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches: [ main ] # Apenas deploy quando push direto para main
   schedule:
-    - cron: "0 3 * * 1" # Executa toda segunda-feira
+    - cron: "0 3 * * 1" # Executa build automatizado toda segunda-feira (opcional)
 
 permissions:
   contents: read
@@ -15,10 +13,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        node-version: [20] # versão mais recente estável do Node
+        node-version: [20]
 
     steps:
       - name: Checkout código
@@ -37,7 +34,7 @@ jobs:
         run: node fix-imports.mjs
 
       - name: Rodar lint
-        run: npm run lint || true # Evita falha se houver warnings de lint
+        run: npm run lint || true
 
       - name: Rodar testes com cobertura
         run: npm run test -- --coverage
@@ -68,7 +65,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Verificar vulnerabilidades (não quebra o pipeline)
+      - name: Verificar vulnerabilidades
         run: |
           echo "Rodando npm audit..."
           npm audit --audit-level=moderate || echo "Vulnerabilidades encontradas. Verifique o log."
@@ -77,8 +74,6 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: javascript
-          # Use um token pessoal se estiver rodando PRs de forks
-          # token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
 
       - name: Analisar com CodeQL
         uses: github/codeql-action/analyze@v3
@@ -86,7 +81,7 @@ jobs:
   deploy:
     needs: [build, security]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Evita deploys de PRs e cron
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
