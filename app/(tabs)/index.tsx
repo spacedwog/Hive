@@ -68,6 +68,7 @@ export default function TelaPrinc() {
   const loadBlockedHistory = async () => {
     try {
       const data = await SecureStore.getItemAsync('blockedHistory');
+      console.log('Dados carregados do SecureStore:', data);
       if (data) setBlockedHistory(JSON.parse(data));
     } catch (err: any) {
       console.error('Erro ao carregar blockedHistory:', err);
@@ -91,7 +92,8 @@ export default function TelaPrinc() {
   }, []);
 
   useEffect(() => {
-    saveBlockedHistory(blockedHistory);
+    // Salva o histórico sempre que ele mudar
+    if (blockedHistory.length > 0) saveBlockedHistory(blockedHistory);
   }, [blockedHistory]);
 
   // --- Carrega Potential IPs ---
@@ -206,7 +208,7 @@ export default function TelaPrinc() {
     checkAndBlockHighRiskRoutes();
     const interval = setInterval(checkAndBlockHighRiskRoutes, 5000);
     return () => clearInterval(interval);
-  }, [accessCode, potentialIPs, blockedHistory]);
+  }, [accessCode, potentialIPs]); // removido blockedHistory das dependências
 
   if (!accessCode || accessCode.trim() === '')
     return (
@@ -265,7 +267,7 @@ export default function TelaPrinc() {
 
               {/* Histórico de bloqueios detalhado */}
               <FirewallUtils.PaginatedList
-                items={blockedHistory}
+                items={blockedHistory.length ? blockedHistory : []}
                 itemsPerPage={5}
                 renderItem={(entry: BlockedEntry, idx: number) => (
                   <View key={idx} style={{ marginBottom: 6 }}>
@@ -413,7 +415,7 @@ const styles = StyleSheet.create({
   card:{ borderRadius:16,padding:20,shadowColor:'#000',shadowOpacity:0.3,shadowRadius:12,width:'100%',marginBottom:20 },
   description:{ fontSize:16,color:'#e2e8f0',lineHeight:24 },
   loginContainer:{ flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#0f172a' },
-  loginBtn:{ backgroundColor:'#50fa7b',borderRadius:8,paddingVertical:8,paddingHorizontal:24,marginTop:12 },
+  loginBtn:{ backgroundColor:'#50fa7b',borderRadius:8,paddingVertical:8,paddingHorizontal:24, marginTop:12 },
   modalOverlay:{ flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(0,0,0,0.5)' },
   modalContent:{ backgroundColor:'#0f172a', padding:24, borderRadius:16, width:'80%' },
   input:{ borderWidth:1, borderColor:'#94a3b8', borderRadius:8, padding:8, color:'#fff', marginTop:8 },
