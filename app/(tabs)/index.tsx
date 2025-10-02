@@ -18,7 +18,7 @@ import { FirewallUtils, Rule } from '../../hive_security/hive_ip/hive_firewall.t
 export default function TelaPrinc() {
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [firewallData, setFirewallData] = useState<any | null>(null);
-  const [ , setRawJson] = useState<any | null>(null);
+  const [, setRawJson] = useState<any | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
   const [potentialIPs, setPotentialIPs] = useState<string[]>([]);
   const [blockedHistory, setBlockedHistory] = useState<string[]>([]);
@@ -57,6 +57,7 @@ export default function TelaPrinc() {
     });
   };
 
+  // Carrega Potential IPs
   useEffect(() => {
     const loadPotentialIPs = async () => {
       const domains = [
@@ -83,10 +84,11 @@ export default function TelaPrinc() {
     if (accessCode && potentialIPs.length === 0) loadPotentialIPs();
   }, [accessCode, potentialIPs.length]);
 
+  // Verifica firewall, risco e bloqueios automáticos
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '') return;
 
-    const fetchFirewallData = async () => {
+    const checkAndBlockHighRiskRoutes = async () => {
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
         const data = await response.json();
@@ -98,22 +100,40 @@ export default function TelaPrinc() {
         }
 
         setFirewallData(data.data);
+
         const risk = FirewallUtils.calculateRiskLevel(data.data);
 
-        if ((risk.level === 'Alto' || risk.level === 'Crítico') && potentialIPs.length > 0) {
-          const ipParaBloquear = potentialIPs.find(ip => !blockedHistory.includes(ip))
-            || `192.168.1.${Math.floor(Math.random() * 254 + 1)}`;
-          if (!blockedHistory.includes(ipParaBloquear)) {
-            setBlockedHistory(prev => [...prev, ipParaBloquear]);
-            await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
-              method:'POST',
-              headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({ ip: ipParaBloquear })
+        // Avalia rotas automáticas usando IP conectado + Potential IPs
+        const connectedIP = data.data.ipConectado; // IP do STA ou Soft-AP
+        for (const potentialIP of potentialIPs) {
+          if (blockedHistory.includes(potentialIP)) continue;
+
+          const routeRisk = FirewallUtils.evaluateRouteRisk({
+            destination: connectedIP,
+            gateway: potentialIP
+          });
+
+          if (routeRisk.level !== 'Baixo') {
+            // Deleta rota antiga
+            await fetch(`${VERCEL_URL}/api/routes`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ destination: connectedIP })
             });
+
+            // Bloqueia IP
+            await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ip: potentialIP })
+            });
+
+            setBlockedHistory(prev => [...prev, potentialIP]);
             await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
           }
         }
 
+        // Atualiza rotas caso tentativas bloqueadas >= regras aplicadas
         if (data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
           await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
         }
@@ -121,14 +141,15 @@ export default function TelaPrinc() {
       } catch (err: any) {
         setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
         setFirewallData(null);
-        setErrorMessage(err?.message || 'Falha no fetch firewall');
+        setErrorMessage(err?.message || 'Falha ao processar rotas');
         setErrorModalVisible(true);
       }
     };
 
-    fetchFirewallData();
-    const interval = setInterval(fetchFirewallData, 5000);
+    checkAndBlockHighRiskRoutes();
+    const interval = setInterval(checkAndBlockHighRiskRoutes, 5000);
     return () => clearInterval(interval);
+
   }, [accessCode, potentialIPs, blockedHistory]);
 
   if (!accessCode || accessCode.trim() === '')
@@ -169,7 +190,7 @@ export default function TelaPrinc() {
                   <FirewallUtils.PaginatedList
                     items={firewallData.blocked as string[] ?? []}
                     itemsPerPage={ipsPerPage}
-                    renderItem={(ip: any, idx: React.Key | null | undefined) => <Text key={idx} style={styles.description}>{String(ip)}</Text>}
+                    renderItem={(ip: any, idx) => <Text key={idx} style={styles.description}>{String(ip)}</Text>}
                     title="IPs Bloqueados"
                   />
                 </View>
@@ -189,14 +210,14 @@ export default function TelaPrinc() {
               <FirewallUtils.PaginatedList
                 items={blockedHistory}
                 itemsPerPage={5}
-                renderItem={(ip: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined, idx: React.Key | null | undefined) => <Text key={idx} style={styles.description}>{ip}</Text>}
+                renderItem={(ip, idx) => <Text key={idx} style={styles.description}>{ip}</Text>}
                 title="Histórico de bloqueios"
               />
 
               <FirewallUtils.PaginatedList
                 items={rules}
                 itemsPerPage={rulesPerPage}
-                renderItem={(r: { destination: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; gateway: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; }, idx: React.Key | null | undefined) => <Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>}
+                renderItem={(r, idx) => <Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>}
                 title="Regras e Rotas Criadas"
               />
             </>

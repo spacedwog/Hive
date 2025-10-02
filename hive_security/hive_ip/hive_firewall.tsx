@@ -137,6 +137,24 @@ export class FirewallUtils {
     return { level: nivel, color: cor, tentativas, regras, ratio };
   }
 
+  // -------- Evaluate Route Risk --------
+  static evaluateRouteRisk({ destination, gateway }: { destination: string; gateway: string }) {
+    // Aqui você pode usar lógica de análise simples ou mais avançada
+    // Exemplo: risco baseado em IP privado, IP conhecido ou padrão
+    const blockedRanges = ['192.168.', '10.', '172.16.']; // Exemplo de blocos internos
+    let level = 'Baixo';
+
+    for (const prefix of blockedRanges) {
+      if (gateway.startsWith(prefix)) {
+        level = 'Alto';
+        break;
+      }
+    }
+
+    // Retorna objeto compatível com calculateRiskLevel
+    return { level, ratio: 1 };
+  }
+
   // -------- Save Route --------
   static async saveRoute(destination: string, gateway: string, setRules: any, setErrorModalVisible: any, setErrorMessage: any) {
     try {
