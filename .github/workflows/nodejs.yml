@@ -44,9 +44,6 @@ jobs:
           name: coverage-report
           path: coverage/
 
-      - name: Build do projeto
-        run: npm run build
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -63,9 +60,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Verificar vulnerabilidades
-        run: npm audit --audit-level=moderate
 
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@v2

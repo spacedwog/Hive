@@ -2,37 +2,31 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "jsx": "react-native",
-    "module": "NodeNext",
-    "target": "ES2021",
-    "moduleResolution": "NodeNext",
+    "module": "node16",
+    "target": "esnext",
+    "moduleResolution": "node16",
     "strict": true,
-    "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true,
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
+
+    "typeRoots": [
+      "./src/types",
+      "./node_modules/@types"
+    ],
+
     "paths": {
-      "@/*": ["app/*"],
-      "@components/*": ["app/components/*"],
-      "@hooks/*": ["app/hooks/*"],
-      "@constants/*": ["app/constants/*"]
-    },
-    "typeRoots": ["./src/types", "./node_modules/@types"]
+      "@/*": ["./*"]
+    }
   },
   "include": [
     "app",
-    "components",
-    "hooks",
     "env.d.ts",
     "victory-native.d.ts",
     "**/*.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules",
-    "babel.config.js",
-    "metro.config.js",
-    "jest.config.js"
-  ]
+    "**/*.tsx",
+    "api/lib/sensor/SensorApiHandler.js"
+, "api/firewall.js"  ]
 }
