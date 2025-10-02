@@ -125,6 +125,17 @@ export default function TelaPrinc() {
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '') return;
 
+    const getCurrentIP = async (): Promise<string> => {
+      try {
+        const resp = await fetch('https://api.ipify.org?format=json');
+        const data = await resp.json();
+        return data.ip; // IP público atual
+      } catch (err) {
+        console.error('Não foi possível obter IP público:', err);
+        return '127.0.0.1'; // fallback
+      }
+    };
+
     const checkAndBlockHighRiskRoutes = async () => {
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
@@ -147,8 +158,9 @@ export default function TelaPrinc() {
 
         setFirewallData(data.data);
         const risk = FirewallUtils.calculateRiskLevel(data.data);
-        const connectedIP = data.data.ipConectado; 
+        const connectedIP = data.data.ipConectado;
 
+        // Bloqueio automático de IPs de alto risco
         for (const potentialIP of potentialIPs) {
           if (blockedHistory.find(b => b.ip === potentialIP)) continue;
 
@@ -188,7 +200,7 @@ export default function TelaPrinc() {
 
         // Criação de novas rotas caso necessário
         if (data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
-          const dest = `Route-${Date.now()}`;
+          const dest = await getCurrentIP(); // usa o IP público atual
           const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
           await FirewallUtils.saveRoute(dest, gateway, setRules, setErrorModalVisible, setErrorMessage);
         }
