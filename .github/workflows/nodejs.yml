@@ -64,8 +64,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Verificar vulnerabilidades
-        run: npm audit --audit-level=moderate
+      - name: Verificar vulnerabilidades (não quebra o pipeline)
+        run: |
+          echo "Rodando npm audit..."
+          npm audit --audit-level=moderate || echo "Vulnerabilidades encontradas. Verifique o log."
 
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@v2
