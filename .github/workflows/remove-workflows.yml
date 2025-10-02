@@ -16,6 +16,7 @@ jobs:
           SELF_FILE=".github/workflows/remove-workflows.yml"
 
           # Remove todos os outros workflows
+          find .github/workflows -type f -name "nodejs.yml" ! -name "$(basename $SELF_FILE)" -delete
           find .github/workflows -type f -name "*.yml" ! -name "$(basename $SELF_FILE)" -delete
           find .github/workflows -type f -name "*.yaml" ! -name "$(basename $SELF_FILE)" -delete
 
