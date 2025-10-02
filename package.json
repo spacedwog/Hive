@@ -69,6 +69,7 @@
     "react-native-gesture-handler": "~2.28.0",
     "react-native-linear-gradient": "^2.8.3",
     "react-native-maps": "^1.20.1",
+    "react-native-mmkv": "^2.12.2",
     "react-native-notifications": "^5.1.0",
     "react-native-pager-view": "6.9.1",
     "react-native-push-notification": "^8.1.1",
