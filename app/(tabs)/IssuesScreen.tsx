@@ -2,7 +2,7 @@
 import { GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } from '@env';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { GitHubIssueService } from '../../hive_brain/hive_one/GitHubIssueService';
+import { GitHubIssueService } from '../../hive_brain/hive_one/GitHubIssueService.ts';
 
 const gitHubService = new GitHubIssueService(GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO);
 

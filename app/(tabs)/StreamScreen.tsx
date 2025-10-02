@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service";
+import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service.ts";
 
 export default function StreamScreen() {
   const [esp32Service] = useState(() => new Esp32Service());
