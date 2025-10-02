@@ -23,7 +23,6 @@ export class FirewallUtils {
 
   // -------- Paginated List Component --------
   static PaginatedList = function<T>({ items, itemsPerPage, renderItem, title }: PaginatedListProps<T>) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [page, setPage] = useState(1);
     const totalPages = Math.ceil(items.length / itemsPerPage);
     const paginatedItems = items.slice((page - 1) * itemsPerPage, page * itemsPerPage);
@@ -139,19 +138,14 @@ export class FirewallUtils {
 
   // -------- Evaluate Route Risk --------
   static evaluateRouteRisk({ destination, gateway }: { destination: string; gateway: string }) {
-    // Aqui você pode usar lógica de análise simples ou mais avançada
-    // Exemplo: risco baseado em IP privado, IP conhecido ou padrão
-    const blockedRanges = ['192.168.', '10.', '172.16.']; // Exemplo de blocos internos
+    const blockedRanges = ['192.168.', '10.', '172.16.'];
     let level = 'Baixo';
-
     for (const prefix of blockedRanges) {
       if (gateway.startsWith(prefix)) {
         level = 'Alto';
         break;
       }
     }
-
-    // Retorna objeto compatível com calculateRiskLevel
     return { level, ratio: 1 };
   }
 
@@ -199,6 +193,20 @@ export class FirewallUtils {
       setErrorModalVisible(true);
       setRules([]);
     }
+  }
+
+  // -------- Generate Encrypted Rule --------
+  static generateEncryptedRule(destination: string, potentialIPs: string[]): Rule {
+    const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '0.0.0.0';
+    const encryptedDestination = Buffer.from(destination).toString('base64');
+    const encryptedGateway = Buffer.from(gateway).toString('base64');
+    return { destination: encryptedDestination, gateway: encryptedGateway };
+  }
+
+  // -------- Generate Normal Route --------
+  static generateRoute(destination: string, potentialIPs: string[]): Rule {
+    const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '0.0.0.0';
+    return { destination, gateway };
   }
 
 }

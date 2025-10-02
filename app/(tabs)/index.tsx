@@ -91,7 +91,18 @@ export default function TelaPrinc() {
     const checkAndBlockHighRiskRoutes = async () => {
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
-        const data = await response.json();
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          console.error('Resposta inválida da API:', text);
+          setErrorMessage('Erro: resposta da API inválida');
+          setErrorModalVisible(true);
+          setFirewallData(null);
+          return;
+        }
+
         setRawJson((prev: any) => ({ ...prev, firewall: data }));
 
         if (!data.success) {
@@ -100,11 +111,10 @@ export default function TelaPrinc() {
         }
 
         setFirewallData(data.data);
-
         const risk = FirewallUtils.calculateRiskLevel(data.data);
 
         // Avalia rotas automáticas usando IP conectado + Potential IPs
-        const connectedIP = data.data.ipConectado; // IP do STA ou Soft-AP
+        const connectedIP = data.data.ipConectado; 
         for (const potentialIP of potentialIPs) {
           if (blockedHistory.includes(potentialIP)) continue;
 
@@ -133,12 +143,21 @@ export default function TelaPrinc() {
           }
         }
 
-        // Atualiza rotas caso tentativas bloqueadas >= regras aplicadas
-        if (data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
-          await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
+        // Caso tentativas bloqueadas >= regras aplicadas
+        if (data.data.tentativasBloqueadas > data.data.regrasAplicadas) {
+          // Cria nova regra e encripta os dados
+          const dest = `Encrypted-${Date.now()}`;
+          const gateway = `192.0.2.${Math.floor(Math.random() * 255)}`;
+          await FirewallUtils.saveRoute(dest, gateway, setRules, setErrorModalVisible, setErrorMessage);
+        } else if (data.data.tentativasBloqueadas === data.data.regrasAplicadas) {
+          // Cria nova rota normal
+          const dest = `Route-${Date.now()}`;
+          const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
+          await FirewallUtils.saveRoute(dest, gateway, setRules, setErrorModalVisible, setErrorMessage);
         }
 
       } catch (err: any) {
+        console.error('Erro fetch firewall:', err);
         setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
         setFirewallData(null);
         setErrorMessage(err?.message || 'Falha ao processar rotas');
@@ -279,7 +298,17 @@ export default function TelaPrinc() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ destination: newDestination.trim() }),
                   });
-                  const data = await resp.json();
+
+                  const text = await resp.text();
+                  let data;
+                  try { data = JSON.parse(text); } 
+                  catch { 
+                    console.error('Resposta inválida da API ao deletar:', text);
+                    setErrorMessage('Erro: resposta da API inválida ao deletar rota');
+                    setErrorModalVisible(true);
+                    return;
+                  }
+
                   if (!data.success) {
                     setErrorMessage(data.error || "Falha ao deletar a rota");
                     setErrorModalVisible(true);
@@ -306,17 +335,22 @@ export default function TelaPrinc() {
 
       {/* Modal de erro global */}
       <Modal
+        transparent={true}
         visible={errorModalVisible}
         animationType="fade"
-        transparent={true}
         onRequestClose={() => setErrorModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: '#f87171' }]}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12, color:'#fff' }}>Erro</Text>
-            <Text style={{ color:'#fff', marginBottom: 16 }}>{errorMessage}</Text>
-            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#0f172a' }]} onPress={() => setErrorModalVisible(false)}>
-              <Text style={{ fontWeight: 'bold', color: '#fff' }}>Fechar</Text>
+          <View style={[styles.modalContent, { backgroundColor: '#0f172a' }]}>
+            <Text style={{ color: '#f87171', fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>
+              Erro
+            </Text>
+            <Text style={{ color: '#fff', marginBottom: 16 }}>{errorMessage}</Text>
+            <TouchableOpacity
+              onPress={() => setErrorModalVisible(false)}
+              style={[styles.modalBtn, { backgroundColor: '#f87171' }]}
+            >
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Fechar</Text>
             </TouchableOpacity>
           </View>
         </View>
