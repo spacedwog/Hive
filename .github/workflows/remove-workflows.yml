@@ -1,7 +1,10 @@
-name: Remover Workflows (preservar este)
+name: Remover Workflows
 
 on:
   workflow_dispatch: # dispara manualmente para evitar loops automáticos
+
+permissions:
+  contents: write
 
 jobs:
   delete-workflows:
@@ -9,21 +12,23 @@ jobs:
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Remover todos os workflows exceto este
         run: |
-          # Descobre o nome do próprio arquivo de workflow
-          SELF_FILE=".github/workflows/remove-workflows.yml"
+          # Descobre o nome do arquivo de workflow em execução
+          SELF_FILE=$(basename "${GITHUB_WORKFLOW_REF%%@*}")
+          echo "Arquivo atual do workflow: $SELF_FILE"
 
-          # Remove todos os outros workflows
-          find .github/workflows -type f -name "nodejs.yml" ! -name "$(basename $SELF_FILE)" -delete
-          find .github/workflows -type f -name "*.yml" ! -name "$(basename $SELF_FILE)" -delete
-          find .github/workflows -type f -name "*.yaml" ! -name "$(basename $SELF_FILE)" -delete
+          # Remove todos os outros workflows exceto este
+          find .github/workflows -type f -name "*.yml" ! -name "$SELF_FILE" -delete
+          find .github/workflows -type f -name "*.yaml" ! -name "$SELF_FILE" -delete
 
           # Configura o git para commitar como o bot
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add .
+          git add .github/workflows
           git commit -a -m "Commited" || echo "Nenhuma alteração para commitar"
           git push origin main
