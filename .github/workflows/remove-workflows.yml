@@ -1,7 +1,7 @@
 name: Remover Workflow Runs
 
 on:
-  workflow_dispatch: # só dispara manualmente
+  workflow_dispatch:
 
 permissions:
   actions: write
@@ -14,11 +14,11 @@ jobs:
       - name: Instalar jq
         run: sudo apt-get install -y jq
 
-      - name: Deletar todos os workflow runs
+      - name: Deletar todos os workflow runs (exceto o atual)
         run: |
-          REPO="$spacedwog/Hive"
+          REPO="spacedwog/Hive"
           TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          CURRENT_RUN_ID="$209"
+          CURRENT_RUN_ID="209"
 
           echo "Repositório: $REPO"
           echo "Run atual: $CURRENT_RUN_ID"
@@ -27,6 +27,12 @@ jobs:
           runs=$(curl -s -H "Authorization: Bearer $TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/actions/runs?per_page=100")
+
+          # Verifica se retornou algo
+          if [ "$(echo "$runs" | jq '.workflow_runs | length')" -eq 0 ]; then
+            echo "Nenhum workflow run encontrado."
+            exit 0
+          fi
 
           # Percorre todos os IDs dos runs e deleta
           echo "$runs" | jq -r '.workflow_runs[].id' | while read run_id; do
