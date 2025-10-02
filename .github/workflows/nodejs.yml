@@ -30,7 +30,7 @@ jobs:
         run: npm install
 
       - name: Executar fix-import
-        run: node fix-imports.cjs
+        run: node fix-imports.mjs
 
       - name: Rodar lint
         run: npm run lint || true # Evita falha se houver warnings de lint
