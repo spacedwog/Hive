@@ -1,34 +1,42 @@
-name: Remover Workflows
+name: Remover Workflow Runs
 
 on:
-  workflow_dispatch: # dispara manualmente para evitar loops automáticos
+  workflow_dispatch: # só dispara manualmente
 
 permissions:
-  contents: write
+  actions: write
+  contents: read
 
 jobs:
-  delete-workflows:
+  delete-runs:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Instalar jq
+        run: sudo apt-get install -y jq
 
-      - name: Remover todos os workflows exceto este
+      - name: Deletar todos os workflow runs (exceto o atual)
         run: |
-          # Descobre o nome do arquivo de workflow em execução
-          SELF_FILE=$(basename "${GITHUB_WORKFLOW_REF%%@*}")
-          echo "Arquivo atual do workflow: $SELF_FILE"
+          REPO=${Hive}
+          TOKEN=${{ secrets.GITHUB_TOKEN }}
+          CURRENT_RUN_ID=${209}
 
-          # Remove todos os outros workflows exceto este
-          find .github/workflows -type f -name "*.yml" ! -name "$SELF_FILE" -delete
-          find .github/workflows -type f -name "*.yaml" ! -name "$SELF_FILE" -delete
+          echo "Repositório: $REPO"
+          echo "Run atual: $CURRENT_RUN_ID"
 
-          # Configura o git para commitar como o bot
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Busca todos os workflow runs
+          runs=$(curl -s -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/actions/runs?per_page=100")
 
-          git add .github/workflows
-          git commit -a -m "Commited" || echo "Nenhuma alteração para commitar"
-          git push origin main
+          # Percorre todos os IDs dos runs
+          echo "$runs" | jq -r '.workflow_runs[].id' | while read run_id; do
+            if [ "$run_id" != "$CURRENT_RUN_ID" ]; then
+              echo "Deletando run $run_id..."
+              curl -s -X DELETE \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$REPO/actions/runs/$run_id"
+            else
+              echo "Ignorando o run atual $run_id"
+            fi
+          done
