@@ -68,7 +68,6 @@ export default function TelaPrinc() {
   const loadBlockedHistory = async () => {
     try {
       const data = await SecureStore.getItemAsync('blockedHistory');
-      console.log('Dados carregados do SecureStore:', data);
       if (data) setBlockedHistory(JSON.parse(data));
     } catch (err: any) {
       console.error('Erro ao carregar blockedHistory:', err);
@@ -87,12 +86,42 @@ export default function TelaPrinc() {
     }
   };
 
+  // --- Busca histórico de bloqueios da API ---
+  const fetchBlockedHistoryFromAPI = async () => {
+    try {
+      const resp = await fetch(`${VERCEL_URL}/api/firewall?action=blocked`);
+      const text = await resp.text();
+      let data;
+      try { data = JSON.parse(text); } catch {
+        console.error('Resposta inválida da API (blocked):', text);
+        setErrorMessage('Erro: resposta da API inválida ao carregar bloqueios');
+        setErrorModalVisible(true);
+        return;
+      }
+
+      if (!data.success || !data.data) return;
+
+      const entries: BlockedEntry[] = data.data.map((item: any) => ({
+        ip: item.ip,
+        reason: item.reason || 'Automático',
+        timestamp: item.timestamp || new Date().toISOString(),
+      }));
+
+      setBlockedHistory(entries);
+      saveBlockedHistory(entries);
+    } catch (err: any) {
+      console.error('Erro ao buscar blockedHistory:', err);
+      setErrorMessage(err?.message || 'Falha ao carregar histórico de bloqueios da API');
+      setErrorModalVisible(true);
+    }
+  };
+
   useEffect(() => {
     loadBlockedHistory();
+    fetchBlockedHistoryFromAPI();
   }, []);
 
   useEffect(() => {
-    // Salva o histórico sempre que ele mudar
     if (blockedHistory.length > 0) saveBlockedHistory(blockedHistory);
   }, [blockedHistory]);
 
@@ -161,21 +190,18 @@ export default function TelaPrinc() {
           });
 
           if (routeRisk.level !== 'Baixo') {
-            // Deleta rota antiga
             await fetch(`${VERCEL_URL}/api/firewall?action=routes`, {
               method: "DELETE",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ destination: connectedIP })
             });
 
-            // Bloqueia IP
             await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ip: potentialIP })
             });
 
-            // Adiciona ao histórico detalhado
             setBlockedHistory(prev => [
               ...prev,
               {
@@ -191,10 +217,13 @@ export default function TelaPrinc() {
 
         // Criação de novas rotas caso necessário
         if (data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
-          const dest = "192.168.15.188/status"; // usa o IP público atual
+          const dest = "192.168.15.188/status";
           const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
           await FirewallUtils.saveRoute(dest, gateway, setRules, setErrorModalVisible, setErrorMessage);
         }
+
+        // Atualiza histórico do servidor
+        await fetchBlockedHistoryFromAPI();
 
       } catch (err: any) {
         console.error('Erro fetch firewall:', err);
@@ -208,7 +237,7 @@ export default function TelaPrinc() {
     checkAndBlockHighRiskRoutes();
     const interval = setInterval(checkAndBlockHighRiskRoutes, 5000);
     return () => clearInterval(interval);
-  }, [accessCode, potentialIPs]); // removido blockedHistory das dependências
+  }, [accessCode, potentialIPs]); // não colocamos blockedHistory aqui para evitar loop infinito
 
   if (!accessCode || accessCode.trim() === '')
     return (
