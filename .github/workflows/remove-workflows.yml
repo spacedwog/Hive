@@ -18,7 +18,7 @@ jobs:
         run: |
           REPO="spacedwog/Hive"
           TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          CURRENT_RUN_ID="215"
+          CURRENT_RUN_ID="216"
 
           echo "Repositório: $REPO"
           echo "Run atual: $CURRENT_RUN_ID"
