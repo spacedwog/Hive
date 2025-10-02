@@ -81,7 +81,7 @@ jobs:
           # token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
 
       - name: Analisar com CodeQL
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
 
   deploy:
     needs: [build, security]
