@@ -1,4 +1,4 @@
-name: Attest Build Provenance
+name: Build, Attest and Deploy
 
 on:
   workflow_dispatch:
@@ -8,22 +8,44 @@ permissions:
   contents: read
   security-events: write
 
+env:
+  ESP32_SOFTAP_IP: ${{ secrets.ESP32_SOFTAP_IP }}
+  ESP32_STA_IP: ${{ secrets.ESP32_STA_IP }}
+
 jobs:
-  attest:
+  attest-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
+      # 1️⃣ Checkout do repositório
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2️⃣ Build do artefato
       - name: Build artifact
         run: |
           mkdir -p dist
           echo "hello world" > dist/my-app.zip
 
+      # 3️⃣ Attestação do artefato
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: 'dist/my-app.zip'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.MY_PAT }}    # ← usar PAT seguro
           push-to-registry: false
           show-summary: true
+
+      # 4️⃣ Deploy no Vercel
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npm install -g vercel
+          vercel --prod --token $VERCEL_TOKEN
+
+      # 5️⃣ Exemplo de uso das variáveis do ESP32
+      - name: Test ESP32 IPs
+        run: |
+          echo "SoftAP IP: $ESP32_SOFTAP_IP"
+          echo "STA IP: $ESP32_STA_IP"
