@@ -189,7 +189,7 @@ export default function TelaPrinc() {
 
         // Criação de novas rotas caso necessário
         if (data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
-          const dest = "192.168.15.166/status"; // usa o IP público atual
+          const dest = "192.168.15.188/status"; // usa o IP público atual
           const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
           await FirewallUtils.saveRoute(dest, gateway, setRules, setErrorModalVisible, setErrorMessage);
         }
