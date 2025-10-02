@@ -1,108 +1,110 @@
-import { exec } from "child_process";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+const { exec } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
+// -------------------------
 // Classe para padronizar respostas
+// -------------------------
 class ApiResponse {
   static success(message, data = {}) {
     return { success: true, message, data, timestamp: Date.now() };
   }
 
-  static error(code, error, details = null) {
-    return {
-      success: false,
-      error: { code, message: error, details },
-      timestamp: Date.now(),
-    };
+  static error(code, message, details = null) {
+    return { success: false, error: { code, message, details }, timestamp: Date.now() };
   }
 }
 
+// -------------------------
 // Classe principal do firewall
+// -------------------------
 class FirewallInfo {
-  static blockedIPs = [];
-  static attemptsBlocked = 0;
-  static lastUpdate = null;
-  static status = "Ativo";
-
+  static blockedHistory = [];
   static routingTable = [];
   static natTable = [];
   static activeConnections = [];
   static vpnStatus = false;
+  static status = "Ativo";
+  static lastUpdate = null;
 
-  // Simula tentativas bloqueadas e atualiza logs
-  static simulateFailedAttempts() {
-    const failed = Math.floor(Math.random() * 4);
-    this.attemptsBlocked += failed;
-    for (let i = 0; i < failed; i++) {
-      const ip = `192.168.1.${Math.floor(Math.random() * 254 + 1)}`;
-      if (!this.blockedIPs.includes(ip)) {
-        this.blockedIPs.push(ip);
-      }
-    }
-    this.lastUpdate = new Date().toISOString();
-    this.saveBlockedToLogs();
-  }
+  static logFilePath = path.join(process.cwd(), "firewall.log");
+  static saveTimeout = null;
 
+  // -------------------------
+  // Histórico de bloqueios
+  // -------------------------
   static loadBlockedFromLogs() {
     try {
-      const logPath = path.join(process.cwd(), "firewall.log");
-      if (fs.existsSync(logPath)) {
-        const logs = fs.readFileSync(logPath, "utf-8").split("\n").filter(Boolean);
-        this.blockedIPs = [...new Set(logs)];
-        this.attemptsBlocked = this.blockedIPs.length;
-        this.lastUpdate = new Date().toISOString();
-      }
+      if (!fs.existsSync(this.logFilePath)) return;
+      const raw = fs.readFileSync(this.logFilePath, "utf-8");
+      const lines = raw.split("\n").filter(Boolean);
+      this.blockedHistory = lines.map(line => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean);
     } catch (err) {
-      console.error("Erro ao ler firewall.log:", err);
+      console.error("Erro ao carregar firewall.log:", err);
     }
+  }
+
+  static scheduleSave() {
+    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+    this.saveTimeout = setTimeout(() => this.saveBlockedToLogs(), 300);
   }
 
   static saveBlockedToLogs() {
     try {
-      const logPath = path.join(process.cwd(), "firewall.log");
-      fs.writeFileSync(logPath, this.blockedIPs.join("\n"));
+      const data = this.blockedHistory.map(e => JSON.stringify(e)).join("\n");
+      fs.writeFileSync(this.logFilePath, data);
     } catch (err) {
       console.error("Erro ao salvar firewall.log:", err);
     }
   }
 
-  static block(ip) {
-    if (!ip) {
-      return ApiResponse.error("INVALID_IP", "IP é obrigatório.");
+  static block(ip, reason = "Automático") {
+    if (!ip) return ApiResponse.error("INVALID_IP", "IP é obrigatório.");
+    if (!this.blockedHistory.find(b => b.ip === ip)) {
+      const entry = { ip, reason, timestamp: new Date().toISOString() };
+      this.blockedHistory.push(entry);
+      this.lastUpdate = entry.timestamp;
+      this.scheduleSave();
     }
-    if (!this.blockedIPs.includes(ip)) {
-      this.blockedIPs.push(ip);
-      this.attemptsBlocked++;
-      this.lastUpdate = new Date().toISOString();
-      this.saveBlockedToLogs();
-    }
-    return ApiResponse.success(`IP ${ip} bloqueado.`, { blocked: this.blockedIPs });
+    return ApiResponse.success(`IP ${ip} bloqueado.`, { blockedHistory: this.blockedHistory });
   }
 
   static unblock(ip) {
-    if (!ip) {
-      return ApiResponse.error("INVALID_IP", "IP é obrigatório.");
-    }
-    const index = this.blockedIPs.indexOf(ip);
+    if (!ip) return ApiResponse.error("INVALID_IP", "IP é obrigatório.");
+    const index = this.blockedHistory.findIndex(b => b.ip === ip);
     if (index !== -1) {
-      this.blockedIPs.splice(index, 1);
+      this.blockedHistory.splice(index, 1);
       this.lastUpdate = new Date().toISOString();
-      this.saveBlockedToLogs();
-      return ApiResponse.success(`IP ${ip} desbloqueado.`, { blocked: this.blockedIPs });
+      this.scheduleSave();
+      return ApiResponse.success(`IP ${ip} desbloqueado.`, { blockedHistory: this.blockedHistory });
     }
     return ApiResponse.error("NOT_FOUND", "IP não encontrado na lista de bloqueio.");
   }
 
+  static getBlocked() {
+    this.loadBlockedFromLogs();
+    return ApiResponse.success("IPs bloqueados", { blockedHistory: this.blockedHistory });
+  }
+
+  // -------------------------
+  // Firewall Info
+  // -------------------------
   static getInfo() {
     this.loadBlockedFromLogs();
-    this.simulateFailedAttempts();
+    this.lastUpdate = new Date().toISOString();
     return ApiResponse.success("Informações do firewall", {
       status: this.status,
       ultimaAtualizacao: this.lastUpdate,
-      tentativasBloqueadas: this.attemptsBlocked,
-      regrasAplicadas: this.blockedIPs.length,
-      blocked: this.blockedIPs,
+      tentativasBloqueadas: this.blockedHistory.length,
+      regrasAplicadas: this.routingTable.length,
+      blockedHistory: this.blockedHistory,
       routingTable: this.routingTable,
       natTable: this.natTable,
       vpnStatus: this.vpnStatus,
@@ -115,23 +117,17 @@ class FirewallInfo {
     });
   }
 
-  static getBlocked() {
-    this.loadBlockedFromLogs();
-    return ApiResponse.success("IPs bloqueados", { blocked: this.blockedIPs });
-  }
-
+  // -------------------------
+  // Rotas e NAT
+  // -------------------------
   static addRoute(destination, gateway) {
-    if (!destination || !gateway) {
-      return ApiResponse.error("INVALID_ROUTE", "Destino e Gateway são obrigatórios.");
-    }
+    if (!destination || !gateway) return ApiResponse.error("INVALID_ROUTE", "Destino e Gateway são obrigatórios.");
     this.routingTable.push({ destination, gateway });
     return ApiResponse.success("Rota adicionada.", { routingTable: this.routingTable });
   }
 
   static addNAT(internalIP, externalIP) {
-    if (!internalIP || !externalIP) {
-      return ApiResponse.error("INVALID_NAT", "IP interno e externo são obrigatórios.");
-    }
+    if (!internalIP || !externalIP) return ApiResponse.error("INVALID_NAT", "IP interno e externo são obrigatórios.");
     this.natTable.push({ internalIP, externalIP });
     return ApiResponse.success("NAT configurado.", { natTable: this.natTable });
   }
@@ -141,29 +137,30 @@ class FirewallInfo {
     return ApiResponse.success(`VPN ${enable ? "ativada" : "desativada"}.`, { vpnStatus: this.vpnStatus });
   }
 
-  static async getConnections() {
+  // -------------------------
+  // Conexões ativas
+  // -------------------------
+  static getConnections() {
     return new Promise((resolve) => {
       const cmd = process.platform === "win32" ? "netstat -n -p tcp" : "netstat -tun";
       exec(cmd, (err, stdout) => {
-        if (err) {
-          return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err.message }));
-        }
+        if (err) return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err.message }));
 
         const lines = stdout.split("\n").slice(4);
         const connections = [];
 
-        lines.forEach((line) => {
+        lines.forEach(line => {
           const parts = line.trim().split(/\s+/);
           if (parts.length < 4) return;
-
-          let protocol = parts[0].toUpperCase();
-          let src, dst, status;
+          let protocol, src, dst, status;
 
           if (process.platform === "win32") {
+            protocol = parts[0].toUpperCase();
             src = parts[1];
             dst = parts[2];
             status = parts[3] || "";
           } else {
+            protocol = parts[0].toUpperCase();
             src = parts[3];
             dst = parts[4];
             status = parts[5] || "";
@@ -182,7 +179,7 @@ class FirewallInfo {
 // -------------------------
 // Handler principal
 // -------------------------
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { method, query, body } = req;
   const { action } = query;
 
@@ -192,92 +189,28 @@ export default async function handler(req, res) {
   }
 
   try {
-    // GET informações do firewall
-    if (method === "GET" && action === "info") {
-      return res.status(200).json(FirewallInfo.getInfo());
-    }
+    if (method === "GET" && action === "info") return res.status(200).json(FirewallInfo.getInfo());
+    if (method === "GET" && action === "blocked") return res.status(200).json(FirewallInfo.getBlocked());
+    if (method === "POST" && action === "block") return res.status(200).json(FirewallInfo.block(parsedBody?.ip, parsedBody?.reason));
+    if (method === "POST" && action === "unblock") return res.status(200).json(FirewallInfo.unblock(parsedBody?.ip));
+    if (method === "POST" && action === "nat") return res.status(200).json(FirewallInfo.addNAT(parsedBody?.internalIP, parsedBody?.externalIP));
+    if (method === "POST" && action === "vpn") return res.status(200).json(FirewallInfo.setVPN(parsedBody?.enable));
+    if (method === "GET" && action === "connections") return res.status(200).json(await FirewallInfo.getConnections());
 
-    // GET IPs bloqueados
-    if (method === "GET" && action === "blocked") {
-      return res.status(200).json(FirewallInfo.getBlocked());
-    }
-
-    // POST block
-    if (method === "POST" && action === "block") {
-      return res.status(200).json(FirewallInfo.block(parsedBody?.ip));
-    }
-
-    // POST unblock
-    if (method === "POST" && action === "unblock") {
-      return res.status(200).json(FirewallInfo.unblock(parsedBody?.ip));
-    }
-
-    // POST NAT
-    if (method === "POST" && action === "nat") {
-      return res.status(200).json(FirewallInfo.addNAT(parsedBody?.internalIP, parsedBody?.externalIP));
-    }
-
-    // POST VPN
-    if (method === "POST" && action === "vpn") {
-      return res.status(200).json(FirewallInfo.setVPN(parsedBody?.enable));
-    }
-
-    // GET conexões
-    if (method === "GET" && action === "connections") {
-      return res.status(200).json(await FirewallInfo.getConnections());
-    }
-
-    // Rotas: GET, POST, DELETE
     if (action === "routes") {
-      if (method === "GET") {
-        return res.status(200).json({
-          success: true,
-          routes: FirewallInfo.routingTable,
-          rules: FirewallInfo.rules || FirewallInfo.routingTable,
-        });
-      }
-
-      if (method === "POST") {
-        const { destination, gateway } = parsedBody || {};
-        if (!destination || !gateway) {
-          return res.status(400).json({ success: false, error: { code: "INVALID_INPUT", message: "Destination e gateway são obrigatórios." } });
-        }
-        const result = FirewallInfo.addRoute(destination, gateway);
-        return res.status(200).json(result);
-      }
-
+      if (method === "GET") return res.status(200).json({ success: true, routes: FirewallInfo.routingTable });
+      if (method === "POST") return res.status(200).json(FirewallInfo.addRoute(parsedBody?.destination, parsedBody?.gateway));
       if (method === "DELETE") {
         const { destination } = parsedBody || {};
-        if (!destination) {
-          return res.status(400).json({ success: false, error: { code: "INVALID_ROUTE", message: "Destination é obrigatório para remoção." } });
-        }
-        const index = FirewallInfo.routingTable.findIndex(r => r.destination === destination);
-        if (index === -1) {
-          return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Rota não encontrada." } });
-        }
-        FirewallInfo.routingTable.splice(index, 1);
-        if (FirewallInfo.rules) {
-          FirewallInfo.rules = FirewallInfo.rules.filter(r => r.destination !== destination);
-        }
-        return res.status(200).json({
-          success: true,
-          message: `Rota ${destination} removida.`,
-          routes: FirewallInfo.routingTable,
-          rules: FirewallInfo.rules || FirewallInfo.routingTable,
-        });
+        if (!destination) return res.status(400).json(ApiResponse.error("INVALID_ROUTE", "Destination obrigatório."));
+        const idx = FirewallInfo.routingTable.findIndex(r => r.destination === destination);
+        if (idx === -1) return res.status(404).json(ApiResponse.error("NOT_FOUND", "Rota não encontrada."));
+        FirewallInfo.routingTable.splice(idx, 1);
+        return res.status(200).json(ApiResponse.success(`Rota ${destination} removida.`, { routes: FirewallInfo.routingTable }));
       }
-
-      return res.status(405).json({ success: false, error: { code: "METHOD_NOT_ALLOWED", message: `Método ${method} não permitido para routes.` } });
     }
 
-    // Rota padrão sem action
-    if (!action && method === "GET") {
-      return res.status(200).json(ApiResponse.success("Bem-vindo! Seu acesso foi permitido pelo firewall.", {
-        project: "HIVE PROJECT",
-        version: "1.2.0",
-        platform: os.platform(),
-      }));
-    }
+    if (!action && method === "GET") return res.status(200).json(ApiResponse.success("Bem-vindo!", { project: "HIVE PROJECT", version: "1.2.0" }));
 
     return res.status(404).json(ApiResponse.error("NOT_FOUND", "Rota não encontrada."));
   } catch (err) {
@@ -286,5 +219,7 @@ export default async function handler(req, res) {
   }
 }
 
-// Exporta a classe para uso externo
-export { FirewallInfo };
+// -------------------------
+// Exporta
+// -------------------------
+module.exports = { handler, FirewallInfo };
