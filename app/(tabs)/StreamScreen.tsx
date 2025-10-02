@@ -194,12 +194,12 @@ export default function StreamScreen() {
             />
           </View>
           <Button
-            title="📄 Exibir JSON"
+            title="🛜 ESP32-CAM(Data)"
             onPress={() => setStatusModalVisible(true)}
             color="#0af"
           />
           <Button
-            title="🌐 Ver JSON do Vercel"
+            title="❤️‍🔥 API(Infra-estrutura)"
             onPress={fetchStatusFromVercel}
             color="#ff9900"
           />
