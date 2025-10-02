@@ -70,12 +70,12 @@ jobs:
           npm audit --audit-level=moderate || echo "Vulnerabilidades encontradas. Verifique o log."
 
       - name: Inicializar CodeQL
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript
 
       - name: Analisar com CodeQL
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
 
   deploy:
     needs: [build, security]
