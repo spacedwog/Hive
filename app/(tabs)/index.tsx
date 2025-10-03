@@ -1,6 +1,5 @@
 // eslint-disable-next-line import/no-unresolved
 import { VERCEL_URL } from '@env';
-import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useState } from 'react';
 import {
   Animated,
@@ -14,6 +13,14 @@ import {
   View
 } from 'react-native';
 import BottomNav from '../../hive_body/BottomNav.tsx';
+import {
+  addBlockedEntry,
+  addRule,
+  deleteRule,
+  getBlockedHistory,
+  getRules,
+  initDB
+} from '../../hive_security/hive_database/database.ts';
 import { FirewallUtils, Rule } from '../../hive_security/hive_ip/hive_firewall.tsx';
 
 interface BlockedEntry {
@@ -64,27 +71,16 @@ export default function TelaPrinc() {
     });
   };
 
-  // --- Persistência do histórico de bloqueios usando SecureStore ---
-  const loadBlockedHistory = async () => {
-    try {
-      const data = await SecureStore.getItemAsync('blockedHistory');
-      if (data) setBlockedHistory(JSON.parse(data));
-    } catch (err: any) {
-      console.error('Erro ao carregar blockedHistory:', err);
-      setErrorMessage(err?.message || 'Falha ao carregar histórico de bloqueios');
-      setErrorModalVisible(true);
-    }
-  };
-
-  const saveBlockedHistory = async (data: BlockedEntry[]) => {
-    try {
-      await SecureStore.setItemAsync('blockedHistory', JSON.stringify(data));
-    } catch (err: any) {
-      console.error('Erro ao salvar blockedHistory:', err);
-      setErrorMessage(err?.message || 'Falha ao salvar histórico de bloqueios');
-      setErrorModalVisible(true);
-    }
-  };
+  // --- Inicializa DB e carrega dados ---
+  useEffect(() => {
+    initDB();
+    (async () => {
+      const history = await getBlockedHistory();
+      setBlockedHistory(history);
+      const rulesDb = await getRules();
+      setRules(rulesDb);
+    })();
+  }, []);
 
   const formatBlockedTime = (isoString: string) => {
     const blockedDate = new Date(isoString);
@@ -104,14 +100,6 @@ export default function TelaPrinc() {
 
     return `${blockedDate.toLocaleDateString()} (há ${elapsed.trim()})`;
   };
-
-  useEffect(() => {
-    loadBlockedHistory();
-  }, []);
-
-  useEffect(() => {
-    saveBlockedHistory(blockedHistory);
-  }, [blockedHistory]);
 
   // --- Carrega Potential IPs ---
   useEffect(() => {
@@ -192,15 +180,15 @@ export default function TelaPrinc() {
               body: JSON.stringify({ ip: potentialIP })
             });
 
-            // Adiciona ao histórico detalhado
-            setBlockedHistory(prev => [
-              ...prev,
-              {
-                ip: potentialIP,
-                reason: routeRisk.level !== 'Baixo' ? routeRisk.level : 'Automático',
-                timestamp: new Date().toISOString(),
-              }
-            ]);
+            // Adiciona ao histórico no banco
+            const entry: BlockedEntry = {
+              ip: potentialIP,
+              reason: routeRisk.level !== 'Baixo' ? routeRisk.level : 'Automático',
+              timestamp: new Date().toISOString(),
+            };
+            await addBlockedEntry(entry.ip, entry.reason!, entry.timestamp);
+            const history = await getBlockedHistory();
+            setBlockedHistory(history);
 
             await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
           }
@@ -208,9 +196,11 @@ export default function TelaPrinc() {
 
         // Criação de novas rotas caso necessário
         if (data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
-          const dest = "192.168.15.166/status"; // usa o IP público atual
+          const dest = "192.168.15.166/status";
           const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
-          await FirewallUtils.saveRoute(dest, gateway, setRules, setErrorModalVisible, setErrorMessage);
+          await addRule(dest, gateway);
+          const rulesDb = await getRules();
+          setRules(rulesDb);
         }
 
       } catch (err: any) {
@@ -348,7 +338,9 @@ export default function TelaPrinc() {
                   setErrorModalVisible(true);
                   return;
                 }
-                await FirewallUtils.saveRoute(newDestination.trim(), newGateway.trim(), setRules, setErrorModalVisible, setErrorMessage);
+                await addRule(newDestination.trim(), newGateway.trim());
+                const rulesDb = await getRules();
+                setRules(rulesDb);
                 hideModal();
               }}>
                 <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>Salvar</Text>
@@ -362,28 +354,10 @@ export default function TelaPrinc() {
                   return;
                 }
                 try {
-                  const resp = await fetch(`${VERCEL_URL}/api/firewall?action=routes`, {
-                    method: "DELETE",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ destination: newDestination.trim() }),
-                  });
-                  const text = await resp.text();
-                  let data;
-                  try { data = JSON.parse(text); } 
-                  catch { 
-                    console.error('Resposta inválida da API ao deletar:', text);
-                    setErrorMessage('Erro: resposta da API inválida ao deletar rota');
-                    setErrorModalVisible(true);
-                    return;
-                  }
-
-                  if (!data.success) {
-                    setErrorMessage(data.error || "Falha ao deletar a rota");
-                    setErrorModalVisible(true);
-                  } else {
-                    setRules(prev => prev.filter(r => r.destination !== newDestination.trim()));
-                    hideModal();
-                  }
+                  await deleteRule(newDestination.trim());
+                  const rulesDb = await getRules();
+                  setRules(rulesDb);
+                  hideModal();
                 } catch (err: any) {
                   setErrorMessage(err.message || "Falha ao deletar a rota");
                   setErrorModalVisible(true);
