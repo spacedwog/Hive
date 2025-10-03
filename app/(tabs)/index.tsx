@@ -44,10 +44,14 @@ export default function TelaPrinc() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showToast, setShowToast] = useState(false);
+
   const ipsPerPage = 10;
   const rulesPerPage = 5;
   const fadeAnim = useState(new Animated.Value(0))[0];
 
+  // --- Funções para modais ---
   const showModal = () => {
     setModalVisible(true);
     Animated.timing(fadeAnim, {
@@ -71,14 +75,20 @@ export default function TelaPrinc() {
     });
   };
 
+  const showSuccessToast = (message: string, duration: number = 3000) => {
+    setSuccessMessage(message);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), duration);
+  };
+
   // --- Inicializa DB e carrega dados ---
   useEffect(() => {
     initDB();
     (async () => {
       const history = await getBlockedHistory();
-      setBlockedHistory(history);
+      setBlockedHistory(history ?? []);
       const rulesDb = await getRules();
-      setRules(rulesDb);
+      setRules(rulesDb ?? []);
     })();
   }, []);
 
@@ -156,9 +166,11 @@ export default function TelaPrinc() {
         const risk = FirewallUtils.calculateRiskLevel(data.data);
         const connectedIP = data.data.ipConectado;
 
+        const currentHistory = await getBlockedHistory() ?? [];
+
         // Bloqueio automático de IPs de alto risco
         for (const potentialIP of potentialIPs) {
-          if (blockedHistory.find(b => b.ip === potentialIP)) continue;
+          if (currentHistory.find(b => b.ip === potentialIP)) continue;
 
           const routeRisk = FirewallUtils.evaluateRouteRisk({
             destination: connectedIP,
@@ -187,10 +199,13 @@ export default function TelaPrinc() {
               timestamp: new Date().toISOString(),
             };
             await addBlockedEntry(entry.ip, entry.reason!, entry.timestamp);
-            const history = await getBlockedHistory();
-            setBlockedHistory(history);
+            const updatedHistory = await getBlockedHistory() ?? [];
+            setBlockedHistory(updatedHistory);
 
             await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
+
+            // Toast de sucesso
+            showSuccessToast(`IP ${potentialIP} bloqueado automaticamente (risco: ${routeRisk.level})`);
           }
         }
 
@@ -200,7 +215,8 @@ export default function TelaPrinc() {
           const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
           await addRule(dest, gateway);
           const rulesDb = await getRules();
-          setRules(rulesDb);
+          setRules(rulesDb ?? []);
+          showSuccessToast(`Nova regra criada: ${dest} ➝ ${gateway}`);
         }
 
       } catch (err: any) {
@@ -215,7 +231,7 @@ export default function TelaPrinc() {
     checkAndBlockHighRiskRoutes();
     const interval = setInterval(checkAndBlockHighRiskRoutes, 5000);
     return () => clearInterval(interval);
-  }, [accessCode, potentialIPs, blockedHistory]);
+  }, [accessCode, potentialIPs]);
 
   if (!accessCode || accessCode.trim() === '')
     return (
@@ -235,6 +251,7 @@ export default function TelaPrinc() {
         <View style={styles.card}>
           {firewallData ? (
             <>
+              {/* Status do firewall */}
               <Text style={styles.description}>
                 Status: <Text style={{ color: firewallData.status === 'Ativo' ? '#50fa7b' : '#f87171', fontWeight: 'bold' }}>{firewallData.status}</Text>
               </Text>
@@ -255,7 +272,9 @@ export default function TelaPrinc() {
                   <FirewallUtils.PaginatedList
                     items={firewallData.blocked as string[] ?? []}
                     itemsPerPage={ipsPerPage}
-                    renderItem={(ip: string, idx: number) => <Text key={idx} style={styles.description}>{ip}</Text>}
+                    renderItem={(ip: string, idx: number) => (
+                      <Text key={idx} style={styles.description}>{ip}</Text>
+                    )}
                     title="IPs Bloqueados"
                   />
                 </View>
@@ -272,30 +291,63 @@ export default function TelaPrinc() {
                 <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Adicionar Rota</Text>
               </TouchableOpacity>
 
-              {/* Histórico de bloqueios detalhado */}
+              {/* Histórico de bloqueios */}
               <FirewallUtils.PaginatedList
-                items={blockedHistory}
+                items={blockedHistory ?? []}
                 itemsPerPage={5}
-                renderItem={(entry: BlockedEntry, idx: number) => (
-                  <View key={idx} style={{ marginBottom: 6 }}>
-                    <Text style={styles.description}>
-                      IP: <Text style={{ fontWeight: 'bold' }}>{entry.ip}</Text>
-                    </Text>
-                    <Text style={[styles.description, { color: '#f87171' }]}>
-                      Motivo: {entry.reason}
-                    </Text>
-                    <Text style={[styles.description, { color: '#94a3b8' }]}>
-                      Bloqueado: {formatBlockedTime(entry.timestamp)}
-                    </Text>
-                  </View>
-                )}
+                renderItem={(entry: BlockedEntry, idx: number) => {
+                  let color = '#50fa7b'; // Baixo
+                  if (entry.reason === 'Médio') color = '#fbbf24';
+                  if (entry.reason === 'Alto') color = '#f87171';
+
+                  return (
+                    <View
+                      key={idx}
+                      style={{
+                        backgroundColor: '#1e293b',
+                        borderLeftWidth: 4,
+                        borderLeftColor: color,
+                        padding: 12,
+                        borderRadius: 8,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <Text style={[styles.description, { fontWeight: 'bold', fontSize: 16 }]}>
+                        {entry.ip}
+                      </Text>
+                      <Text style={[styles.description, { color, fontWeight: 'bold' }]}>
+                        Motivo: {entry.reason}
+                      </Text>
+                      <Text style={[styles.description, { color: '#94a3b8' }]}>
+                        Bloqueado: {formatBlockedTime(entry.timestamp)}
+                      </Text>
+                    </View>
+                  );
+                }}
                 title="Histórico de bloqueios"
               />
 
+              {/* Regras e rotas */}
               <FirewallUtils.PaginatedList
-                items={rules}
+                items={rules ?? []}
                 itemsPerPage={rulesPerPage}
-                renderItem={(r: Rule, idx: number) => <Text key={idx} style={styles.description}>{r.destination} ➝ {r.gateway}</Text>}
+                renderItem={(r: Rule, idx: number) => (
+                  <View
+                    key={idx}
+                    style={{
+                      backgroundColor: '#1e293b',
+                      borderLeftWidth: 4,
+                      borderLeftColor: '#38bdf8',
+                      padding: 12,
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Text style={[styles.description, { fontWeight: 'bold', fontSize: 16 }]}>
+                      {r.destination} ➝ {r.gateway}
+                    </Text>
+                  </View>
+                )}
                 title="Regras e Rotas Criadas"
               />
             </>
@@ -338,10 +390,16 @@ export default function TelaPrinc() {
                   setErrorModalVisible(true);
                   return;
                 }
-                await addRule(newDestination.trim(), newGateway.trim());
-                const rulesDb = await getRules();
-                setRules(rulesDb);
-                hideModal();
+                try {
+                  await addRule(newDestination.trim(), newGateway.trim());
+                  const rulesDb = await getRules();
+                  setRules(rulesDb ?? []);
+                  hideModal();
+                  showSuccessToast(`Rota ${newDestination} ➝ ${newGateway} adicionada!`);
+                } catch (err: any) {
+                  setErrorMessage(err.message || "Falha ao adicionar a rota");
+                  setErrorModalVisible(true);
+                }
               }}>
                 <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>Salvar</Text>
               </TouchableOpacity>
@@ -356,8 +414,9 @@ export default function TelaPrinc() {
                 try {
                   await deleteRule(newDestination.trim());
                   const rulesDb = await getRules();
-                  setRules(rulesDb);
+                  setRules(rulesDb ?? []);
                   hideModal();
+                  showSuccessToast(`Rota ${newDestination} deletada!`);
                 } catch (err: any) {
                   setErrorMessage(err.message || "Falha ao deletar a rota");
                   setErrorModalVisible(true);
@@ -397,12 +456,19 @@ export default function TelaPrinc() {
           </View>
         </View>
       </Modal>
+
+      {/* Toast de sucesso temporário */}
+      {showToast && (
+        <View style={styles.toastContainer}>
+          <Text style={styles.toastText}>{successMessage}</Text>
+        </View>
+      )}
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding:24, backgroundColor:'#0f172a', alignItems:'center' },
+  container:{ padding:24, backgroundColor:'#0f172a', alignItems:'center' },
   card:{ borderRadius:16,padding:20,shadowColor:'#000',shadowOpacity:0.3,shadowRadius:12,width:'100%',marginBottom:20 },
   description:{ fontSize:16,color:'#e2e8f0',lineHeight:24 },
   loginContainer:{ flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#0f172a' },
@@ -411,4 +477,23 @@ const styles = StyleSheet.create({
   modalContent:{ backgroundColor:'#0f172a', padding:24, borderRadius:16, width:'80%' },
   input:{ borderWidth:1, borderColor:'#94a3b8', borderRadius:8, padding:8, color:'#fff', marginTop:8 },
   modalBtn:{ flex:1, padding:12, borderRadius:8, alignItems:'center', marginHorizontal:4 },
+  toastContainer:{
+    position:'absolute',
+    top:350,
+    left:20,
+    right:20,
+    padding:16,
+    backgroundColor:'#50fa7b',
+    borderRadius:12,
+    alignItems:'center',
+    shadowColor:'#000',
+    shadowOpacity:0.3,
+    shadowRadius:8,
+    elevation:5,
+  },
+  toastText:{
+    color:'#0f172a',
+    fontWeight:'bold',
+    fontSize:16,
+  }
 });
