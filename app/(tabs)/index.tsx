@@ -167,7 +167,25 @@ export default function TelaPrinc() {
         const risk = FirewallUtils.calculateRiskLevel(data.data);
         const connectedIP = data.data.ipConectado;
 
-        const currentHistory = await getBlockedHistory() ?? [];
+        let currentHistory = await getBlockedHistory() ?? [];
+
+        // Fallback: incrementa histórico de bloqueios com IPs Bloqueados do firewallData
+        if (firewallData && Array.isArray(firewallData.blocked)) {
+          for (const blockedIP of firewallData.blocked) {
+            if (!currentHistory.find(b => b.ip === blockedIP)) {
+              // Adiciona ao histórico local se não existir
+              const entry: BlockedEntry = {
+                ip: blockedIP,
+                reason: 'Desconhecido (fallback)',
+                timestamp: new Date().toISOString(),
+              };
+              await addBlockedEntry(entry.ip, entry.reason ?? '', entry.timestamp);
+            }
+          }
+          // Atualiza o histórico após o fallback
+          currentHistory = await getBlockedHistory() ?? [];
+          setBlockedHistory(currentHistory);
+        }
 
         // Bloqueio automático de IPs de alto risco
         for (const potentialIP of potentialIPs) {
@@ -220,7 +238,8 @@ export default function TelaPrinc() {
           showSuccessToast(`Nova regra criada: ${dest} ➝ ${gateway}`);
         }
 
-      } catch (err: any) {
+      }
+      catch (err: any) {
         console.error('Erro fetch firewall:', err);
         setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
         setFirewallData(null);
