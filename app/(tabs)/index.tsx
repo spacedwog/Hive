@@ -1,6 +1,6 @@
 // eslint-disable-next-line import/no-unresolved
 import { VERCEL_URL } from '@env';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -50,7 +50,7 @@ export default function TelaPrinc() {
 
   const ipsPerPage = 10;
   const rulesPerPage = 5;
-  const fadeAnim = useState(new Animated.Value(0))[0];
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // --- Funções para modais ---
   const showModal = () => {

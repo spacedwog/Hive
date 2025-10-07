@@ -1,6 +1,7 @@
 export default {
   name: "Hive",
   slug: "hive",
+  scheme: "hive",
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
