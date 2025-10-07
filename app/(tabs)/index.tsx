@@ -143,7 +143,11 @@ export default function TelaPrinc() {
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '') return;
 
+    let isRunning = false; // Flag para evitar execuções simultâneas
+
     const checkAndBlockHighRiskRoutes = async () => {
+      if (isRunning) return;
+      isRunning = true;
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
         const text = await response.text();
@@ -153,6 +157,7 @@ export default function TelaPrinc() {
           setErrorMessage('Erro: resposta da API inválida');
           setErrorModalVisible(true);
           setFirewallData(null);
+          isRunning = false;
           return;
         }
 
@@ -160,10 +165,16 @@ export default function TelaPrinc() {
 
         if (!data.success) {
           setFirewallData(null);
+          isRunning = false;
           return;
         }
 
-        setFirewallData(data.data);
+        setFirewallData((prev: any) => {
+          if (JSON.stringify(prev) !== JSON.stringify(data.data)) {
+            return data.data;
+          }
+          return prev;
+        });
         const risk = FirewallUtils.calculateRiskLevel(data.data);
         const connectedIP = data.data.ipConectado;
 
@@ -226,13 +237,16 @@ export default function TelaPrinc() {
         setFirewallData(null);
         setErrorMessage(err?.message || 'Falha ao processar rotas');
         setErrorModalVisible(true);
+      } finally {
+        isRunning = false;
       }
     };
 
     checkAndBlockHighRiskRoutes();
+    // Aumenta o intervalo para 1 minuto para reduzir requisições
     const interval = setInterval(checkAndBlockHighRiskRoutes, 60000);
     return () => clearInterval(interval);
-  }, [accessCode]);
+  }, [accessCode, potentialIPs]);
 
   if (!accessCode || accessCode.trim() === '')
     return (
