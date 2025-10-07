@@ -169,11 +169,40 @@ export default function TelaPrinc() {
 
         let currentHistory = await getBlockedHistory() ?? [];
 
-        // Fallback: incrementa histórico de bloqueios com IPs Bloqueados do firewallData
+        // Fallback: lógica Alfa/Omega/Fibonacci para incrementar histórico de bloqueios
         if (firewallData && Array.isArray(firewallData.blocked)) {
+          let alfa = firewallData.blocked[0] ?? null;
+          let omega = firewallData.blocked[1] ?? null;
+
+          // Se houver apenas um IP, inicializa omega igual a alfa
+          if (alfa && !omega) omega = alfa;
+
+          // Executa a lógica Fibonacci para todos os IPs bloqueados
+          for (let i = 0; i < firewallData.blocked.length; i++) {
+            if (alfa && omega) {
+              // Fibonacci = alfa + omega (concatenação de IPs)
+              const fibonacci = alfa + omega;
+
+              // Se o IP resultante não está no histórico, adiciona
+              if (!currentHistory.find(b => b.ip === fibonacci)) {
+                const entry: BlockedEntry = {
+                  ip: fibonacci,
+                  reason: 'Fibonacci (fallback)',
+                  timestamp: new Date().toISOString(),
+                };
+                await addBlockedEntry(entry.ip, entry.reason ?? '', entry.timestamp);
+              }
+
+              // Atualiza alfa e omega para o próximo ciclo
+              const temp = omega;
+              omega = fibonacci;
+              alfa = temp;
+            }
+          }
+
+          // Também adiciona os IPs originais se não estiverem no histórico
           for (const blockedIP of firewallData.blocked) {
             if (!currentHistory.find(b => b.ip === blockedIP)) {
-              // Adiciona ao histórico local se não existir
               const entry: BlockedEntry = {
                 ip: blockedIP,
                 reason: 'Desconhecido (fallback)',
@@ -182,6 +211,7 @@ export default function TelaPrinc() {
               await addBlockedEntry(entry.ip, entry.reason ?? '', entry.timestamp);
             }
           }
+
           // Atualiza o histórico após o fallback
           currentHistory = await getBlockedHistory() ?? [];
           setBlockedHistory(currentHistory);
