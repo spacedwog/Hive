@@ -1,6 +1,6 @@
 // eslint-disable-next-line import/no-unresolved
 import { VERCEL_URL } from '@env';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -50,7 +50,7 @@ export default function TelaPrinc() {
 
   const ipsPerPage = 10;
   const rulesPerPage = 5;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useState(new Animated.Value(0))[0];
 
   // --- Funções para modais ---
   const showModal = () => {
@@ -167,55 +167,7 @@ export default function TelaPrinc() {
         const risk = FirewallUtils.calculateRiskLevel(data.data);
         const connectedIP = data.data.ipConectado;
 
-        let currentHistory = await getBlockedHistory() ?? [];
-
-        // Fallback: lógica Alfa/Omega/Fibonacci para incrementar histórico de bloqueios
-        if (firewallData && Array.isArray(firewallData.blocked)) {
-          let alfa = firewallData.blocked[0] ?? null;
-          let omega = firewallData.blocked[1] ?? null;
-
-          // Se houver apenas um IP, inicializa omega igual a alfa
-          if (alfa && !omega) omega = alfa;
-
-          // Executa a lógica Fibonacci para todos os IPs bloqueados
-          for (let i = 0; i < firewallData.blocked.length; i++) {
-            if (alfa && omega) {
-              // Fibonacci = alfa + omega (concatenação de IPs)
-              const fibonacci = alfa + omega;
-
-              // Se o IP resultante não está no histórico, adiciona
-              if (!currentHistory.find(b => b.ip === fibonacci)) {
-                const entry: BlockedEntry = {
-                  ip: fibonacci,
-                  reason: 'Fibonacci (fallback)',
-                  timestamp: new Date().toISOString(),
-                };
-                await addBlockedEntry(entry.ip, entry.reason ?? '', entry.timestamp);
-              }
-
-              // Atualiza alfa e omega para o próximo ciclo
-              const temp = omega;
-              omega = fibonacci;
-              alfa = temp;
-            }
-          }
-
-          // Também adiciona os IPs originais se não estiverem no histórico
-          for (const blockedIP of firewallData.blocked) {
-            if (!currentHistory.find(b => b.ip === blockedIP)) {
-              const entry: BlockedEntry = {
-                ip: blockedIP,
-                reason: 'Fibonacci (module)',
-                timestamp: new Date().toISOString(),
-              };
-              await addBlockedEntry(entry.ip, entry.reason ?? '', entry.timestamp);
-            }
-          }
-
-          // Atualiza o histórico após o fallback
-          currentHistory = await getBlockedHistory() ?? [];
-          setBlockedHistory(currentHistory);
-        }
+        const currentHistory = await getBlockedHistory() ?? [];
 
         // Bloqueio automático de IPs de alto risco
         for (const potentialIP of potentialIPs) {
@@ -268,8 +220,7 @@ export default function TelaPrinc() {
           showSuccessToast(`Nova regra criada: ${dest} ➝ ${gateway}`);
         }
 
-      }
-      catch (err: any) {
+      } catch (err: any) {
         console.error('Erro fetch firewall:', err);
         setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
         setFirewallData(null);

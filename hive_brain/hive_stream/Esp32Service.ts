@@ -1,4 +1,4 @@
-// eslint-disable-next-line import/no-unresolved
+ // eslint-disable-next-line import/no-unresolved
 import { ESP32_SOFTAP_IP, ESP32_STA_IP } from "@env";
 
 export type LedStatus = "on" | "off";
@@ -13,6 +13,8 @@ export type Esp32Status = {
   auto_off_ms: number;
 };
 
+type ModalCallback = (message: string) => void;
+
 export default class Esp32Service {
   static SOFTAP_IP = ESP32_SOFTAP_IP;
   static STA_IP = ESP32_STA_IP;
@@ -20,6 +22,7 @@ export default class Esp32Service {
   status: Esp32Status;
   mode: "Soft-AP" | "STA";
   private reconnectInterval?: NodeJS.Timeout;
+  private modalCallback?: ModalCallback;
 
   constructor() {
     this.mode = "STA"; // Inicializa no STA por padrão
@@ -36,6 +39,18 @@ export default class Esp32Service {
     console.log("📡 ESP32 Service iniciado");
     console.log("STA_IP do .env:", Esp32Service.STA_IP);
     console.log("SOFTAP_IP do .env:", Esp32Service.SOFTAP_IP);
+  }
+
+  // Permite registrar um callback para exibir modal
+  onModal(callback: ModalCallback) {
+    this.modalCallback = callback;
+  }
+
+  // Método auxiliar para disparar o modal
+  private showModal(message: string) {
+    if (this.modalCallback) {
+      this.modalCallback(message);
+    }
   }
 
   switchMode(): "Soft-AP" | "STA" {
@@ -86,10 +101,12 @@ export default class Esp32Service {
         console.log(`✅ Reconectado via ${this.getCurrentIP()}`);
         this.syncStatus(json);
         this.stopReconnectLoop();
+        this.showModal("Reconexão bem-sucedida!");
       } catch {
         console.warn(`⏳ Tentativa ${attempts}/${maxRetries} falhou em ${this.getCurrentIP()}...`);
         if (attempts >= maxRetries) {
           console.error(`❌ Máximo de tentativas atingido, mantendo último estado.`);
+          this.showModal("Falha ao reconectar ao ESP32. Verifique a conexão.");
           this.stopReconnectLoop();
         }
       }
@@ -114,6 +131,7 @@ export default class Esp32Service {
       this.syncStatus(json);
     } catch (err) {
       console.error(`⚠️ Erro ao alternar LED:`, err);
+      this.showModal("Erro ao alternar LED. Tentando reconectar...");
       try {
         const json = await this.tryReconnectOnce(endpoint);
         this.syncStatus(json);
@@ -145,6 +163,7 @@ export default class Esp32Service {
       return this.status;
     } catch (err) {
       console.error(`⚠️ Erro ao buscar status:`, err);
+      this.showModal("Erro ao buscar status do ESP32. Tentando reconectar...");
       try {
         const json = await this.tryReconnectOnce("status");
         this.syncStatus({
@@ -175,6 +194,7 @@ export default class Esp32Service {
       return { json: this.status, image: imageBlob };
     } catch (err) {
       console.error("⚠️ Erro ao buscar snapshot:", err);
+      this.showModal("Erro ao buscar snapshot. Tentando reconectar...");
       this.startReconnectLoop("snapshot", 5000, 5);
       return { json: this.status, image: new Blob() };
     }
@@ -186,6 +206,7 @@ export default class Esp32Service {
       this.status.auto_off_ms = json.auto_off_ms ?? ms;
     } catch (err) {
       console.error("⚠️ Erro ao atualizar auto_off_ms:", err);
+      this.showModal("Erro ao atualizar auto_off_ms.");
     }
   }
 }
