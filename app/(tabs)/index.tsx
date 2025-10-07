@@ -1,6 +1,7 @@
 // eslint-disable-next-line import/no-unresolved
 import { VERCEL_URL } from '@env';
-import React, { useEffect, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -140,8 +141,10 @@ export default function TelaPrinc() {
   }, [accessCode, potentialIPs.length]);
 
   // --- Verifica firewall, risco e bloqueios automáticos ---
+  const isFocused = useIsFocused();
+
   useEffect(() => {
-    if (!accessCode || accessCode.trim() === '') return;
+    if (!accessCode || accessCode.trim() === '' || !isFocused) return;
 
     let isRunning = false; // Flag para evitar execuções simultâneas
 
@@ -180,7 +183,7 @@ export default function TelaPrinc() {
 
         const currentHistory = await getBlockedHistory() ?? [];
 
-        // Bloqueio automático de IPs de alto risco
+        // Bloqueio automático de apenas 1 IP de alto risco por ciclo
         for (const potentialIP of potentialIPs) {
           if (currentHistory.find(b => b.ip === potentialIP)) continue;
 
@@ -212,12 +215,18 @@ export default function TelaPrinc() {
             };
             await addBlockedEntry(entry.ip, entry.reason!, entry.timestamp);
             const updatedHistory = await getBlockedHistory() ?? [];
-            setBlockedHistory(updatedHistory);
+            setBlockedHistory(prev => {
+              if (JSON.stringify(prev) !== JSON.stringify(updatedHistory)) {
+                return updatedHistory;
+              }
+              return prev;
+            });
 
             await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
 
             // Toast de sucesso
             showSuccessToast(`IP ${potentialIP} bloqueado automaticamente (risco: ${routeRisk.level})`);
+            break; // Só processa um IP por ciclo
           }
         }
 
@@ -227,7 +236,12 @@ export default function TelaPrinc() {
           const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
           await addRule(dest, gateway);
           const rulesDb = await getRules();
-          setRules(rulesDb ?? []);
+          setRules(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(rulesDb)) {
+              return rulesDb ?? [];
+            }
+            return prev;
+          });
           showSuccessToast(`Nova regra criada: ${dest} ➝ ${gateway}`);
         }
 
@@ -243,10 +257,10 @@ export default function TelaPrinc() {
     };
 
     checkAndBlockHighRiskRoutes();
-    // Aumenta o intervalo para 1 minuto para reduzir requisições
+    // Só faz polling se a tela estiver em foco
     const interval = setInterval(checkAndBlockHighRiskRoutes, 60000);
     return () => clearInterval(interval);
-  }, [accessCode, potentialIPs]);
+  }, [accessCode, potentialIPs, isFocused]);
 
   if (!accessCode || accessCode.trim() === '')
     return (
@@ -259,7 +273,7 @@ export default function TelaPrinc() {
     );
 
   // Só calcula o risco se houver dados do firewall
-  const risk = FirewallUtils.calculateRiskLevel(firewallData);
+  const risk = useMemo(() => FirewallUtils.calculateRiskLevel(firewallData), [firewallData]);
 
   return (
     <>
@@ -288,9 +302,9 @@ export default function TelaPrinc() {
                   <FirewallUtils.PaginatedList
                     items={firewallData.blocked as string[] ?? []}
                     itemsPerPage={ipsPerPage}
-                    renderItem={(ip: string, idx: number) => (
+                    renderItem={useCallback((ip: string, idx: number) => (
                       <Text key={idx} style={styles.description}>{ip}</Text>
-                    )}
+                    ), [])}
                     title="IPs Bloqueados"
                   />
                 </View>
@@ -311,7 +325,7 @@ export default function TelaPrinc() {
               <FirewallUtils.PaginatedList
                 items={blockedHistory ?? []}
                 itemsPerPage={5}
-                renderItem={(entry: BlockedEntry, idx: number) => {
+                renderItem={useCallback((entry: BlockedEntry, idx: number) => {
                   let color = '#50fa7b'; // Baixo
                   if (entry.reason === 'Médio') color = '#fbbf24';
                   if (entry.reason === 'Alto') color = '#f87171';
@@ -339,7 +353,7 @@ export default function TelaPrinc() {
                       </Text>
                     </View>
                   );
-                }}
+                }, [blockedHistory])}
                 title="Histórico de bloqueios"
               />
 
@@ -347,7 +361,7 @@ export default function TelaPrinc() {
               <FirewallUtils.PaginatedList
                 items={rules ?? []}
                 itemsPerPage={rulesPerPage}
-                renderItem={(r: Rule, idx: number) => (
+                renderItem={useCallback((r: Rule, idx: number) => (
                   <View
                     key={idx}
                     style={{
@@ -363,7 +377,7 @@ export default function TelaPrinc() {
                       {r.destination} ➝ {r.gateway}
                     </Text>
                   </View>
-                )}
+                ), [rules])}
                 title="Regras e Rotas Criadas"
               />
             </>
