@@ -140,19 +140,30 @@ export default function TelaPrinc() {
   }, [accessCode, potentialIPs.length]);
 
   // --- Verifica firewall, risco e bloqueios automáticos ---
+  // Controle para evitar múltiplos modais de erro e pausar polling após erro
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '') return;
 
+    let pollingPaused = false;
+    let pauseTimeout: NodeJS.Timeout | null = null;
+    let interval: NodeJS.Timeout | null = null;
+
     const checkAndBlockHighRiskRoutes = async () => {
+      if (pollingPaused) return;
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch {
           console.error('Resposta inválida da API:', text);
-          setErrorMessage('Erro: resposta da API inválida');
-          setErrorModalVisible(true);
+          if (!errorModalVisible) {
+            setErrorMessage('Erro: resposta da API inválida');
+            setErrorModalVisible(true);
+          }
           setFirewallData(null);
+          // Pausa polling por 10s
+          pollingPaused = true;
+          pauseTimeout = setTimeout(() => { pollingPaused = false; }, 10000);
           return;
         }
 
@@ -224,15 +235,24 @@ export default function TelaPrinc() {
         console.error('Erro fetch firewall:', err);
         setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
         setFirewallData(null);
-        setErrorMessage(err?.message || 'Falha ao processar rotas');
-        setErrorModalVisible(true);
+        if (!errorModalVisible) {
+          setErrorMessage(err?.message || 'Falha ao processar rotas');
+          setErrorModalVisible(true);
+        }
+        // Pausa polling por 10s
+        pollingPaused = true;
+        pauseTimeout = setTimeout(() => { pollingPaused = false; }, 10000);
       }
     };
 
     checkAndBlockHighRiskRoutes();
-    const interval = setInterval(checkAndBlockHighRiskRoutes, 5000);
-    return () => clearInterval(interval);
-  }, [accessCode, potentialIPs]);
+    interval = setInterval(checkAndBlockHighRiskRoutes, 5000);
+    return () => {
+      if (interval) clearInterval(interval);
+      if (pauseTimeout) clearTimeout(pauseTimeout);
+    };
+  // Inclua errorModalVisible como dependência
+  }, [accessCode, potentialIPs, errorModalVisible]);
 
   if (!accessCode || accessCode.trim() === '')
     return (
