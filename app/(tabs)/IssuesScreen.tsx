@@ -1,7 +1,8 @@
 // eslint-disable-next-line import/no-unresolved
 import { GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } from '@env';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import EditIssueModal from '../../hive_body/EditIssueModal.tsx';
 import { GitHubIssueService } from '../../hive_brain/hive_one/GitHubIssueService.ts';
 
 const gitHubService = new GitHubIssueService(GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO);
@@ -125,118 +126,21 @@ export default function IssuesScreen() {
         </>
       )}
 
-      <Modal
+      <EditIssueModal
         visible={editModalVisible}
-        animationType="slide"
-        transparent={true}
         onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar Issue</Text>
-            <TextInput
-              style={styles.input}
-              value={editTitle}
-              onChangeText={setEditTitle}
-              placeholder="Título"
-              placeholderTextColor="#888"
-            />
-            <TextInput
-              style={[styles.input, { height: 80 }]}
-              value={editBody}
-              onChangeText={setEditBody}
-              placeholder="Corpo"
-              placeholderTextColor="#888"
-              multiline
-            />
-            <TextInput
-              style={styles.input}
-              value={editLabels}
-              onChangeText={setEditLabels}
-              placeholder="Tags (separadas por vírgula)"
-              placeholderTextColor="#888"
-            />
-            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-              <TouchableOpacity
-                style={[
-                  styles.statusBtn,
-                  editStatus === "open" ? styles.statusBtnActive : null,
-                ]}
-                onPress={() => setEditStatus("open")}
-              >
-                <Text style={editStatus === "open" ? styles.statusBtnTextActive : styles.statusBtnText}>
-                  Aberta
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.statusBtn,
-                  editStatus === "closed" ? styles.statusBtnActive : null,
-                ]}
-                onPress={() => setEditStatus("closed")}
-              >
-                <Text style={editStatus === "closed" ? styles.statusBtnTextActive : styles.statusBtnText}>
-                  Fechada
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-              <TouchableOpacity
-                style={[
-                  styles.projectStatusBtn,
-                  projectStatus === "Backlog" ? styles.projectStatusBtnActive : null,
-                ]}
-                onPress={() => setProjectStatus("Backlog")}
-              >
-                <Text style={projectStatus === "Backlog" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
-                  Backlog
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.projectStatusBtn,
-                  projectStatus === "Ready" ? styles.projectStatusBtnActive : null,
-                ]}
-                onPress={() => setProjectStatus("Ready")}
-              >
-                <Text style={projectStatus === "Ready" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
-                  Ready
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.projectStatusBtn,
-                  projectStatus === "In Progress" ? styles.projectStatusBtnActive : null,
-                ]}
-                onPress={() => setProjectStatus("In Progress")}
-              >
-                <Text style={projectStatus === "In Progress" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
-                  In Progress
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.projectStatusBtn,
-                  projectStatus === "In Review" ? styles.projectStatusBtnActive : null,
-                ]}
-                onPress={() => setProjectStatus("In Review")}
-              >
-                <Text style={projectStatus === "In Review" ? styles.projectStatusBtnTextActive : styles.projectStatusBtnText}>
-                  In Review
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleEditSave}>
-                <Text style={styles.saveBtnText}>Salvar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditModalVisible(false)}>
-                <Text style={styles.cancelBtnText}>Cancelar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        editTitle={editTitle}
+        setEditTitle={setEditTitle}
+        editBody={editBody}
+        setEditBody={setEditBody}
+        editLabels={editLabels}
+        setEditLabels={setEditLabels}
+        editStatus={editStatus}
+        setEditStatus={setEditStatus}
+        projectStatus={projectStatus}
+        setProjectStatus={setProjectStatus}
+        onSave={handleEditSave}
+      />
     </ScrollView>
   );
 }
