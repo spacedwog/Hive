@@ -205,7 +205,7 @@ export default function TelaPrinc() {
             if (!currentHistory.find(b => b.ip === blockedIP)) {
               const entry: BlockedEntry = {
                 ip: blockedIP,
-                reason: 'Desconhecido (fallback)',
+                reason: 'Fibonacci (module)',
                 timestamp: new Date().toISOString(),
               };
               await addBlockedEntry(entry.ip, entry.reason ?? '', entry.timestamp);
