@@ -4,14 +4,15 @@ import React, { useEffect, useState } from 'react';
 import {
   Animated,
   Easing,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
+import { GlobalErrorModal } from '../../hive_body/GlobalErrorModal.tsx';
+import { RouteModal } from '../../hive_body/RouteModal.tsx';
+
 import BottomNav from '../../hive_body/BottomNav.tsx';
 import {
   addBlockedEntry,
@@ -357,105 +358,56 @@ export default function TelaPrinc() {
       <BottomNav />
 
       {/* Modal para adicionar rota */}
-      <Modal
+      <RouteModal
         visible={modalVisible}
-        animationType="none"
-        transparent={true}
-        onRequestClose={hideModal}
-      >
-        <Animated.View style={[styles.modalOverlay, { opacity: fadeAnim }]}>
-          <View style={styles.modalContent}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Nova Rota</Text>
-
-            <TextInput
-              placeholder="Destino"
-              value={newDestination}
-              onChangeText={setNewDestination}
-              style={styles.input}
-              placeholderTextColor="#94a3b8"
-            />
-            <TextInput
-              placeholder="Gateway"
-              value={newGateway}
-              onChangeText={setNewGateway}
-              style={styles.input}
-              placeholderTextColor="#94a3b8"
-            />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
-              {/* Salvar */}
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#50fa7b' }]} onPress={async () => {
-                if (!newDestination.trim() || !newGateway.trim()) {
-                  setErrorMessage("Destino e Gateway são obrigatórios!");
-                  setErrorModalVisible(true);
-                  return;
-                }
-                try {
-                  await addRule(newDestination.trim(), newGateway.trim());
-                  const rulesDb = await getRules();
-                  setRules(rulesDb ?? []);
-                  hideModal();
-                  showSuccessToast(`Rota ${newDestination} ➝ ${newGateway} adicionada!`);
-                } catch (err: any) {
-                  setErrorMessage(err.message || "Falha ao adicionar a rota");
-                  setErrorModalVisible(true);
-                }
-              }}>
-                <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>Salvar</Text>
-              </TouchableOpacity>
-
-              {/* Deletar */}
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#fbbf24' }]} onPress={async () => {
-                if (!newDestination.trim()) {
-                  setErrorMessage("Informe o destino para deletar!");
-                  setErrorModalVisible(true);
-                  return;
-                }
-                try {
-                  await deleteRule(newDestination.trim());
-                  const rulesDb = await getRules();
-                  setRules(rulesDb ?? []);
-                  hideModal();
-                  showSuccessToast(`Rota ${newDestination} deletada!`);
-                } catch (err: any) {
-                  setErrorMessage(err.message || "Falha ao deletar a rota");
-                  setErrorModalVisible(true);
-                }
-              }}>
-                <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>Deletar</Text>
-              </TouchableOpacity>
-
-              {/* Cancelar */}
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#f87171' }]} onPress={hideModal}>
-                <Text style={{ fontWeight: 'bold', color: '#fff' }}>Cancelar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Animated.View>
-      </Modal>
+        fadeAnim={fadeAnim}
+        newDestination={newDestination}
+        newGateway={newGateway}
+        setNewDestination={setNewDestination}
+        setNewGateway={setNewGateway}
+        hideModal={hideModal}
+        onSave={async () => {
+          if (!newDestination.trim() || !newGateway.trim()) {
+            setErrorMessage("Destino e Gateway são obrigatórios!");
+            setErrorModalVisible(true);
+            return;
+          }
+          try {
+            await addRule(newDestination.trim(), newGateway.trim());
+            const rulesDb = await getRules();
+            setRules(rulesDb ?? []);
+            hideModal();
+            showSuccessToast(`Rota ${newDestination} ➝ ${newGateway} adicionada!`);
+          } catch (err: any) {
+            setErrorMessage(err.message || "Falha ao adicionar a rota");
+            setErrorModalVisible(true);
+          }
+        }}
+        onDelete={async () => {
+          if (!newDestination.trim()) {
+            setErrorMessage("Informe o destino para deletar!");
+            setErrorModalVisible(true);
+            return;
+          }
+          try {
+            await deleteRule(newDestination.trim());
+            const rulesDb = await getRules();
+            setRules(rulesDb ?? []);
+            hideModal();
+            showSuccessToast(`Rota ${newDestination} deletada!`);
+          } catch (err: any) {
+            setErrorMessage(err.message || "Falha ao deletar a rota");
+            setErrorModalVisible(true);
+          }
+        }}
+      />
 
       {/* Modal de erro global */}
-      <Modal
-        transparent={true}
+      <GlobalErrorModal
         visible={errorModalVisible}
-        animationType="fade"
-        onRequestClose={() => setErrorModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: '#0f172a' }]}>
-            <Text style={{ color: '#f87171', fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>
-              Erro
-            </Text>
-            <Text style={{ color: '#fff', marginBottom: 16 }}>{errorMessage}</Text>
-            <TouchableOpacity
-              onPress={() => setErrorModalVisible(false)}
-              style={[styles.modalBtn, { backgroundColor: '#f87171' }]}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        errorMessage={errorMessage}
+        onClose={() => setErrorModalVisible(false)}
+      />
 
       {/* Toast de sucesso temporário */}
       {showToast && (
