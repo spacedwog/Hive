@@ -53,6 +53,59 @@ export default function TelaPrinc() {
   const rulesPerPage = 5;
   const fadeAnim = useState(new Animated.Value(0))[0];
 
+  // --- RenderItem Callbacks moved to top-level to avoid hook order issues ---
+  const renderBlockedIpItem = useCallback((ip: string, idx: number) => (
+    <Text key={idx} style={styles.description}>{ip}</Text>
+  ), []);
+
+  const renderBlockedHistoryItem = useCallback((entry: BlockedEntry, idx: number) => {
+    let color = '#50fa7b'; // Baixo
+    if (entry.reason === 'Médio') color = '#fbbf24';
+    if (entry.reason === 'Alto') color = '#f87171';
+
+    return (
+      <View
+        key={idx}
+        style={{
+          backgroundColor: '#1e293b',
+          borderLeftWidth: 4,
+          borderLeftColor: color,
+          padding: 12,
+          borderRadius: 8,
+          marginBottom: 8,
+        }}
+      >
+        <Text style={[styles.description, { fontWeight: 'bold', fontSize: 16 }]}>
+          {entry.ip}
+        </Text>
+        <Text style={[styles.description, { color, fontWeight: 'bold' }]}>
+          Motivo: {entry.reason}
+        </Text>
+        <Text style={[styles.description, { color: '#94a3b8' }]}>
+          Bloqueado: {formatBlockedTime(entry.timestamp)}
+        </Text>
+      </View>
+    );
+  }, [blockedHistory]);
+
+  const renderRuleItem = useCallback((r: Rule, idx: number) => (
+    <View
+      key={idx}
+      style={{
+        backgroundColor: '#1e293b',
+        borderLeftWidth: 4,
+        borderLeftColor: '#38bdf8',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 8,
+      }}
+    >
+      <Text style={[styles.description, { fontWeight: 'bold', fontSize: 16 }]}>
+        {r.destination} ➝ {r.gateway}
+      </Text>
+    </View>
+  ), [rules]);
+
   // --- Funções para modais ---
   const showModal = () => {
     setModalVisible(true);
@@ -143,14 +196,15 @@ export default function TelaPrinc() {
   // --- Verifica firewall, risco e bloqueios automáticos ---
   const isFocused = useIsFocused();
 
+   // Ref para evitar execuções simultâneas
+  const isRunningRef = React.useRef(false);
+
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '' || !isFocused) return;
 
-    let isRunning = false; // Flag para evitar execuções simultâneas
-
     const checkAndBlockHighRiskRoutes = async () => {
-      if (isRunning) return;
-      isRunning = true;
+      if (isRunningRef.current) return;
+      isRunningRef.current = true;
       try {
         const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
         const text = await response.text();
@@ -160,7 +214,7 @@ export default function TelaPrinc() {
           setErrorMessage('Erro: resposta da API inválida');
           setErrorModalVisible(true);
           setFirewallData(null);
-          isRunning = false;
+          isRunningRef.current = false;
           return;
         }
 
@@ -168,7 +222,7 @@ export default function TelaPrinc() {
 
         if (!data.success) {
           setFirewallData(null);
-          isRunning = false;
+          isRunningRef.current = false;
           return;
         }
 
@@ -252,28 +306,30 @@ export default function TelaPrinc() {
         setErrorMessage(err?.message || 'Falha ao processar rotas');
         setErrorModalVisible(true);
       } finally {
-        isRunning = false;
+        isRunningRef.current = false;
       }
     };
 
     checkAndBlockHighRiskRoutes();
     // Só faz polling se a tela estiver em foco
-    const interval = setInterval(checkAndBlockHighRiskRoutes, 60000);
-    return () => clearInterval(interval);
+    const interval = setInterval(checkAndBlockHighRiskRoutes, 90000); // 90s para reduzir carga
+    return () => {
+      clearInterval(interval);
+      isRunningRef.current = false;
+    };
   }, [accessCode, potentialIPs, isFocused]);
 
-  if (!accessCode || accessCode.trim() === '')
-    return (
-      <View style={styles.loginContainer}>
-        <Text style={{ color: '#fff', fontSize: 16 }}>Acesse o HIVE Project</Text>
-        <TouchableOpacity onPress={() => setAccessCode('ACESSO_LIBERADO')} style={styles.loginBtn}>
-          <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Login</Text>
-        </TouchableOpacity>
-      </View>
-    );
-
-  // Só calcula o risco se houver dados do firewall
   const risk = useMemo(() => FirewallUtils.calculateRiskLevel(firewallData), [firewallData]);
+
+if (!accessCode || accessCode.trim() === '')
+  return (
+    <View style={styles.loginContainer}>
+      <Text style={{ color: '#fff', fontSize: 16 }}>Acesse o HIVE Project</Text>
+      <TouchableOpacity onPress={() => setAccessCode('ACESSO_LIBERADO')} style={styles.loginBtn}>
+        <Text style={{ color: '#0f172a', fontWeight: 'bold' }}>Login</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <>
@@ -302,9 +358,7 @@ export default function TelaPrinc() {
                   <FirewallUtils.PaginatedList
                     items={firewallData.blocked as string[] ?? []}
                     itemsPerPage={ipsPerPage}
-                    renderItem={useCallback((ip: string, idx: number) => (
-                      <Text key={idx} style={styles.description}>{ip}</Text>
-                    ), [])}
+                    renderItem={renderBlockedIpItem}
                     title="IPs Bloqueados"
                   />
                 </View>
@@ -325,35 +379,7 @@ export default function TelaPrinc() {
               <FirewallUtils.PaginatedList
                 items={blockedHistory ?? []}
                 itemsPerPage={5}
-                renderItem={useCallback((entry: BlockedEntry, idx: number) => {
-                  let color = '#50fa7b'; // Baixo
-                  if (entry.reason === 'Médio') color = '#fbbf24';
-                  if (entry.reason === 'Alto') color = '#f87171';
-
-                  return (
-                    <View
-                      key={idx}
-                      style={{
-                        backgroundColor: '#1e293b',
-                        borderLeftWidth: 4,
-                        borderLeftColor: color,
-                        padding: 12,
-                        borderRadius: 8,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <Text style={[styles.description, { fontWeight: 'bold', fontSize: 16 }]}>
-                        {entry.ip}
-                      </Text>
-                      <Text style={[styles.description, { color, fontWeight: 'bold' }]}>
-                        Motivo: {entry.reason}
-                      </Text>
-                      <Text style={[styles.description, { color: '#94a3b8' }]}>
-                        Bloqueado: {formatBlockedTime(entry.timestamp)}
-                      </Text>
-                    </View>
-                  );
-                }, [blockedHistory])}
+                renderItem={renderBlockedHistoryItem}
                 title="Histórico de bloqueios"
               />
 
@@ -361,23 +387,7 @@ export default function TelaPrinc() {
               <FirewallUtils.PaginatedList
                 items={rules ?? []}
                 itemsPerPage={rulesPerPage}
-                renderItem={useCallback((r: Rule, idx: number) => (
-                  <View
-                    key={idx}
-                    style={{
-                      backgroundColor: '#1e293b',
-                      borderLeftWidth: 4,
-                      borderLeftColor: '#38bdf8',
-                      padding: 12,
-                      borderRadius: 8,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Text style={[styles.description, { fontWeight: 'bold', fontSize: 16 }]}>
-                      {r.destination} ➝ {r.gateway}
-                    </Text>
-                  </View>
-                ), [rules])}
+                renderItem={renderRuleItem}
                 title="Regras e Rotas Criadas"
               />
             </>
