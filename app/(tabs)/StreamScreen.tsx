@@ -5,13 +5,15 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Button,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native";
+import ErrorModal from "../../hive_body/ErrorModal.tsx";
+import StatusModal from "../../hive_body/StatusModal.tsx";
+import VercelModal from "../../hive_body/VercelModal.tsx";
+
 import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service.ts";
 
 export default function StreamScreen() {
@@ -233,65 +235,21 @@ export default function StreamScreen() {
         </View>
       </ScrollView>
 
-      {/* Modal de erros */}
-      <Modal
+      <ErrorModal
         visible={errorModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setErrorModalVisible(false)}
-      >
-        <View style={styles.modalBackground}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>⚠️ Erro capturado</Text>
-            <ScrollView style={{ maxHeight: 200 }}>
-              <Text style={styles.modalText}>{errorMessage}</Text>
-            </ScrollView>
-            <TouchableOpacity style={styles.modalButton} onPress={() => setErrorModalVisible(false)}>
-              <Text style={{ color: "#fff", fontWeight: "bold" }}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal de status JSON ESP32 */}
-      <Modal
+        errorMessage={errorMessage}
+        onClose={() => setErrorModalVisible(false)}
+      />
+      <StatusModal
         visible={statusModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setStatusModalVisible(false)}
-      >
-        <View style={styles.modalBackground}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>📄 Status ESP32 JSON</Text>
-            <ScrollView style={{ maxHeight: 300 }}>
-              <Text style={styles.modalText}>{JSON.stringify(status, null, 2)}</Text>
-            </ScrollView>
-            <TouchableOpacity style={styles.modalButton} onPress={() => setStatusModalVisible(false)}>
-              <Text style={{ color: "#fff", fontWeight: "bold" }}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal de status JSON Vercel */}
-      <Modal
+        status={status}
+        onClose={() => setStatusModalVisible(false)}
+      />
+      <VercelModal
         visible={vercelModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setVercelModalVisible(false)}
-      >
-        <View style={styles.modalBackground}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>🌐 Status Vercel JSON</Text>
-            <ScrollView style={{ maxHeight: 300 }}>
-              <Text style={styles.modalText}>{JSON.stringify(vercelStatus, null, 2)}</Text>
-            </ScrollView>
-            <TouchableOpacity style={styles.modalButton} onPress={() => setVercelModalVisible(false)}>
-              <Text style={{ color: "#fff", fontWeight: "bold" }}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        vercelStatus={vercelStatus}
+        onClose={() => setVercelModalVisible(false)}
+      />
     </View>
   );
 }
