@@ -89,40 +89,58 @@ export default function HiveScreen() {
       const servers = ["192.168.4.1", "192.168.15.166"];
       const responses = await Promise.all(
         servers.map(async (server) => {
+          let res;
           try {
-            const res = await axios.get(`http://${server}/status`, {
+            res = await axios.get(`http://${server}/status`, {
               timeout: 3000,
               headers: { Authorization: authHeader },
             });
-
-            const latitude = res.data.location?.latitude ?? FALLBACK_LAT;
-            const longitude = res.data.location?.longitude ?? FALLBACK_LON;
-            let clients: any[] = [];
-
+          } catch (err) {
+            // Fallback para VERCEL
             try {
-              const clientsRes = await axios.get(`http://${server}/clients`, {
+              res = await axios.get(`${VERCEL_URL}/api/status?server=${server}`, {
+                timeout: 5000,
+                headers: { Authorization: authHeader },
+              });
+            } catch (err2) {
+              return { server, status: "offline" as const, error: String(err2), latitude: FALLBACK_LAT, longitude: FALLBACK_LON, clients: [], anomaly: { detected: false, message: "", current_value: 0 } } as NodeStatus;
+            }
+          }
+
+          const latitude = res.data.location?.latitude ?? FALLBACK_LAT;
+          const longitude = res.data.location?.longitude ?? FALLBACK_LON;
+          let clients: any[] = [];
+
+          try {
+            const clientsRes = await axios.get(`http://${server}/clients`, {
+              timeout: 8000,
+              headers: { Authorization: authHeader },
+            });
+            clients = clientsRes.data?.clients ?? [];
+          } catch {
+            // Fallback para VERCEL
+            try {
+              const clientsRes = await axios.get(`${VERCEL_URL}/api/clients?server=${server}`, {
                 timeout: 8000,
                 headers: { Authorization: authHeader },
               });
               clients = clientsRes.data?.clients ?? [];
             } catch {}
-
-            const node: NodeStatus = { ...res.data, server, latitude, longitude, clients };
-
-            if (node.ultrassonico_m !== undefined && node.ultrassonico_m < 0.1) {
-              node.anomaly = { detected: true, message: "Distância ultrassônica muito baixa!", current_value: node.ultrassonico_m };
-              Vibration.vibrate(500);
-              try {
-                await axios.post(`${VERCEL_URL}/api/anomalia`, { server: node.server, device: node.device, message: node.anomaly.message, current_value: node.anomaly.current_value, timestamp: new Date().toISOString() });
-              } catch {}
-            } else {
-              node.anomaly = { detected: false, message: "", current_value: node.ultrassonico_m ?? 0 };
-            }
-
-            return node;
-          } catch (err) {
-            return { server, status: "offline" as const, error: String(err), latitude: FALLBACK_LAT, longitude: FALLBACK_LON, clients: [], anomaly: { detected: false, message: "", current_value: 0 } } as NodeStatus;
           }
+
+          const node: NodeStatus = { ...res.data, server, latitude, longitude, clients };
+
+          if (node.ultrassonico_m !== undefined && node.ultrassonico_m < 0.1) {
+            node.anomaly = { detected: true, message: "Distância ultrassônica muito baixa!", current_value: node.ultrassonico_m };
+            Vibration.vibrate(500);
+            try {
+              await axios.post(`${VERCEL_URL}/api/anomalia`, { server: node.server, device: node.device, message: node.anomaly.message, current_value: node.anomaly.current_value, timestamp: new Date().toISOString() });
+            } catch {}
+          } else {
+            node.anomaly = { detected: false, message: "", current_value: node.ultrassonico_m ?? 0 };
+          }
+
+          return node;
         })
       );
 
@@ -140,8 +158,8 @@ export default function HiveScreen() {
             }
             next[key] = newArr;
           } else if (!next[key]) {
-                   next[key] = [];
-                 }
+            next[key] = [];
+          }
         });
         return next;
       });
