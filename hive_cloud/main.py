@@ -7,22 +7,8 @@ from utils import format_json
 
 st.title("Vercel API Dashboard")
 
-# 🔹 Input manual do token
-if "token_enviado" not in st.session_state:
-    st.session_state.token_enviado = False
-if not st.session_state.token_enviado:
-    token_input = st.text_input("Insira seu Vercel Token", type="password", key="token_input")
-    if st.button("Enviar Token"):
-        if token_input:
-            st.session_state.token = token_input
-            st.session_state.token_enviado = True
-            st.success("Token enviado com sucesso!")
-        else:
-            st.warning("Por favor, insira um token antes de enviar.")
-    token = None
-else:
-    token = st.session_state.token
-    st.info("Token enviado e salvo!")
+# 🔹 Token FIXO
+token = "Awk6YFryd6vv6IPddje7eJbR"  # Substitua pelo seu token real
 
 # 🔹 Inicializa as APIs se um token estiver selecionado
 if token:
@@ -68,3 +54,15 @@ if token:
     if st.button("Listar Domínios"):
         domains = domains_api.list_domains()
         st.code(format_json(domains), language="json")
+
+    st.header("Firewall")
+    if st.button("Consultar Firewall"):
+        import requests
+        try:
+            # Substitua a URL abaixo pela URL real do seu endpoint Vercel
+            url = "https://hive-chi-woad.vercel.app/api/firewall"
+            response = requests.get(url)
+            response.raise_for_status()
+            st.code(format_json(response.json()), language="json")
+        except requests.exceptions.RequestException as e:
+            st.error(f"Erro ao consultar firewall: {e}")
