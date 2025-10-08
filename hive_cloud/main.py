@@ -12,8 +12,8 @@ st.title("Vercel API Dashboard")
 # 🔹 Carrega todos os tokens do arquivo .env
 env_tokens = dotenv_values(".env")
 
-# 🔹 Filtra apenas as variáveis que contêm 'VERCEL_TOKEN'
-token_list = {key: value for key, value in env_tokens.items() if "VERCEL_TOKEN" in key}
+# 🔹 Filtra apenas as variáveis que contêm 'CLOUD_TOKEN'
+token_list = {key: value for key, value in env_tokens.items() if "CLOUD_TOKEN" in key}
 
 # 🔹 Exibe o <select> com os tokens disponíveis
 if token_list:
@@ -41,9 +41,22 @@ if token:
         st.code(format_json(projects), language="json")
 
     st.header("Deployments")
-    if st.button("Listar Deployments"):
-        deployments = deployments_api.list_deployments()
+
+# Primeiro, pega os projetos disponíveis
+projects = projects_api.list_projects()
+project_names = [p["name"] for p in projects.get("projects", [])]
+
+selected_project = st.selectbox(
+    "Selecione um projeto para ver os deployments:",
+    project_names or ["Nenhum projeto encontrado"],
+)
+
+if st.button("Listar Deployments"):
+    if selected_project != "Nenhum projeto encontrado":
+        deployments = deployments_api.list_deployments(params={"project": selected_project})
         st.code(format_json(deployments), language="json")
+    else:
+        st.warning("Nenhum projeto disponível para listar os deployments.")
 
     st.header("Domínios")
     if st.button("Listar Domínios"):
