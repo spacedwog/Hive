@@ -143,34 +143,43 @@ class FirewallInfo {
 
   static async getConnections() {
     return new Promise((resolve) => {
-      const cmd = process.platform === "win32" ? "netstat -n -p tcp" : "netstat -tun";
+      const cmd = process.platform === "win32" ? "netstat -ano" : "netstat -tun";
       exec(cmd, (err, stdout) => {
         if (err) {
           return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err.message }));
         }
 
-        const lines = stdout.split("\n").slice(4);
+        const lines = stdout.split("\n");
         const connections = [];
 
-        lines.forEach((line) => {
-          const parts = line.trim().split(/\s+/);
-          if (parts.length < 4) return;
-
-          let protocol = parts[0].toUpperCase();
-          let src, dst, status;
-
-          if (process.platform === "win32") {
-            src = parts[1];
-            dst = parts[2];
-            status = parts[3] || "";
-          } else {
-            src = parts[3];
-            dst = parts[4];
-            status = parts[5] || "";
-          }
-
-          connections.push({ protocol, src, dst, status });
-        });
+        if (process.platform === "win32") {
+          // Procura linhas que começam com TCP ou UDP
+          lines.forEach((line) => {
+            if (/^(TCP|UDP)/.test(line.trim())) {
+              const parts = line.trim().split(/\s+/);
+              if (parts.length >= 5) {
+                const protocol = parts[0];
+                const src = parts[1];
+                const dst = parts[2];
+                const status = parts[3] || "";
+                const pid = parts[4] || "";
+                connections.push({ protocol, src, dst, status, pid });
+              }
+            }
+          });
+        } else {
+          // Linux/Unix parsing
+          lines.slice(2).forEach((line) => {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 6) {
+              const protocol = parts[0];
+              const src = parts[3];
+              const dst = parts[4];
+              const status = parts[5] || "";
+              connections.push({ protocol, src, dst, status });
+            }
+          });
+        }
 
         this.activeConnections = connections;
         resolve(ApiResponse.success("Conexões ativas", { activeConnections: connections }));
