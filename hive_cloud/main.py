@@ -1,6 +1,4 @@
 import streamlit as st
-import os
-from dotenv import dotenv_values
 from vercel_client import VercelClient
 from projects import Projects
 from deployments import Deployments
@@ -9,24 +7,22 @@ from utils import format_json
 
 st.title("Vercel API Dashboard")
 
-# 🔹 Carrega todos os tokens do arquivo .env
-env_tokens = dotenv_values(".env")
-
-# 🔹 Filtra apenas as variáveis que contêm 'CLOUD_TOKEN'
-token_list = {key: value for key, value in env_tokens.items() if "CLOUD_TOKEN" in key}
-
-# 🔹 Exibe o <select> com os tokens disponíveis
-if token_list:
-    st.subheader("Selecione o token da Vercel (.env)")
-    selected_key = st.selectbox(
-        "Escolha um token disponível:",
-        list(token_list.keys()),
-        index=0,  # seleciona o primeiro por padrão
-    )
-    token = token_list[selected_key]
-    st.info(f"Token selecionado: {selected_key}")
+# 🔹 Input manual do token
+if "token_enviado" not in st.session_state:
+    st.session_state.token_enviado = False
+if not st.session_state.token_enviado:
+    token_input = st.text_input("Insira seu Vercel Token", type="password", key="token_input")
+    if st.button("Enviar Token"):
+        if token_input:
+            st.session_state.token = token_input
+            st.session_state.token_enviado = True
+            st.success("Token enviado com sucesso!")
+        else:
+            st.warning("Por favor, insira um token antes de enviar.")
+    token = None
 else:
-    token = st.text_input("Insira seu Vercel Token", type="password")
+    token = st.session_state.token
+    st.info("Token enviado e salvo!")
 
 # 🔹 Inicializa as APIs se um token estiver selecionado
 if token:
