@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import subprocess
 
 st.title("Menu Firewall - HIVE")
 
@@ -20,6 +21,23 @@ rotas = [
 ]
 
 st.header("Rotas do Firewall")
+
+# Botão para executar netstat -ano localmente
+if st.button("Executar netstat -ano (local Windows)"):
+    try:
+        result = subprocess.run(
+            ["netstat", "-ano"],
+            capture_output=True,
+            text=True,
+            shell=True
+        )
+        if result.returncode == 0:
+            st.success("Resultado do comando netstat -ano:")
+            st.code(result.stdout, language="text")
+        else:
+            st.error(f"Erro ao executar netstat: {result.stderr}")
+    except Exception as e:
+        st.error(f"Falha ao executar netstat: {str(e)}")
 
 for rota in rotas:
     st.subheader(rota["nome"])

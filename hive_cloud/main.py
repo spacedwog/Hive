@@ -59,8 +59,6 @@ if pagina == "Dashboard Vercel":
             st.code(json.dumps(domains, indent=2, ensure_ascii=False), language="json")
 
 elif pagina == "Firewall HIVE":
-    import subprocess
-
     st.title("Menu Firewall - HIVE")
     BASE_URL = "https://hive-chi-woad.vercel.app/api/firewall"
 
@@ -82,23 +80,6 @@ elif pagina == "Firewall HIVE":
         "Escolha a ação do Firewall:",
         [rota["nome"] for rota in rotas]
     )
-
-    # Botão para executar netstat -ano localmente no Windows
-    if st.button("Executar netstat -ano (local Windows)"):
-        try:
-            result = subprocess.run(
-                ["netstat", "-ano"],
-                capture_output=True,
-                text=True,
-                shell=True
-            )
-            if result.returncode == 0:
-                st.success("Resultado do comando netstat -ano:")
-                st.code(result.stdout, language="text")
-            else:
-                st.error(f"Erro ao executar netstat: {result.stderr}")
-        except Exception as e:
-            st.error(f"Falha ao executar netstat: {str(e)}")
 
     rota_selecionada = next((r for r in rotas if r["nome"] == menu_acao), None)
     if rota_selecionada:
