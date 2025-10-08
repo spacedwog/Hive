@@ -143,10 +143,16 @@ class FirewallInfo {
 
   static async getConnections() {
     return new Promise((resolve) => {
-      const cmd = process.platform === "win32" ? "netstat -tun" : "netstat -ano";
+      let cmd;
+      if (process.platform === "win32") {
+        cmd = "netstat -ano";
+      } else {
+        // Tenta usar netstat, se não existir, usa ss
+        cmd = "netstat -tun 2>/dev/null || ss -tun";
+      }
       exec(cmd, (err, stdout) => {
-        if (err) {
-          return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err.message }));
+        if (err || !stdout) {
+          return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err ? err.message : "Nenhuma saída do comando." }));
         }
 
         const lines = stdout.split("\n");
