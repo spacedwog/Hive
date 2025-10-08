@@ -146,20 +146,12 @@ class FirewallInfo {
       let cmd;
       if (process.platform === "win32") {
         cmd = "netstat -ano";
-      } else {
-        // Tenta usar netstat, se não existir, usa ss
-        cmd = "netstat -tun 2>/dev/null || ss -tun";
-      }
-      exec(cmd, (err, stdout) => {
-        if (err || !stdout) {
-          return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err ? err.message : "Nenhuma saída do comando." }));
-        }
-
-        const lines = stdout.split("\n");
-        const connections = [];
-
-        if (process.platform === "win32") {
-          // Procura linhas que começam com TCP ou UDP
+        exec(cmd, (err, stdout) => {
+          if (err || !stdout) {
+            return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err ? err.message : "Nenhuma saída do comando." }));
+          }
+          const lines = stdout.split("\n");
+          const connections = [];
           lines.forEach((line) => {
             if (/^(TCP|UDP)/.test(line.trim())) {
               const parts = line.trim().split(/\s+/);
@@ -173,23 +165,67 @@ class FirewallInfo {
               }
             }
           });
-        } else {
-          // Linux/Unix parsing
-          lines.slice(2).forEach((line) => {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 6) {
-              const protocol = parts[0];
-              const src = parts[3];
-              const dst = parts[4];
-              const status = parts[5] || "";
-              connections.push({ protocol, src, dst, status });
+          this.activeConnections = connections;
+          resolve(ApiResponse.success("Conexões ativas", { activeConnections: connections }));
+        });
+      } else {
+        // Verifica se netstat ou ss estão disponíveis
+        exec("which netstat", (errNetstat, stdoutNetstat) => {
+          if (stdoutNetstat && stdoutNetstat.trim()) {
+            cmd = "netstat -tun";
+          } else {
+            exec("which ss", (errSs, stdoutSs) => {
+              if (stdoutSs && stdoutSs.trim()) {
+                cmd = "ss -tun";
+              } else {
+                // Nenhum comando disponível
+                return resolve(ApiResponse.error("NETSTAT_ERROR", "Nenhum comando disponível para obter conexões ativas.", { error: "netstat e ss não encontrados no sistema." }));
+              }
+              exec(cmd, (err, stdout) => {
+                if (err || !stdout) {
+                  return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err ? err.message : "Nenhuma saída do comando." }));
+                }
+                const lines = stdout.split("\n");
+                const connections = [];
+                // Parsing para ss (simplificado)
+                lines.forEach((line, idx) => {
+                  if (idx === 0 || !line.trim()) return; // pula cabeçalho
+                  const parts = line.trim().split(/\s+/);
+                  if (parts.length >= 5) {
+                    const protocol = parts[0];
+                    const src = parts[4];
+                    const dst = parts[5];
+                    const status = parts[1] || "";
+                    connections.push({ protocol, src, dst, status });
+                  }
+                });
+                this.activeConnections = connections;
+                resolve(ApiResponse.success("Conexões ativas", { activeConnections: connections }));
+              });
+            });
+            return;
+          }
+          exec(cmd, (err, stdout) => {
+            if (err || !stdout) {
+              return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err ? err.message : "Nenhuma saída do comando." }));
             }
+            const lines = stdout.split("\n");
+            const connections = [];
+            lines.slice(2).forEach((line) => {
+              const parts = line.trim().split(/\s+/);
+              if (parts.length >= 6) {
+                const protocol = parts[0];
+                const src = parts[3];
+                const dst = parts[4];
+                const status = parts[5] || "";
+                connections.push({ protocol, src, dst, status });
+              }
+            });
+            this.activeConnections = connections;
+            resolve(ApiResponse.success("Conexões ativas", { activeConnections: connections }));
           });
-        }
-
-        this.activeConnections = connections;
-        resolve(ApiResponse.success("Conexões ativas", { activeConnections: connections }));
-      });
+        });
+      }
     });
   }
 }
