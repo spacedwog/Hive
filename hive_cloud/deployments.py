@@ -6,7 +6,7 @@ class Deployments:
 
     def list_deployments(self, project_id=None):
         params = {"projectId": project_id} if project_id else None
-        return self.client.get("/v13/deployments", params=params)
+        return self.client.get("/v6/deployments", params=params)
 
     def get_deployment(self, deployment_id):
-        return self.client.get(f"/v13/deployments/{deployment_id}")
+        return self.client.get(f"/v6/deployments/{deployment_id}")

@@ -42,21 +42,31 @@ if token:
 
     st.header("Deployments")
 
-# Primeiro, pega os projetos disponíveis
-projects = projects_api.list_projects()
-project_names = [p["name"] for p in projects.get("projects", [])]
+    # Primeiro, pega os projetos disponíveis
+    projects = projects_api.list_projects()
+    # Cria um dicionário para mapear nome do projeto para seu id
+    project_map = {p["name"]: p["id"] for p in projects.get("projects", [])}
+    project_names = list(project_map.keys())
 
-selected_project = st.selectbox(
-    "Selecione um projeto para ver os deployments:",
-    project_names or ["Nenhum projeto encontrado"],
-)
+    selected_project = st.selectbox(
+        "Selecione um projeto para ver os deployments:",
+        project_names or ["Nenhum projeto encontrado"],
+    )
 
-if st.button("Listar Deployments"):
-    if selected_project != "Nenhum projeto encontrado":
-        deployments = deployments_api.list_deployments(params={"project": selected_project})
-        st.code(format_json(deployments), language="json")
-    else:
-        st.warning("Nenhum projeto disponível para listar os deployments.")
+    if st.button("Listar Deployments"):
+        if selected_project != "Nenhum projeto encontrado":
+            project_id = project_map[selected_project]
+            try:
+                deployments = deployments_api.list_deployments(project_id=project_id)
+                st.code(format_json(deployments), language="json")
+            except Exception as e:
+                import requests
+                if isinstance(e, requests.exceptions.HTTPError):
+                    st.error(f"Erro na requisição: {e.response.status_code} - {e.response.text}")
+                else:
+                    st.error(f"Erro: {str(e)}")
+        else:
+            st.warning("Nenhum projeto disponível para listar os deployments.")
 
     st.header("Domínios")
     if st.button("Listar Domínios"):
