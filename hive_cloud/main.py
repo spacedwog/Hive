@@ -59,6 +59,8 @@ if pagina == "Dashboard Vercel":
             st.code(json.dumps(domains, indent=2, ensure_ascii=False), language="json")
 
 elif pagina == "Firewall HIVE":
+    import subprocess
+
     st.title("Menu Firewall - HIVE")
     BASE_URL = "https://hive-chi-woad.vercel.app/api/firewall"
 
@@ -80,6 +82,23 @@ elif pagina == "Firewall HIVE":
         "Escolha a ação do Firewall:",
         [rota["nome"] for rota in rotas]
     )
+
+    # Botão para executar netstat -ano localmente no Windows
+    if st.button("Executar netstat -ano (local Windows)"):
+        try:
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True,
+                text=True,
+                shell=True
+            )
+            if result.returncode == 0:
+                st.success("Resultado do comando netstat -ano:")
+                st.code(result.stdout, language="text")
+            else:
+                st.error(f"Erro ao executar netstat: {result.stderr}")
+        except Exception as e:
+            st.error(f"Falha ao executar netstat: {str(e)}")
 
     rota_selecionada = next((r for r in rotas if r["nome"] == menu_acao), None)
     if rota_selecionada:
@@ -107,6 +126,17 @@ elif pagina == "Firewall HIVE":
                 else:
                     st.error("Método não suportado.")
                 response.raise_for_status()
-                st.code(json.dumps(response.json(), indent=2, ensure_ascii=False), language="json")
+                resp_json = response.json()
+                # Se for erro de comando de conexões, mostra mensagem amigável
+                if (
+                    rota_selecionada["action"] == "connections"
+                    and not resp_json.get("success", True)
+                    and resp_json.get("error", {}).get("code") == "NETSTAT_ERROR"
+                ):
+                    st.warning(
+                        "Não foi possível obter conexões ativas: comandos netstat e ss não estão instalados no servidor. "
+                        "Peça ao administrador para instalar um deles para usar esta funcionalidade."
+                    )
+                st.code(json.dumps(resp_json, indent=2, ensure_ascii=False), language="json")
             except requests.exceptions.RequestException as e:
                 st.error(f"Erro ao consultar {rota_selecionada['nome']}: {e}")

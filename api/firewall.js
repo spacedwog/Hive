@@ -141,36 +141,38 @@ class FirewallInfo {
     return ApiResponse.success(`VPN ${enable ? "ativada" : "desativada"}.`, { vpnStatus: this.vpnStatus });
   }
 
-  static async getConnections() {
+   static async getConnections() {
     return new Promise((resolve) => {
-      let cmd;
       if (process.platform === "win32") {
-        cmd = "netstat -ano";
-        exec(cmd, (err, stdout) => {
+        // Executa netstat -ano no Windows
+        exec("netstat -ano", (err, stdout) => {
           if (err || !stdout) {
             return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err ? err.message : "Nenhuma saída do comando." }));
           }
           const lines = stdout.split("\n");
           const connections = [];
+          // Ignora cabeçalho, começa a partir da primeira linha que inicia com TCP ou UDP
           lines.forEach((line) => {
             if (/^(TCP|UDP)/.test(line.trim())) {
               const parts = line.trim().split(/\s+/);
+              // netstat -ano no Windows: Protocolo, Endereço Local, Endereço Remoto, Estado, PID
               if (parts.length >= 5) {
                 const protocol = parts[0];
-                const src = parts[1];
-                const dst = parts[2];
-                const status = parts[3] || "";
-                const pid = parts[4] || "";
-                connections.push({ protocol, src, dst, status, pid });
+                const localAddress = parts[1];
+                const remoteAddress = parts[2];
+                const state = parts[3];
+                const pid = parts[4];
+                connections.push({ protocol, localAddress, remoteAddress, state, pid });
               }
             }
           });
           this.activeConnections = connections;
-          resolve(ApiResponse.success("Conexões ativas", { activeConnections: connections }));
+          resolve(ApiResponse.success("Conexões ativas (netstat -ano)", { activeConnections: connections }));
         });
       } else {
         // Verifica se netstat ou ss estão disponíveis
         exec("which netstat", (errNetstat, stdoutNetstat) => {
+          let cmd;
           if (stdoutNetstat && stdoutNetstat.trim()) {
             cmd = "netstat -tun";
           } else {
