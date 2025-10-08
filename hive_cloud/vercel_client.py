@@ -1,7 +1,7 @@
 import requests
 
 class VercelClient:
-    BASE_URL = "https://hive-chi-woad.vercel.app/api"
+    BASE_URL = "https://api.vercel.com"
 
     def __init__(self, token: str):
         self.token = token

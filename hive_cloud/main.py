@@ -1,4 +1,6 @@
 import streamlit as st
+import os
+from dotenv import dotenv_values
 from vercel_client import VercelClient
 from projects import Projects
 from deployments import Deployments
@@ -7,8 +9,26 @@ from utils import format_json
 
 st.title("Vercel API Dashboard")
 
-token = st.text_input("Insira seu Vercel Token", type="password")
+# 🔹 Carrega todos os tokens do arquivo .env
+env_tokens = dotenv_values(".env")
 
+# 🔹 Filtra apenas as variáveis que contêm 'VERCEL_TOKEN'
+token_list = {key: value for key, value in env_tokens.items() if "VERCEL_TOKEN" in key}
+
+# 🔹 Exibe o <select> com os tokens disponíveis
+if token_list:
+    st.subheader("Selecione o token da Vercel (.env)")
+    selected_key = st.selectbox(
+        "Escolha um token disponível:",
+        list(token_list.keys()),
+        index=0,  # seleciona o primeiro por padrão
+    )
+    token = token_list[selected_key]
+    st.info(f"Token selecionado: {selected_key}")
+else:
+    token = st.text_input("Insira seu Vercel Token", type="password")
+
+# 🔹 Inicializa as APIs se um token estiver selecionado
 if token:
     client = VercelClient(token)
     projects_api = Projects(client)
