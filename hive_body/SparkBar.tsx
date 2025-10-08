@@ -1,29 +1,31 @@
+// Novo arquivo SparkBar.tsx
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-export class SparkBar {
-  width: number;
-  height: number;
+type SparkBarProps = {
   data: number[];
+  width: number;
+  height?: number;
+};
 
-  constructor(data: number[], width: number, height = 120) {
-    this.data = data;
-    this.width = width;
-    this.height = height;
-  }
+export class SparkBar extends React.Component<SparkBarProps> {
+  static defaultProps = {
+    height: 120,
+  };
 
   render() {
-    const n = Math.max(this.data.length, 1);
+    const { data, width, height } = this.props;
+    const n = Math.max(data.length, 1);
     const barGap = 2;
-    const barWidth = Math.max(2, Math.floor((this.width - (n - 1) * barGap) / n));
+    const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
 
     return (
-      <View style={[styles.chartBox, { width: this.width, height: this.height }]}>
+      <View style={[styles.chartBox, { width, height }]}>
         <View style={styles.chartAxis} />
         <View style={styles.chartBarsRow}>
-          {this.data.map((v, i) => {
+          {data.map((v, i) => {
             const clamped = Math.max(0, Math.min(100, v));
-            const h = Math.max(2, Math.round((clamped / 100) * (this.height - 16)));
+            const h = Math.max(2, Math.round((clamped / 100) * (height! - 16)));
             return (
               <View
                 key={`${i}-${v}`}

@@ -15,38 +15,9 @@ import {
 } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
 
+import { SparkBar } from '../../hive_body/SparkBar.tsx';
+
 import { FALLBACK_LAT, FALLBACK_LON, MAX_POINTS, NodeStatus } from "../../hive_brain/hive_prime/EspManager.ts";
-
-// ==================================
-// Componente gráfico de barras
-// ==================================
-const SparkBar: React.FC<{ data: number[]; width: number; height?: number }> = ({ data, width, height = 120 }) => {
-  const n = Math.max(data.length, 1);
-  const barGap = 2;
-  const barWidth = Math.max(2, Math.floor((width - (n - 1) * barGap) / n));
-
-  return (
-    <View style={[styles.chartBox, { width, height }]}>
-      <View style={styles.chartAxis} />
-      <View style={styles.chartBarsRow}>
-        {data.map((v, i) => {
-          const clamped = Math.max(0, Math.min(100, v));
-          const h = Math.max(2, Math.round((clamped / 100) * (height - 16)));
-          return (
-            <View
-              key={`${i}-${v}`}
-              style={[styles.chartBar, { width: barWidth, height: h, marginRight: i === n - 1 ? 0 : barGap }]}
-            />
-          );
-        })}
-      </View>
-      <View style={styles.chartLabels}>
-        <Text style={styles.chartLabelText}>0%</Text>
-        <Text style={styles.chartLabelText}>100%</Text>
-      </View>
-    </View>
-  );
-};
 
 // ==================================
 // HiveScreen
