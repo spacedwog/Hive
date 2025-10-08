@@ -14,7 +14,6 @@ rotas = [
     {"nome": "Desbloquear IP", "action": "unblock", "method": "POST", "fields": ["ip"]},
     {"nome": "Configurar NAT", "action": "nat", "method": "POST", "fields": ["internalIP", "externalIP"]},
     {"nome": "VPN", "action": "vpn", "method": "POST", "fields": ["enable"]},
-    {"nome": "Conexões Ativas", "action": "connections", "method": "GET"},
     {"nome": "Rotas (listar)", "action": "routes", "method": "GET"},
     {"nome": "Rotas (adicionar)", "action": "routes", "method": "POST", "fields": ["destination", "gateway"]},
     {"nome": "Rotas (remover)", "action": "routes", "method": "DELETE", "fields": ["destination"]},
@@ -48,19 +47,6 @@ for rota in rotas:
 
             response.raise_for_status()
             resp_json = response.json()
-            # Se for erro de comando de conexões, mostra instrução para executar manualmente
-            if (
-                rota["action"] == "connections"
-                and not resp_json.get("success", True)
-                and resp_json.get("error", {}).get("code") == "NETSTAT_ERROR"
-            ):
-                st.warning(
-                    "❗ O comando netstat não está instalado no servidor.\n\n"
-                    "Para visualizar as conexões ativas, execute manualmente no Prompt de Comando do Windows:\n\n"
-                    "```cmd\nnetstat -ano\n```\n"
-                    "O resultado mostrará todas as conexões de rede e os PIDs dos processos.\n\n"
-                    "Se precisar de ajuda para interpretar o resultado, copie e cole aqui!"
-                )
             st.code(resp_json, language="json")
         except requests.exceptions.RequestException as e:
             st.error(f"Erro ao consultar {rota['nome']}: {e}")

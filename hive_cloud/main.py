@@ -69,7 +69,6 @@ elif pagina == "Firewall HIVE":
         {"nome": "Desbloquear IP", "action": "unblock", "method": "POST", "fields": ["ip"]},
         {"nome": "Configurar NAT", "action": "nat", "method": "POST", "fields": ["internalIP", "externalIP"]},
         {"nome": "VPN", "action": "vpn", "method": "POST", "fields": ["enable"]},
-        {"nome": "Conexões Ativas", "action": "connections", "method": "GET"},
         {"nome": "Rotas (listar)", "action": "routes", "method": "GET"},
         {"nome": "Rotas (adicionar)", "action": "routes", "method": "POST", "fields": ["destination", "gateway"]},
         {"nome": "Rotas (remover)", "action": "routes", "method": "DELETE", "fields": ["destination"]},
@@ -108,16 +107,6 @@ elif pagina == "Firewall HIVE":
                     st.error("Método não suportado.")
                 response.raise_for_status()
                 resp_json = response.json()
-                # Se for erro de comando de conexões, mostra mensagem amigável
-                if (
-                    rota_selecionada["action"] == "connections"
-                    and not resp_json.get("success", True)
-                    and resp_json.get("error", {}).get("code") == "NETSTAT_ERROR"
-                ):
-                    st.warning(
-                        "Não foi possível obter conexões ativas: comandos netstat e ss não estão instalados no servidor. "
-                        "Peça ao administrador para instalar um deles para usar esta funcionalidade."
-                    )
                 st.code(json.dumps(resp_json, indent=2, ensure_ascii=False), language="json")
             except requests.exceptions.RequestException as e:
                 st.error(f"Erro ao consultar {rota_selecionada['nome']}: {e}")
