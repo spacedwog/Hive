@@ -143,7 +143,7 @@ class FirewallInfo {
 
   static async getConnections() {
     return new Promise((resolve) => {
-      const cmd = process.platform === "win32" ? "netstat -ano" : "netstat -tun";
+      const cmd = process.platform === "win32" ? "netstat -tun" : "netstat -ano";
       exec(cmd, (err, stdout) => {
         if (err) {
           return resolve(ApiResponse.error("NETSTAT_ERROR", "Falha ao obter conexões ativas.", { error: err.message }));
