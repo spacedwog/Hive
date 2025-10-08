@@ -14,7 +14,7 @@ import {
 import { GlobalErrorModal } from '../../hive_body/hive_modal/GlobalErrorModal.tsx';
 import { RouteModal } from '../../hive_body/hive_modal/RouteModal.tsx';
 
-import BottomNav from '../../hive_body/hive_view/hive_nav/BottomNav.tsx';
+import BottomNav from '../../hive_body/hive_nav/BottomNav.tsx';
 import {
   addBlockedEntry,
   addRule,
