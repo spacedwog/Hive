@@ -20,25 +20,6 @@ rotas = [
     {"nome": "Rotas (remover)", "action": "routes", "method": "DELETE", "fields": ["destination"]},
 ]
 
-st.header("Rotas do Firewall")
-
-# Botão para executar netstat -ano localmente
-if st.button("Executar netstat -ano (local Windows)"):
-    try:
-        result = subprocess.run(
-            ["netstat", "-ano"],
-            capture_output=True,
-            text=True,
-            shell=True
-        )
-        if result.returncode == 0:
-            st.success("Resultado do comando netstat -ano:")
-            st.code(result.stdout, language="text")
-        else:
-            st.error(f"Erro ao executar netstat: {result.stderr}")
-    except Exception as e:
-        st.error(f"Falha ao executar netstat: {str(e)}")
-
 for rota in rotas:
     st.subheader(rota["nome"])
     fields = rota.get("fields", [])
@@ -66,6 +47,20 @@ for rota in rotas:
                 continue
 
             response.raise_for_status()
-            st.code(response.json(), language="json")
+            resp_json = response.json()
+            # Se for erro de comando de conexões, mostra instrução para executar manualmente
+            if (
+                rota["action"] == "connections"
+                and not resp_json.get("success", True)
+                and resp_json.get("error", {}).get("code") == "NETSTAT_ERROR"
+            ):
+                st.warning(
+                    "❗ O comando netstat não está instalado no servidor.\n\n"
+                    "Para visualizar as conexões ativas, execute manualmente no Prompt de Comando do Windows:\n\n"
+                    "```cmd\nnetstat -ano\n```\n"
+                    "O resultado mostrará todas as conexões de rede e os PIDs dos processos.\n\n"
+                    "Se precisar de ajuda para interpretar o resultado, copie e cole aqui!"
+                )
+            st.code(resp_json, language="json")
         except requests.exceptions.RequestException as e:
             st.error(f"Erro ao consultar {rota['nome']}: {e}")
