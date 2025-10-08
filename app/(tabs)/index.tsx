@@ -11,10 +11,10 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { GlobalErrorModal } from '../../hive_body/GlobalErrorModal.tsx';
-import { RouteModal } from '../../hive_body/RouteModal.tsx';
+import { GlobalErrorModal } from '../../hive_body/hive_modal/GlobalErrorModal.tsx';
+import { RouteModal } from '../../hive_body/hive_modal/RouteModal.tsx';
 
-import BottomNav from '../../hive_body/BottomNav.tsx';
+import BottomNav from '../../hive_body/hive_view/hive_nav/BottomNav.tsx';
 import {
   addBlockedEntry,
   addRule,

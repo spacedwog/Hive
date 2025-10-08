@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
 
-import { SparkBar } from '../../hive_body/SparkBar.tsx';
+import { SparkBar } from '../../hive_body/hive_bar/SparkBar.tsx';
 
 import { FALLBACK_LAT, FALLBACK_LON, MAX_POINTS, NodeStatus } from "../../hive_brain/hive_prime/EspManager.ts";
 

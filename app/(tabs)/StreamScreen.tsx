@@ -10,9 +10,9 @@ import {
   Text,
   View
 } from "react-native";
-import ErrorModal from "../../hive_body/ErrorModal.tsx";
-import StatusModal from "../../hive_body/StatusModal.tsx";
-import VercelModal from "../../hive_body/VercelModal.tsx";
+import ErrorModal from "../../hive_body/hive_modal/ErrorModal.tsx";
+import StatusModal from "../../hive_body/hive_modal/StatusModal.tsx";
+import VercelModal from "../../hive_body/hive_modal/VercelModal.tsx";
 
 import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service.ts";
 
