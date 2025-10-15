@@ -25,6 +25,9 @@ export type SustainabilityReport = {
 };
 
 export class SustainabilityManager {
+  invalidateCache(arg0: string) {
+    throw new Error('Method not implemented.');
+  }
   private static instance: SustainabilityManager;
   private powerMode: PowerMode = 'balanced';
   private metrics: ResourceMetrics[] = [];

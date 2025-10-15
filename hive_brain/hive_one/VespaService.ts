@@ -1,11 +1,15 @@
 import axios from 'axios';
-import { SensorData } from './types';
+import SustainabilityManager from '../hive_sustain/SustainabilityManager.ts';
+import { SensorData } from './types.js';
 
 export class VespaService {
   url: string;
+  private sustainManager: SustainabilityManager;
 
   constructor(url: string) {
     this.url = url;
+    this.sustainManager = SustainabilityManager.getInstance();
+    console.log('🌱 VespaService inicializado com sustentabilidade');
   }
 
   async sendSensorData(data: SensorData) {
@@ -20,12 +24,18 @@ export class VespaService {
 
   async fetchSensorInfo(): Promise<{ data: any | null; html: string | null }> {
     try {
-      const res = await fetch(`${this.url}/api/placa_vespa?info=sensor`);
-      const text = await res.text();
+      const url = `${this.url}/api/placa_vespa?info=sensor`;
+      // Usa cache do SustainabilityManager (adaptativo baseado no modo de energia)
+      const text = await this.sustainManager.cachedRequest<string>(
+        url,
+        { method: 'GET' },
+        this.sustainManager.getTimeout('cache')
+      );
+      
       try {
-        return { data: JSON.parse(text), html: null };
+        return { data: JSON.parse(text as any), html: null };
       } catch {
-        return { data: null, html: text };
+        return { data: null, html: text as any };
       }
     } catch (err) {
       console.error('Erro ao acessar Vespa:', err);
@@ -55,11 +65,14 @@ export class VespaService {
    */
   async fetchFirewallInfo(): Promise<any | null> {
     try {
-      const res = await fetch(`${this.url}/api/firewall`);
-      if (!res.ok) {
-        throw new Error('Erro ao acessar: ' + res.url);
-      }
-      return await res.json();
+      const url = `${this.url}/api/firewall`;
+      // Usa cache do SustainabilityManager
+      const data = await this.sustainManager.cachedRequest<any>(
+        url,
+        { method: 'GET' },
+        this.sustainManager.getTimeout('cache')
+      );
+      return data;
     } catch (err) {
       console.error('Erro ao acessar Firewall:', err);
       return null;

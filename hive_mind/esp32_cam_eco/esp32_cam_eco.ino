@@ -114,9 +114,9 @@ void updateEnergyScore() {
   }
   
   // Penaliza por muitas requests
-  float requestPenalty = min((totalRequests / 1000.0) * 5, 20);
+  float requestPenalty = min((totalRequests / 1000.0) * 5, 20.0);
   
-  energyScore = max(modeScore - requestPenalty, 0);
+  energyScore = max(modeScore - requestPenalty, 0.0);
 }
 
 void enterDeepSleep() {
