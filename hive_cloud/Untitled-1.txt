@@ -1,0 +1,9 @@
+Paste the diagnostics report below when creating an issue at https://github.com/wallabyjs/public/issues/new
+------------
+[stdout] wallaby.js started
+
+
+{
+  "editorVersion": "1.105.1",
+  "pluginVersion": "1.0.470"
+}

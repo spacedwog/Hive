@@ -4,8 +4,8 @@ import * as SQLite from 'expo-sqlite';
 export const db = SQLite.openDatabaseSync('hive.db');
 
 // Cria tabelas normalizadas
-export const initDB = () => {
-  db.execAsync(`
+export const initDB = async () => {
+  await db.execAsync(`
     PRAGMA foreign_keys = ON;
 
     CREATE TABLE IF NOT EXISTS ips (

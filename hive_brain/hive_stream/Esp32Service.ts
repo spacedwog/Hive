@@ -23,6 +23,7 @@ export default class Esp32Service {
   mode: "Soft-AP" | "STA";
   private reconnectInterval?: NodeJS.Timeout;
   private modalCallback?: ModalCallback;
+  private retryCount = 0; // Contador de tentativas atual
 
   constructor() {
     this.mode = "STA"; // Inicializa no STA por padrão
@@ -64,61 +65,157 @@ export default class Esp32Service {
     return this.status.ip;
   }
 
-  private async request(path: string, timeoutMs = 15000) {
+  // Método para testar conectividade básica (ping)
+  private async testConnectivity(): Promise<boolean> {
+    try {
+      console.log(`🏓 Testando conectividade com ${this.getCurrentIP()}...`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      
+      const res = await fetch(`${this.getCurrentIP()}/status`, { 
+        signal: controller.signal,
+        method: 'GET',
+      });
+      
+      clearTimeout(timeout);
+      const isConnected = res.ok;
+      
+      if (isConnected) {
+        console.log(`✅ ESP32 está acessível em ${this.getCurrentIP()}`);
+      } else {
+        console.warn(`⚠️ ESP32 respondeu com status ${res.status}`);
+      }
+      
+      return isConnected;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error(`❌ Falha no teste de conectividade: ${errorMessage}`);
+      console.error(`   IP testado: ${this.getCurrentIP()}`);
+      console.error(`   Modo atual: ${this.mode}`);
+      return false;
+    }
+  }
+
+  // Calcula o delay com backoff exponencial
+  private calculateBackoffDelay(attempt: number, baseDelay = 5000): number {
+    // Backoff exponencial com jitter: baseDelay * 2^attempt + random(0-1000)
+    const exponentialDelay = baseDelay * Math.pow(2, Math.min(attempt, 4));
+    const jitter = Math.random() * 1000;
+    const delay = Math.min(exponentialDelay + jitter, 60000); // Máximo de 60 segundos
+    return delay;
+  }
+
+  private async request(path: string, timeoutMs = 30000) {
     const url = `${this.getCurrentIP()}/${path}`;
     console.log(`🌐 Fazendo request para: ${url}`);
+    console.log(`⏱️  Timeout configurado: ${timeoutMs}ms`);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      const startTime = Date.now();
       const res = await fetch(url, { signal: controller.signal });
+      const duration = Date.now() - startTime;
+      
+      console.log(`⏱️  Request completado em ${duration}ms`);
+      
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       return await res.json();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error(`❌ Falha no request: ${errorMessage}`);
+      console.error(`   URL: ${url}`);
+      throw err;
     } finally {
       clearTimeout(timeout);
     }
   }
 
   private async tryReconnectOnce(path: string) {
+    console.log(`🔄 Tentando reconexão imediata para: ${path}`);
     return this.request(path);
   }
 
-  private startReconnectLoop(path: string, intervalMs = 5000, maxRetries = 5) {
+  private startReconnectLoop(path: string, baseIntervalMs = 5000, maxRetries = 10) {
     if (this.reconnectInterval) {
+      console.warn("⚠️ Loop de reconexão já está ativo, ignorando nova tentativa.");
       return;
     }
 
-    let attempts = 0;
+    this.retryCount = 0;
     console.warn(`🔁 Iniciando reconexão automática em ${this.getCurrentIP()}...`);
+    console.warn(`   Máximo de tentativas: ${maxRetries}`);
+    console.warn(`   Intervalo base: ${baseIntervalMs}ms (com backoff exponencial)`);
 
-    this.reconnectInterval = setInterval(async () => {
-      attempts++;
-      try {
-        const json = await this.request(path);
-        console.log(`✅ Reconectado via ${this.getCurrentIP()}`);
+    // Primeira tentativa imediata
+    this.attemptReconnect(path, baseIntervalMs, maxRetries);
+  }
+
+  private attemptReconnect(path: string, baseIntervalMs: number, maxRetries: number) {
+    this.retryCount++;
+    const currentDelay = this.calculateBackoffDelay(this.retryCount - 1, baseIntervalMs);
+    
+    console.warn(`⏳ Tentativa ${this.retryCount}/${maxRetries} para ${this.getCurrentIP()}...`);
+    console.warn(`   Próxima tentativa em ${(currentDelay / 1000).toFixed(1)}s`);
+
+    this.request(path)
+      .then((json) => {
+        console.log(`✅ Reconectado com sucesso via ${this.getCurrentIP()}`);
+        console.log(`   Tentativas necessárias: ${this.retryCount}`);
         this.syncStatus(json);
         this.stopReconnectLoop();
-        this.showModal("Reconexão bem-sucedida!");
-      } catch {
-        console.warn(`⏳ Tentativa ${attempts}/${maxRetries} falhou em ${this.getCurrentIP()}...`);
-        if (attempts >= maxRetries) {
-          console.error(`❌ Máximo de tentativas atingido, mantendo último estado.`);
-          this.showModal("Falha ao reconectar ao ESP32. Verifique a conexão.");
+        this.showModal(`Reconexão bem-sucedida após ${this.retryCount} tentativa(s)!`);
+      })
+      .catch((err) => {
+        const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+        console.warn(`❌ Tentativa ${this.retryCount} falhou: ${errorMessage}`);
+        
+        if (this.retryCount >= maxRetries) {
+          console.error(`❌ Máximo de ${maxRetries} tentativas atingido, mantendo último estado.`);
+          console.error(`   IP testado: ${this.getCurrentIP()}`);
+          console.error(`   Modo: ${this.mode}`);
+          console.error(`   Sugestão: Verifique se o ESP32 está ligado e na mesma rede.`);
+          this.showModal(`Falha ao reconectar ao ESP32 após ${maxRetries} tentativas. Verifique a conexão.`);
           this.stopReconnectLoop();
+        } else {
+          // Agenda próxima tentativa com backoff exponencial
+          this.reconnectInterval = setTimeout(() => {
+            this.attemptReconnect(path, baseIntervalMs, maxRetries);
+          }, currentDelay);
         }
-      }
-    }, intervalMs);
+      });
   }
 
   private stopReconnectLoop() {
     if (this.reconnectInterval) {
-      clearInterval(this.reconnectInterval);
+      clearTimeout(this.reconnectInterval);
       this.reconnectInterval = undefined;
+      this.retryCount = 0;
       console.log("🛑 Loop de reconexão encerrado.");
     }
+  }
+
+  // Método público para testar manualmente a conexão
+  async checkConnection(): Promise<boolean> {
+    console.log("🔍 Iniciando verificação de conexão...");
+    const isConnected = await this.testConnectivity();
+    
+    if (!isConnected && this.mode === "STA") {
+      console.log("⚠️ Falha no modo STA, tentando Soft-AP automaticamente...");
+      this.switchMode();
+      const softApConnected = await this.testConnectivity();
+      
+      if (softApConnected) {
+        console.log("✅ Conexão estabelecida via Soft-AP");
+        this.showModal("Conectado via Soft-AP");
+        return true;
+      }
+    }
+    
+    return isConnected;
   }
 
   async toggleLed(turnOn?: boolean) {
@@ -126,19 +223,31 @@ export default class Esp32Service {
       ? turnOn ? "led/on" : "led/off"
       : this.status.led_builtin === "on" ? "led/off" : "led/on";
 
+    console.log(`💡 Alternando LED via endpoint: ${endpoint}`);
+
     try {
       const json = await this.request(endpoint);
       this.syncStatus(json);
+      console.log("✅ LED alternado com sucesso");
     } catch (err) {
-      console.error(`⚠️ Erro ao alternar LED:`, err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error(`⚠️ Erro ao alternar LED: ${errorMessage}`);
       this.showModal("Erro ao alternar LED. Tentando reconectar...");
+      
       try {
+        console.log("🔄 Tentando reconexão imediata...");
         const json = await this.tryReconnectOnce(endpoint);
         this.syncStatus(json);
-      } catch {
-        this.startReconnectLoop(endpoint, 5000, 5);
+        console.log("✅ LED alternado após reconexão");
+      } catch (retryErr) {
+        const retryErrorMessage = retryErr instanceof Error ? retryErr.message : 'Erro desconhecido';
+        console.error(`❌ Falha na reconexão imediata: ${retryErrorMessage}`);
+        console.log("🔁 Iniciando loop de reconexão automática...");
+        this.startReconnectLoop(endpoint, 5000, 10);
+        // Inverte o estado localmente enquanto tenta reconectar
         this.status.led_builtin = this.status.led_builtin === "on" ? "off" : "on";
         this.status.led_opposite = this.status.led_opposite === "on" ? "off" : "on";
+        console.log("🔄 Estado do LED invertido localmente");
       }
     }
   }
@@ -153,6 +262,8 @@ export default class Esp32Service {
   }
 
   async fetchStatus(): Promise<Esp32Status> {
+    console.log("📊 Buscando status do ESP32...");
+    
     try {
       const json = await this.request("status");
       this.syncStatus({
@@ -160,25 +271,35 @@ export default class Esp32Service {
         sensor_db: json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1)),
       });
       this.stopReconnectLoop();
+      console.log("✅ Status obtido com sucesso");
       return this.status;
     } catch (err) {
-      console.error(`⚠️ Erro ao buscar status:`, err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error(`⚠️ Erro ao buscar status: ${errorMessage}`);
       this.showModal("Erro ao buscar status do ESP32. Tentando reconectar...");
+      
       try {
+        console.log("🔄 Tentando reconexão imediata...");
         const json = await this.tryReconnectOnce("status");
         this.syncStatus({
           ...json,
           sensor_db: json.sensor_db ?? parseFloat((Math.random() * 100).toFixed(1)),
         });
+        console.log("✅ Status obtido após reconexão");
         return this.status;
-      } catch {
-        this.startReconnectLoop("status", 5000, 5);
+      } catch (retryErr) {
+        const retryErrorMessage = retryErr instanceof Error ? retryErr.message : 'Erro desconhecido';
+        console.error(`❌ Falha na reconexão imediata: ${retryErrorMessage}`);
+        console.log("🔁 Iniciando loop de reconexão automática...");
+        this.startReconnectLoop("status", 5000, 10);
         return this.status;
       }
     }
   }
 
   async fetchSnapshot(): Promise<{ json: Esp32Status; image: Blob }> {
+    console.log("📸 Buscando snapshot do ESP32...");
+    
     try {
       const res = await fetch(`${this.getCurrentIP()}/snapshot`);
       if (!res.ok) {
@@ -191,21 +312,28 @@ export default class Esp32Service {
       const imageBlob = new Blob([text], { type: "image/jpeg" });
 
       this.syncStatus(json);
+      console.log("✅ Snapshot obtido com sucesso");
       return { json: this.status, image: imageBlob };
     } catch (err) {
-      console.error("⚠️ Erro ao buscar snapshot:", err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error(`⚠️ Erro ao buscar snapshot: ${errorMessage}`);
       this.showModal("Erro ao buscar snapshot. Tentando reconectar...");
-      this.startReconnectLoop("snapshot", 5000, 5);
+      console.log("🔁 Iniciando loop de reconexão automática...");
+      this.startReconnectLoop("snapshot", 5000, 10);
       return { json: this.status, image: new Blob() };
     }
   }
 
   async setAutoOff(ms: number) {
+    console.log(`⏲️  Configurando auto_off para ${ms}ms...`);
+    
     try {
       const json = await this.request(`config?auto_off_ms=${ms}`);
       this.status.auto_off_ms = json.auto_off_ms ?? ms;
+      console.log(`✅ Auto_off configurado: ${this.status.auto_off_ms}ms`);
     } catch (err) {
-      console.error("⚠️ Erro ao atualizar auto_off_ms:", err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error(`⚠️ Erro ao atualizar auto_off_ms: ${errorMessage}`);
       this.showModal("Erro ao atualizar auto_off_ms.");
     }
   }

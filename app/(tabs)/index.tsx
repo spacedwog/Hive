@@ -51,7 +51,7 @@ export default function TelaPrinc() {
 
   const ipsPerPage = 10;
   const rulesPerPage = 5;
-  const fadeAnim = useState(new Animated.Value(0))[0];
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   // --- RenderItem Callbacks moved to top-level to avoid hook order issues ---
   const renderBlockedIpItem = useCallback((ip: string, idx: number) => (
@@ -86,7 +86,7 @@ export default function TelaPrinc() {
         </Text>
       </View>
     );
-  }, [blockedHistory]);
+  }, []);
 
   const renderRuleItem = useCallback((r: Rule, idx: number) => (
     <View
@@ -104,7 +104,7 @@ export default function TelaPrinc() {
         {r.destination} ➝ {r.gateway}
       </Text>
     </View>
-  ), [rules]);
+  ), []);
 
   // --- Funções para modais ---
   const showModal = () => {
@@ -138,12 +138,18 @@ export default function TelaPrinc() {
 
   // --- Inicializa DB e carrega dados ---
   useEffect(() => {
-    initDB();
     (async () => {
-      const history = await getBlockedHistory();
-      setBlockedHistory(history ?? []);
-      const rulesDb = await getRules();
-      setRules(rulesDb ?? []);
+      try {
+        await initDB();
+        const history = await getBlockedHistory();
+        setBlockedHistory(history ?? []);
+        const rulesDb = await getRules();
+        setRules(rulesDb ?? []);
+      } catch (error) {
+        console.error('Erro ao inicializar database:', error);
+        setErrorMessage('Falha ao inicializar o banco de dados');
+        setErrorModalVisible(true);
+      }
     })();
   }, []);
 
