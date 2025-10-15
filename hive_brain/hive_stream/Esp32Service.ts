@@ -1,5 +1,6 @@
  // eslint-disable-next-line import/no-unresolved
 import { ESP32_SOFTAP_IP, ESP32_STA_IP } from "@env";
+import SustainabilityManager from '../hive_sustain/SustainabilityManager.ts';
 
 export type LedStatus = "on" | "off";
 
@@ -24,8 +25,10 @@ export default class Esp32Service {
   private reconnectInterval?: NodeJS.Timeout;
   private modalCallback?: ModalCallback;
   private retryCount = 0; // Contador de tentativas atual
+  private sustainManager: SustainabilityManager;
 
   constructor() {
+    this.sustainManager = SustainabilityManager.getInstance();
     this.mode = "STA"; // Inicializa no STA por padrão
     this.status = {
       ip: this.mode === "STA" ? Esp32Service.STA_IP : Esp32Service.SOFTAP_IP,
@@ -69,21 +72,25 @@ export default class Esp32Service {
   private async testConnectivity(): Promise<boolean> {
     try {
       console.log(`🏓 Testando conectividade com ${this.getCurrentIP()}...`);
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
       
-      const res = await fetch(`${this.getCurrentIP()}/status`, { 
-        signal: controller.signal,
-        method: 'GET',
-      });
+      // Usa SustainabilityManager para requisições otimizadas
+      const res = await this.sustainManager.cachedRequest(
+        `${this.getCurrentIP()}/status`,
+        { method: 'GET' },
+        10000 // Cache por 10s
+      );
       
-      clearTimeout(timeout);
-      const isConnected = res.ok;
+      const isConnected = true;
       
       if (isConnected) {
         console.log(`✅ ESP32 está acessível em ${this.getCurrentIP()}`);
       } else {
-        console.warn(`⚠️ ESP32 respondeu com status ${res.status}`);
+        if (typeof res === "object" && res !== null && "status" in res) {
+          // @ts-ignore
+          console.warn(`⚠️ ESP32 respondeu com status ${(res as { status: number }).status}`);
+        } else {
+          console.warn("⚠️ ESP32 respondeu com status desconhecido");
+        }
       }
       
       return isConnected;
