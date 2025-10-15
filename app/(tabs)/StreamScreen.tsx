@@ -60,7 +60,8 @@ export default function StreamScreen() {
   const toggleLed = async () => {
     try {
       await esp32Service.toggleLed();
-      setStatus({ ...esp32Service.status });
+      const newStatus = await esp32Service.fetchStatus();
+      setStatus({ ...newStatus });
     } catch (error) {
       showError(error);
     }
@@ -161,32 +162,55 @@ export default function StreamScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.connectionText}>
-        {status.ip ?? "" ? "✅ Conectado ao ESP32" : "❌ Desconectado"}
+        {status.ip_sta ? `✅ Conectado ao ESP32-CAM (${mode === "STA" ? status.ip_sta : status.ip_ap})` : "❌ Desconectado"}
       </Text>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
-        {/* Status ESP32 */}
-        <Text style={[styles.text, { marginTop: 20 }]}>💡 Status ESP32:</Text>
+        {/* Status ESP32-CAM */}
+        <Text style={[styles.text, { marginTop: 20 }]}>📷 Status ESP32-CAM:</Text>
         <View style={[styles.dataBox, { alignSelf: "center" }]}>
           <Text style={styles.overlayText}>
             LED Built-in:{" "}
             <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
-              {(status.led_builtin ?? "off").toUpperCase()}
+              {status.led_builtin.toUpperCase()}
             </Text>
           </Text>
           <Text style={styles.overlayText}>
             LED Opposite:{" "}
             <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
-              {(status.led_opposite ?? "off").toUpperCase()}
+              {status.led_opposite.toUpperCase()}
             </Text>
           </Text>
-          <Text style={styles.overlayText}>IP: {status.ip ?? "N/A"}</Text>
           <Text style={styles.overlayText}>
-            🔊 Sensor de Som: {(status.sensor_db ?? 0).toFixed(1)} dB
+            IP AP: {status.ip_ap}
+          </Text>
+          <Text style={styles.overlayText}>
+            IP STA: {status.ip_sta}
+          </Text>
+          <Text style={styles.overlayText}>
+            🔊 Sensor de Som: {status.sensor_db} dB
+          </Text>
+          <Text style={styles.overlayText}>
+            ⚡ Modo de Energia: {status.power_mode ?? "balanced"}
+          </Text>
+          <Text style={styles.overlayText}>
+            📊 Energy Score: {status.energy_score?.toFixed(1) ?? "0.0"}
+          </Text>
+          <Text style={styles.overlayText}>
+            💾 Memória Livre: {((status.free_heap ?? 0) / 1024).toFixed(1)} KB
+          </Text>
+          <Text style={styles.overlayText}>
+            ⏱️ Uptime: {((status.uptime_ms ?? 0) / 1000).toFixed(0)}s
+          </Text>
+          <Text style={styles.overlayText}>
+            📡 Total Requisições: {status.total_requests ?? 0}
+          </Text>
+          <Text style={styles.overlayText}>
+            ⏲️ Auto-off: {status.auto_off_ms}ms
           </Text>
           <View style={styles.buttonRow}>
             <Button
-              title={status.led_builtin === "on" ? "Desligar ESP32" : "Ligar ESP32"}
+              title={status.led_builtin === "on" ? "Desligar LED" : "Ligar LED"}
               onPress={toggleLed}
             />
             <Button
