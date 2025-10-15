@@ -2,10 +2,10 @@
 import { VERCEL_URL } from '@env';
 import React, { JSX, useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 export type Rule = { destination: string; gateway: string };
@@ -173,24 +173,43 @@ export class FirewallUtils {
   // -------- Fetch and Save Routes --------
   static async fetchAndSaveRoutes(setRules: any, setRawJson: any, setErrorMessage: any, setErrorModalVisible: any) {
     try {
-      const resp = await fetch(`${VERCEL_URL}/api/firewall?action=routes`, { method: "GET" });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // Timeout de 8s
+      
+      const resp = await fetch(`${VERCEL_URL}/api/firewall?action=routes`, { 
+        method: "GET",
+        signal: controller.signal 
+      });
+      clearTimeout(timeoutId);
+      
+      if (!resp.ok) {
+        throw new Error(`HTTP error! status: ${resp.status}`);
+      }
+      
       const data = await resp.json();
       setRawJson((prev: any) => ({ ...prev, routes: data }));
 
       if (data.success && Array.isArray(data.routes)) {
         const formatted: Rule[] = data.routes.map((r: any) => ({
-          destination: r.destination || r.DestinationPrefix,
-          gateway: r.gateway || r.NextHop,
+          destination: r.destination || r.DestinationPrefix || 'unknown',
+          gateway: r.gateway || r.NextHop || '0.0.0.0',
         }));
         setRules(formatted);
-        for (const r of formatted) {
-          await FirewallUtils.saveRoute(r.destination, r.gateway, setRules, setErrorModalVisible, setErrorMessage);
-        }
-      } else setRules([]);
+        
+        // Não salva rotas automaticamente para evitar loop
+        // for (const r of formatted) {
+        //   await FirewallUtils.saveRoute(r.destination, r.gateway, setRules, setErrorModalVisible, setErrorMessage);
+        // }
+      } else {
+        setRules([]);
+      }
     } catch (err: any) {
-      setRawJson((prev: any) => ({ ...prev, routesError: err?.message || "Falha ao buscar rotas" }));
-      setErrorMessage(err?.message || "Falha ao buscar rotas");
-      setErrorModalVisible(true);
+      console.error('Erro ao buscar rotas:', err);
+      if (err.name !== 'AbortError') {
+        setRawJson((prev: any) => ({ ...prev, routesError: err?.message || "Falha ao buscar rotas" }));
+        // Não mostra modal de erro para evitar spam de notificações
+        console.warn('Falha ao buscar rotas:', err?.message);
+      }
       setRules([]);
     }
   }

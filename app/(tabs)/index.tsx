@@ -138,19 +138,26 @@ export default function TelaPrinc() {
 
   // --- Inicializa DB e carrega dados ---
   useEffect(() => {
+    let mounted = true;
     (async () => {
       try {
         await initDB();
+        if (!mounted) return;
+        
         const history = await getBlockedHistory();
-        setBlockedHistory(history ?? []);
+        if (mounted) setBlockedHistory(history ?? []);
+        
         const rulesDb = await getRules();
-        setRules(rulesDb ?? []);
+        if (mounted) setRules(rulesDb ?? []);
       } catch (error) {
         console.error('Erro ao inicializar database:', error);
-        setErrorMessage('Falha ao inicializar o banco de dados');
-        setErrorModalVisible(true);
+        if (mounted) {
+          setErrorMessage('Falha ao inicializar o banco de dados');
+          setErrorModalVisible(true);
+        }
       }
     })();
+    return () => { mounted = false; };
   }, []);
 
   const formatBlockedTime = (isoString: string) => {
@@ -182,6 +189,8 @@ export default function TelaPrinc() {
       ];
       try {
         const results = await Promise.all(domains.map(FirewallUtils.resolveDomainA));
+        if (!isMountedRef.current) return; // Verifica se ainda está montado
+        
         const aggregated: string[] = [];
         for (const arr of results) {
           const ipArr = arr as string[];
@@ -190,10 +199,13 @@ export default function TelaPrinc() {
         if (aggregated.length === 0) {
           aggregated.push('142.250.190.14','172.217.169.78','140.82.121.4','104.16.133.229');
         }
-        setPotentialIPs(aggregated);
+        if (isMountedRef.current) setPotentialIPs(aggregated);
       } catch (err: any) {
-        setErrorMessage(err.message || 'Falha ao carregar IPs potenciais');
-        setErrorModalVisible(true);
+        console.error('Erro ao carregar IPs potenciais:', err);
+        if (isMountedRef.current) {
+          setErrorMessage(err.message || 'Falha ao carregar IPs potenciais');
+          setErrorModalVisible(true);
+        }
       }
     };
     if (accessCode && potentialIPs.length === 0) loadPotentialIPs();
@@ -202,49 +214,72 @@ export default function TelaPrinc() {
   // --- Verifica firewall, risco e bloqueios automáticos ---
   const isFocused = useIsFocused();
 
-   // Ref para evitar execuções simultâneas
+  // Ref para evitar execuções simultâneas
   const isRunningRef = React.useRef(false);
+  // Ref para verificar se o componente está montado
+  const isMountedRef = React.useRef(true);
 
   useEffect(() => {
     if (!accessCode || accessCode.trim() === '' || !isFocused) return;
 
     const checkAndBlockHighRiskRoutes = async () => {
-      if (isRunningRef.current) return;
+      if (isRunningRef.current || !isMountedRef.current) return;
       isRunningRef.current = true;
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout de 10s
+      
       try {
-        const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`);
+        const response = await fetch(`${VERCEL_URL}/api/firewall?action=info`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!isMountedRef.current) return;
+        
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch {
           console.error('Resposta inválida da API:', text);
-          setErrorMessage('Erro: resposta da API inválida');
-          setErrorModalVisible(true);
-          setFirewallData(null);
+          if (isMountedRef.current) {
+            setErrorMessage('Erro: resposta da API inválida');
+            setErrorModalVisible(true);
+            setFirewallData(null);
+          }
           isRunningRef.current = false;
           return;
         }
 
+        if (!isMountedRef.current) return;
+        
         setRawJson((prev: any) => ({ ...prev, firewall: data }));
 
         if (!data.success) {
-          setFirewallData(null);
+          if (isMountedRef.current) setFirewallData(null);
           isRunningRef.current = false;
           return;
         }
 
-        setFirewallData((prev: any) => {
-          if (JSON.stringify(prev) !== JSON.stringify(data.data)) {
-            return data.data;
-          }
-          return prev;
-        });
+        if (isMountedRef.current) {
+          setFirewallData((prev: any) => {
+            if (JSON.stringify(prev) !== JSON.stringify(data.data)) {
+              return data.data;
+            }
+            return prev;
+          });
+        }
+        if (!isMountedRef.current) return;
+        
         const risk = FirewallUtils.calculateRiskLevel(data.data);
         const connectedIP = data.data.ipConectado;
 
         const currentHistory = await getBlockedHistory() ?? [];
+        
+        if (!isMountedRef.current) return;
 
         // Bloqueio automático de apenas 1 IP de alto risco por ciclo
         for (const potentialIP of potentialIPs) {
+          if (!isMountedRef.current) break;
           if (currentHistory.find(b => b.ip === potentialIP)) continue;
 
           const routeRisk = FirewallUtils.evaluateRouteRisk({
@@ -259,6 +294,8 @@ export default function TelaPrinc() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ destination: connectedIP })
             });
+            
+            if (!isMountedRef.current) break;
 
             // Bloqueia IP
             await fetch(`${VERCEL_URL}/api/firewall?action=block`, {
@@ -266,6 +303,8 @@ export default function TelaPrinc() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ip: potentialIP })
             });
+            
+            if (!isMountedRef.current) break;
 
             // Adiciona ao histórico no banco
             const entry: BlockedEntry = {
@@ -275,57 +314,87 @@ export default function TelaPrinc() {
             };
             await addBlockedEntry(entry.ip, entry.reason!, entry.timestamp);
             const updatedHistory = await getBlockedHistory() ?? [];
-            setBlockedHistory(prev => {
-              if (JSON.stringify(prev) !== JSON.stringify(updatedHistory)) {
-                return updatedHistory;
-              }
-              return prev;
-            });
+            
+            if (isMountedRef.current) {
+              setBlockedHistory(prev => {
+                if (JSON.stringify(prev) !== JSON.stringify(updatedHistory)) {
+                  return updatedHistory;
+                }
+                return prev;
+              });
 
-            await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
+              await FirewallUtils.fetchAndSaveRoutes(setRules, setRawJson, setErrorMessage, setErrorModalVisible);
 
-            // Toast de sucesso
-            showSuccessToast(`IP ${potentialIP} bloqueado automaticamente (risco: ${routeRisk.level})`);
+              // Toast de sucesso
+              showSuccessToast(`IP ${potentialIP} bloqueado automaticamente (risco: ${routeRisk.level})`);
+            }
             break; // Só processa um IP por ciclo
           }
         }
 
         // Criação de novas rotas caso necessário
-        if (data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
+        if (isMountedRef.current && data.data.tentativasBloqueadas >= data.data.regrasAplicadas) {
           const dest = "192.168.15.166/status";
           const gateway = potentialIPs[Math.floor(Math.random() * potentialIPs.length)] || '8.8.8.8';
           await addRule(dest, gateway);
           const rulesDb = await getRules();
-          setRules(prev => {
-            if (JSON.stringify(prev) !== JSON.stringify(rulesDb)) {
-              return rulesDb ?? [];
-            }
-            return prev;
-          });
-          showSuccessToast(`Nova regra criada: ${dest} ➝ ${gateway}`);
+          
+          if (isMountedRef.current) {
+            setRules(prev => {
+              if (JSON.stringify(prev) !== JSON.stringify(rulesDb)) {
+                return rulesDb ?? [];
+              }
+              return prev;
+            });
+            showSuccessToast(`Nova regra criada: ${dest} ➝ ${gateway}`);
+          }
         }
 
       } catch (err: any) {
         console.error('Erro fetch firewall:', err);
-        setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
-        setFirewallData(null);
-        setErrorMessage(err?.message || 'Falha ao processar rotas');
-        setErrorModalVisible(true);
+        if (err.name === 'AbortError') {
+          console.log('Requisição abortada por timeout');
+        } else if (isMountedRef.current) {
+          setRawJson((prev: any) => ({ ...prev, firewallError: err?.message || 'Falha no fetch firewall' }));
+          setFirewallData(null);
+          // Só mostra erro se não for de rede comum
+          if (!err.message?.includes('NetworkError') && !err.message?.includes('fetch')) {
+            setErrorMessage(err?.message || 'Falha ao processar rotas');
+            setErrorModalVisible(true);
+          }
+        }
       } finally {
         isRunningRef.current = false;
       }
     };
 
-    checkAndBlockHighRiskRoutes();
+    // Delay inicial para evitar execução imediata após login
+    const initialTimeout = setTimeout(() => {
+      if (isMountedRef.current) checkAndBlockHighRiskRoutes();
+    }, 2000); // Aguarda 2s após login
+    
     // Só faz polling se a tela estiver em foco
-    const interval = setInterval(checkAndBlockHighRiskRoutes, 90000); // 90s para reduzir carga
+    const interval = setInterval(() => {
+      if (isMountedRef.current) checkAndBlockHighRiskRoutes();
+    }, 90000); // 90s para reduzir carga
+    
     return () => {
+      clearTimeout(initialTimeout);
       clearInterval(interval);
       isRunningRef.current = false;
     };
   }, [accessCode, potentialIPs, isFocused]);
 
   const risk = useMemo(() => FirewallUtils.calculateRiskLevel(firewallData), [firewallData]);
+
+  // Cleanup quando o componente desmontar
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      isRunningRef.current = false;
+    };
+  }, []);
 
 if (!accessCode || accessCode.trim() === '')
   return (
