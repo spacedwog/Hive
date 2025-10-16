@@ -204,7 +204,7 @@ export default function StreamScreen() {
           <Text style={styles.overlayText}>
             IP AP: {status.ip_ap}
           </Text>
-          <Text style={styles.overlayText}>
+                    <Text style={styles.overlayText}>
             IP STA: {status.ip_sta}
           </Text>
           <Text style={styles.overlayText}>

@@ -4,7 +4,7 @@ import SustainabilityManager from '../hive_sustain/SustainabilityManager.ts';
 
 export type LedStatus = "on" | "off";
 
-// Estrutura real retornada pelo ESP32-CAM (baseada no firmware atual)
+// Estrutura real retornada pelo ESP32-CAM (baseada no firmware esp32_cam.ino)
 export type Esp32Status = {
   led_builtin: LedStatus;
   led_opposite: LedStatus;
