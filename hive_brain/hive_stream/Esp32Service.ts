@@ -41,6 +41,17 @@ export default class Esp32Service {
   private sustainManager: SustainabilityManager;
   private errorHistory: ErrorLog[] = [];
   private maxErrorHistory = 20;
+  
+  // Circuit breaker
+  private circuitBreakerFailures = 0;
+  private circuitBreakerThreshold = 5;
+  private circuitBreakerTimeout = 30000; // 30s
+  private circuitBreakerOpenUntil = 0;
+  private isCircuitBreakerOpen = false;
+  
+  // Cache de status
+  private lastSuccessfulStatus: Esp32Status | null = null;
+  private lastSuccessTime = 0;
 
   constructor() {
     this.sustainManager = SustainabilityManager.getInstance();
@@ -117,6 +128,51 @@ export default class Esp32Service {
     return stats;
   }
 
+  private checkCircuitBreaker(): boolean {
+    const now = Date.now();
+    
+    if (this.isCircuitBreakerOpen && now < this.circuitBreakerOpenUntil) {
+      const remainingTime = Math.ceil((this.circuitBreakerOpenUntil - now) / 1000);
+      console.warn(`⚠️ Circuit breaker aberto. Tentando novamente em ${remainingTime}s`);
+      return false;
+    }
+    
+    if (this.isCircuitBreakerOpen && now >= this.circuitBreakerOpenUntil) {
+      console.log("✅ Circuit breaker resetado. Tentando reconectar...");
+      this.isCircuitBreakerOpen = false;
+      this.circuitBreakerFailures = 0;
+    }
+    
+    return true;
+  }
+
+  private recordCircuitBreakerFailure() {
+    this.circuitBreakerFailures++;
+    
+    if (this.circuitBreakerFailures >= this.circuitBreakerThreshold) {
+      this.isCircuitBreakerOpen = true;
+      this.circuitBreakerOpenUntil = Date.now() + this.circuitBreakerTimeout;
+      console.error(`🔴 Circuit breaker aberto após ${this.circuitBreakerFailures} falhas consecutivas`);
+      console.error(`   Pausando requisições por ${this.circuitBreakerTimeout / 1000}s`);
+    }
+  }
+
+  private recordCircuitBreakerSuccess() {
+    if (this.circuitBreakerFailures > 0) {
+      console.log(`✅ Conexão restaurada após ${this.circuitBreakerFailures} falhas`);
+    }
+    this.circuitBreakerFailures = 0;
+    this.isCircuitBreakerOpen = false;
+  }
+
+  getLastKnownStatus(): Esp32Status | null {
+    return this.lastSuccessfulStatus;
+  }
+
+  getTimeSinceLastSuccess(): number {
+    return Date.now() - this.lastSuccessTime;
+  }
+
   switchMode(): "Soft-AP" | "STA" {
     this.mode = this.mode === "STA" ? "Soft-AP" : "STA";
     console.log(`🔄 Modo alterado para ${this.mode}, IP atual: ${this.getCurrentIP()}`);
@@ -127,12 +183,38 @@ export default class Esp32Service {
     return this.mode === "STA" ? this.status.ip_sta : this.status.ip_ap;
   }
 
+  private getFormattedURL(path: string): string {
+    const ip = this.getCurrentIP();
+    
+    // Valida se o IP está definido e não é "desconectado"
+    if (!ip || ip === "desconectado" || ip === "0.0.0.0") {
+      throw new Error(`IP inválido ou não conectado: ${ip}`);
+    }
+    
+    // Remove barras extras e adiciona protocolo HTTP
+    const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+    const cleanIP = ip.replace(/^http:\/\//, '').replace(/\/$/, '');
+    
+    return `http://${cleanIP}/${cleanPath}`;
+  }
+
   private async testConnectivity(): Promise<boolean> {
+    const currentIP = this.getCurrentIP();
+    
+    // Valida IP antes de tentar conectar
+    if (!currentIP || currentIP === "desconectado" || currentIP === "0.0.0.0") {
+      console.error(`❌ IP inválido para teste de conectividade: ${currentIP}`);
+      return false;
+    }
+    
     try {
-      console.log(`🏓 Testando conectividade com ${this.getCurrentIP()}...`);
+      console.log(`🏓 Testando conectividade com ${currentIP}...`);
+      
+      const url = this.getFormattedURL('status');
+      console.log(`   URL de teste: ${url}`);
       
       const res = await this.sustainManager.cachedRequest(
-        `${this.getCurrentIP()}/status`,
+        url,
         { method: 'GET' },
         10000
       );
@@ -140,7 +222,7 @@ export default class Esp32Service {
       const isConnected = true;
       
       if (isConnected) {
-        console.log(`✅ ESP32 está acessível em ${this.getCurrentIP()}`);
+        console.log(`✅ ESP32 está acessível em ${currentIP}`);
       } else {
         if (typeof res === "object" && res !== null && "status" in res) {
           console.warn(`⚠️ ESP32 respondeu com status ${(res as { status: number }).status}`);
@@ -153,7 +235,7 @@ export default class Esp32Service {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       console.error(`❌ Falha no teste de conectividade: ${errorMessage}`);
-      console.error(`   IP testado: ${this.getCurrentIP()}`);
+      console.error(`   IP testado: ${currentIP}`);
       console.error(`   Modo atual: ${this.mode}`);
       return false;
     }
@@ -167,9 +249,26 @@ export default class Esp32Service {
   }
 
   private async request(path: string, options: RequestInit = {}, timeoutMs = 30000) {
-    const url = `${this.getCurrentIP()}/${path}`;
+    // Verifica circuit breaker
+    if (!this.checkCircuitBreaker()) {
+      throw new Error("Circuit breaker aberto. Aguarde antes de tentar novamente.");
+    }
+    
+    let url: string;
+    
+    try {
+      url = this.getFormattedURL(path);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao formatar URL';
+      console.error(`❌ ${errorMessage}`);
+      this.logError(errorMessage, 'network', path, `Modo: ${this.mode}, IP: ${this.getCurrentIP()}`);
+      this.recordCircuitBreakerFailure();
+      throw err;
+    }
+    
     console.log(`🌐 Fazendo request para: ${url}`);
     console.log(`⏱️  Timeout configurado: ${timeoutMs}ms`);
+    console.log(`📍 Modo: ${this.mode} | IP: ${this.getCurrentIP()}`);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -184,6 +283,7 @@ export default class Esp32Service {
       if (!res.ok) {
         const errorDetail = `HTTP ${res.status} - ${res.statusText}`;
         this.logError(errorDetail, 'http', path, `Status: ${res.status}`);
+        this.recordCircuitBreakerFailure();
         
         if (res.status === 404) {
           console.error(`❌ Endpoint não encontrado: ${path}`);
@@ -197,13 +297,15 @@ export default class Esp32Service {
         }
         throw new Error(errorDetail);
       }
+      
+      this.recordCircuitBreakerSuccess();
       return await res.json();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       
       // Categoriza o tipo de erro
       let errorType: ErrorLog['type'] = 'unknown';
-      if (errorMessage.includes('Network request failed')) {
+      if (errorMessage.includes('Network request failed') || errorMessage.includes('Failed to fetch')) {
         errorType = 'network';
       } else if (errorMessage.includes('aborted') || errorMessage.includes('timeout')) {
         errorType = 'timeout';
@@ -212,11 +314,33 @@ export default class Esp32Service {
       }
       
       this.logError(errorMessage, errorType, path, `URL: ${url}`);
+      this.recordCircuitBreakerFailure();
       
       console.error(`❌ Falha no request: ${errorMessage}`);
       console.error(`   URL: ${url}`);
       console.error(`   Modo: ${this.mode}`);
-      console.error(`   Verifique se o ESP32 está ligado e acessível`);
+      
+      // Diagnóstico específico por tipo de erro
+      if (errorType === 'network') {
+        console.error(`\n🔴 ERRO DE REDE DETECTADO:`);
+        console.error(`   ✓ Verifique se o ESP32 está ligado`);
+        console.error(`   ✓ Confirme que o dispositivo está na mesma rede Wi-Fi`);
+        console.error(`   ✓ IP configurado: ${this.getCurrentIP()}`);
+        console.error(`   ✓ Modo atual: ${this.mode}`);
+        console.error(`\n💡 SUGESTÕES:`);
+        if (this.mode === "STA") {
+          console.error(`   → Tente trocar para modo Soft-AP`);
+          console.error(`   → IP Soft-AP: ${this.status.ip_ap}`);
+        } else {
+          console.error(`   → Tente trocar para modo STA`);
+          console.error(`   → IP STA: ${this.status.ip_sta}`);
+        }
+      } else if (errorType === 'timeout') {
+        console.error(`\n⏱️  TIMEOUT DETECTADO:`);
+        console.error(`   → ESP32 não respondeu em ${timeoutMs}ms`);
+        console.error(`   → Possível sobrecarga ou problema no firmware`);
+      }
+      
       throw err;
     } finally {
       clearTimeout(timeout);
@@ -236,9 +360,10 @@ export default class Esp32Service {
       console.error(`   ⚠️ Erro na tentativa: ${errorMessage}`);
       
       // Verifica se é erro de rede ou timeout
-      if (errorMessage.includes('Network request failed')) {
+      if (errorMessage.includes('Network request failed') || errorMessage.includes('Failed to fetch')) {
         console.error(`   🔴 Falha de rede: ESP32 pode estar offline ou inacessível`);
         console.error(`   💡 Dica: Verifique se o ESP32 está ligado e na mesma rede`);
+        console.error(`   � Dica: Use o botão 'Modo' para trocar entre STA e Soft-AP manualmente`);
       } else if (errorMessage.includes('aborted')) {
         console.error(`   ⏱️  Timeout: ESP32 não respondeu a tempo`);
         console.error(`   💡 Dica: ESP32 pode estar sobrecarregado ou com problemas`);
@@ -408,6 +533,11 @@ export default class Esp32Service {
       const json = await this.request("status");
       this.syncStatus(json);
       this.stopReconnectLoop();
+      
+      // Cacheia status bem-sucedido
+      this.lastSuccessfulStatus = { ...this.status };
+      this.lastSuccessTime = Date.now();
+      
       console.log("✅ Status obtido com sucesso:", json);
       return this.status;
     } catch (err) {

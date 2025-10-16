@@ -27,6 +27,12 @@ export default function StreamScreen() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
+  
+  // Estados de conectividade
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(true);
+  const [isFetchingStatus, setIsFetchingStatus] = useState(false);
+  const [consecutiveErrors, setConsecutiveErrors] = useState(0);
 
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [vercelModalVisible, setVercelModalVisible] = useState(false);
@@ -42,8 +48,8 @@ export default function StreamScreen() {
     });
   }, [esp32Service]);
 
-  // Função para exibir erros (mantida para compatibilidade)
-  const showError = (err: any) => {
+  // Função para exibir erros (apenas para ações manuais do usuário)
+  const showError = (err: any, isUserAction = false) => {
     let msg = "";
     if (typeof err === "string") {
       msg = err;
@@ -52,8 +58,15 @@ export default function StreamScreen() {
     } else {
       try { msg = JSON.stringify(err, null, 2); } catch { msg = String(err); }
     }
-    setErrorMessage(msg);
-    setErrorModalVisible(true);
+    
+    // Apenas mostra modal se for ação do usuário
+    // Erros automáticos (polling) são apenas logados
+    if (isUserAction) {
+      setErrorMessage(msg);
+      setErrorModalVisible(true);
+    } else {
+      console.warn("⚠️ Erro silencioso (background):", msg);
+    }
   };
 
   // Função para mostrar o modal de erros com histórico
@@ -82,8 +95,11 @@ export default function StreamScreen() {
       await esp32Service.toggleLed();
       const newStatus = await esp32Service.fetchStatus();
       setStatus({ ...newStatus });
+      setIsConnected(true);
+      setConsecutiveErrors(0);
     } catch (error) {
-      showError(error);
+      showError(error, true); // true = ação do usuário
+      setIsConnected(false);
     }
   };
 
@@ -93,27 +109,47 @@ export default function StreamScreen() {
       esp32Service.switchMode();
       setMode(esp32Service.mode);
       setStatus({ ...esp32Service.status });
+      setIsConnecting(true);
+      setConsecutiveErrors(0);
+      
+      // Tenta reconectar imediatamente no novo modo
+      try {
+        const newStatus = await esp32Service.fetchStatus();
+        setStatus({ ...newStatus });
+        setIsConnected(true);
+        setIsConnecting(false);
+      } catch (err) {
+        console.warn("⚠️ Não foi possível conectar no novo modo ainda");
+        setIsConnecting(false);
+      }
     } catch (error) {
-      showError(error);
+      showError(error, true);
     }
   };
 
   // GET status do Vercel (somente para modal)
   const fetchStatusFromVercel = async () => {
     try {
-      const response = await fetch(`${VERCEL_URL}/api/status?info=server`);
+      const response = await fetch(`${VERCEL_URL}/api/status?info=server`, {
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const text = await response.text();
       let result;
       try {
         result = JSON.parse(text);
       } catch {
-        throw new Error("Resposta não é JSON: " + text);
+        throw new Error("Resposta não é JSON válido: " + text.substring(0, 100));
       }
       setVercelStatus(result);
       setVercelModalVisible(true);
       console.log("🌐 Status Vercel:", result);
     } catch (err) {
-      showError(err);
+      showError(err, true); // true = ação do usuário
     }
   };
 
@@ -127,20 +163,25 @@ export default function StreamScreen() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const text = await response.text();
         let result;
         try {
           result = JSON.parse(text);
         } catch {
-          throw new Error("Resposta não é JSON: " + text);
+          throw new Error("Resposta não é JSON válido: " + text.substring(0, 100));
         }
         if (result.success) {
           console.log("✅ Dados enviados!", result.logData);
         } else {
-          showError(result);
+          throw new Error(result.message || "Erro ao enviar dados");
         }
       } catch (err) {
-        showError(err);
+        showError(err, true); // true = ação do usuário
       }
     },
     [status, VERCEL_API_URL]
@@ -149,6 +190,7 @@ export default function StreamScreen() {
   // Captura e envia foto
   const captureAndUploadPhoto = async () => {
     if (!cameraRef.current) {
+      showError("Câmera não está pronta", true);
       return;
     }
     try {
@@ -162,27 +204,77 @@ export default function StreamScreen() {
       console.log("📸 Foto capturada:", photo.uri);
       await sendDataToVercel(photo.base64);
     } catch (err) {
-      showError(err);
+      showError(err, true); // true = ação do usuário
     }
   };
 
-  // Atualiza status local a cada 2s
+  // Polling inteligente com backoff exponencial
   useEffect(() => {
-    const interval = setInterval(async () => {
+    let interval: NodeJS.Timeout;
+    let isActive = true;
+    
+    const fetchStatusWithBackoff = async () => {
+      if (!isActive || isFetchingStatus) return;
+      
+      setIsFetchingStatus(true);
+      
       try {
         const newStatus = await esp32Service.fetchStatus();
         setStatus({ ...newStatus });
+        setIsConnected(true);
+        setIsConnecting(false);
+        setConsecutiveErrors(0);
+        
+        // Sucesso: polling normal (2s)
+        if (isActive) {
+          interval = setTimeout(fetchStatusWithBackoff, 2000);
+        }
       } catch (err) {
-        showError(err);
+        setIsConnected(false);
+        setConsecutiveErrors(prev => prev + 1);
+        
+        // Não mostra erro em polling automático
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.warn(`⚠️ Erro no polling automático (${consecutiveErrors + 1}x):`, errorMsg);
+        
+        // Backoff exponencial: 5s, 10s, 20s, 30s (máximo)
+        const backoffDelay = Math.min(5000 * Math.pow(2, consecutiveErrors), 30000);
+        
+        if (consecutiveErrors >= 3) {
+          console.warn(`🔴 Múltiplas falhas consecutivas. Pausando polling por ${backoffDelay/1000}s`);
+        }
+        
+        if (isActive) {
+          interval = setTimeout(fetchStatusWithBackoff, backoffDelay);
+        }
+      } finally {
+        setIsFetchingStatus(false);
       }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [esp32Service]);
+    };
+    
+    // Inicia polling
+    fetchStatusWithBackoff();
+    
+    return () => {
+      isActive = false;
+      if (interval) clearTimeout(interval);
+    };
+  }, [esp32Service, consecutiveErrors, isFetchingStatus]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.connectionText}>
-        {status.ip_sta ? `✅ Conectado ao ESP32-CAM (${mode === "STA" ? status.ip_sta : status.ip_ap})` : "❌ Desconectado"}
+      <Text style={[styles.connectionText, {
+        color: isConnected ? "#0af" : isConnecting ? "#facc15" : "#ff6666"
+      }]}>
+        {isConnecting ? (
+          `🔄 Conectando... (${mode})`
+        ) : isConnected ? (
+          `✅ Conectado (${mode}: ${mode === "STA" ? status.ip_sta : status.ip_ap})`
+        ) : consecutiveErrors > 0 ? (
+          `❌ Desconectado - ${consecutiveErrors} tentativas falharam`
+        ) : (
+          "⏳ Iniciando..."
+        )}
       </Text>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
