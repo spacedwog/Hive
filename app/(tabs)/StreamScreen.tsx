@@ -11,12 +11,15 @@ import {
   View
 } from "react-native";
 import ErrorModal from "../../hive_body/hive_modal/ErrorModal.tsx";
+import LogModal, { LogEntry } from "../../hive_body/hive_modal/LogModal.tsx";
 import StatusModal from "../../hive_body/hive_modal/StatusModal.tsx";
 import VercelModal from "../../hive_body/hive_modal/VercelModal.tsx";
 
+import LogService from "../../hive_brain/hive_one/LogService.ts";
 import Esp32Service, { ErrorLog, Esp32Status } from "../../hive_brain/hive_stream/Esp32Service.ts";
 
 export default function StreamScreen() {
+  const [logService] = useState(() => LogService.getInstance());
   const [esp32Service] = useState(() => new Esp32Service());
   const [status, setStatus] = useState<Esp32Status>({ ...esp32Service.status });
   const [mode, setMode] = useState<"Soft-AP" | "STA">(esp32Service.mode);
@@ -27,6 +30,9 @@ export default function StreamScreen() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
+  
+  const [logModalVisible, setLogModalVisible] = useState(false);
+  const [systemLogs, setSystemLogs] = useState<LogEntry[]>([]);
   
   // Estados de conectividade
   const [isConnected, setIsConnected] = useState(false);
@@ -48,6 +54,22 @@ export default function StreamScreen() {
     });
   }, [esp32Service]);
 
+  // Subscreve ao LogService para atualizar logs em tempo real
+  useEffect(() => {
+    const updateLogs = () => {
+      setSystemLogs(logService.getLogs());
+    };
+    
+    logService.subscribe(updateLogs);
+    updateLogs(); // Carrega logs iniciais
+    
+    logService.info("StreamScreen iniciado");
+    
+    return () => {
+      logService.unsubscribe(updateLogs);
+    };
+  }, [logService]);
+
   // Função para exibir erros (apenas para ações manuais do usuário)
   const showError = (err: any, isUserAction = false) => {
     let msg = "";
@@ -64,8 +86,9 @@ export default function StreamScreen() {
     if (isUserAction) {
       setErrorMessage(msg);
       setErrorModalVisible(true);
+      logService.error("Erro em ação do usuário", msg);
     } else {
-      console.warn("⚠️ Erro silencioso (background):", msg);
+      logService.warn("Erro em background", msg);
     }
   };
 
@@ -91,12 +114,14 @@ export default function StreamScreen() {
 
   // Toggle LED
   const toggleLed = async () => {
+    logService.info("Alternando LED...");
     try {
       await esp32Service.toggleLed();
       const newStatus = await esp32Service.fetchStatus();
       setStatus({ ...newStatus });
       setIsConnected(true);
       setConsecutiveErrors(0);
+      logService.success("LED alternado com sucesso");
     } catch (error) {
       showError(error, true); // true = ação do usuário
       setIsConnected(false);
@@ -105,12 +130,14 @@ export default function StreamScreen() {
 
   // Troca modo Soft-AP <-> STA
   const switchMode = async () => {
+    logService.info(`Trocando para modo ${esp32Service.mode === 'STA' ? 'Soft-AP' : 'STA'}...`);
     try {
       esp32Service.switchMode();
       setMode(esp32Service.mode);
       setStatus({ ...esp32Service.status });
       setIsConnecting(true);
       setConsecutiveErrors(0);
+      logService.success(`Modo alterado para ${esp32Service.mode}`);
       
       // Tenta reconectar imediatamente no novo modo
       try {
@@ -118,8 +145,9 @@ export default function StreamScreen() {
         setStatus({ ...newStatus });
         setIsConnected(true);
         setIsConnecting(false);
+        logService.success("Conectado no novo modo");
       } catch (err) {
-        console.warn("⚠️ Não foi possível conectar no novo modo ainda");
+        logService.warn("Não foi possível conectar no novo modo ainda");
         setIsConnecting(false);
       }
     } catch (error) {
@@ -129,6 +157,7 @@ export default function StreamScreen() {
 
   // GET status do Vercel (somente para modal)
   const fetchStatusFromVercel = async () => {
+    logService.info("Buscando status do Vercel...");
     try {
       const response = await fetch(`${VERCEL_URL}/api/status?info=server`, {
         headers: { "Content-Type": "application/json" },
@@ -147,7 +176,7 @@ export default function StreamScreen() {
       }
       setVercelStatus(result);
       setVercelModalVisible(true);
-      console.log("🌐 Status Vercel:", result);
+      logService.success("Status Vercel obtido", JSON.stringify(result));
     } catch (err) {
       showError(err, true); // true = ação do usuário
     }
@@ -176,7 +205,7 @@ export default function StreamScreen() {
           throw new Error("Resposta não é JSON válido: " + text.substring(0, 100));
         }
         if (result.success) {
-          console.log("✅ Dados enviados!", result.logData);
+          logService.success("Dados enviados para Vercel", JSON.stringify(result.logData));
         } else {
           throw new Error(result.message || "Erro ao enviar dados");
         }
@@ -193,6 +222,7 @@ export default function StreamScreen() {
       showError("Câmera não está pronta", true);
       return;
     }
+    logService.info("Capturando foto...");
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 1,
@@ -201,7 +231,7 @@ export default function StreamScreen() {
         skipProcessing: true,
       });
       setCapturedPhoto(photo.uri);
-      console.log("📸 Foto capturada:", photo.uri);
+      logService.success("Foto capturada", photo.uri);
       await sendDataToVercel(photo.base64);
     } catch (err) {
       showError(err, true); // true = ação do usuário
@@ -235,13 +265,13 @@ export default function StreamScreen() {
         
         // Não mostra erro em polling automático
         const errorMsg = err instanceof Error ? err.message : String(err);
-        console.warn(`⚠️ Erro no polling automático (${consecutiveErrors + 1}x):`, errorMsg);
+        logService.warn(`Erro no polling automático (${consecutiveErrors + 1}x)`, errorMsg);
         
         // Backoff exponencial: 5s, 10s, 20s, 30s (máximo)
         const backoffDelay = Math.min(5000 * Math.pow(2, consecutiveErrors), 30000);
         
         if (consecutiveErrors >= 3) {
-          console.warn(`🔴 Múltiplas falhas consecutivas. Pausando polling por ${backoffDelay/1000}s`);
+          logService.warn(`Múltiplas falhas consecutivas. Pausando polling por ${backoffDelay/1000}s`);
         }
         
         if (isActive) {
@@ -333,6 +363,13 @@ export default function StreamScreen() {
               color={errorLogs.length > 0 ? "#ff6666" : "#666"}
             />
           </View>
+          <View style={{ marginTop: 10 }}>
+            <Button
+              title={`📋 Ver Logs (${systemLogs.length})`}
+              onPress={() => setLogModalVisible(true)}
+              color="#0af"
+            />
+          </View>
         </View>
 
         {/* Câmera iOS */}
@@ -380,6 +417,15 @@ export default function StreamScreen() {
         visible={vercelModalVisible}
         vercelStatus={vercelStatus}
         onClose={() => setVercelModalVisible(false)}
+      />
+      <LogModal
+        visible={logModalVisible}
+        logs={systemLogs}
+        onClose={() => setLogModalVisible(false)}
+        onClearLogs={() => {
+          logService.clearLogs();
+          setSystemLogs([]);
+        }}
       />
     </View>
   );
