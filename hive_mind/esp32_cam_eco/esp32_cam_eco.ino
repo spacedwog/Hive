@@ -194,13 +194,17 @@ void sendStatusResponse(WiFiClient &client) {
   json += "\"energy_score\":" + String(energyScore, 1) + ",";
   json += "\"total_requests\":" + String(totalRequests) + ",";
   json += "\"uptime_ms\":" + String(millis()) + ",";
-  json += "\"free_heap\":" + String(ESP.getFreeHeap());
+  json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
+  json += "\"wifi_strength\":" + String(WiFi.RSSI()) + ",";
+  json += "\"firmware\":\"eco-v1.0\"";
   json += "}";
 
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: application/json");
   client.println("Connection: close");
+  client.println("Access-Control-Allow-Origin: *");
   client.println("X-Energy-Score: " + String(energyScore, 1));
+  client.println("X-Firmware: eco-v1.0");
   client.println();
   client.print(json);
   
@@ -392,6 +396,16 @@ void setup() {
 
   server.begin();
   Serial.println("🚀 Servidor HTTP iniciado (Modo Sustentável)");
+  Serial.println("\n📋 Endpoints disponíveis:");
+  Serial.println("  GET /status - Status completo do sistema");
+  Serial.println("  GET /led/on - Liga o LED");
+  Serial.println("  GET /led/off - Desliga o LED");
+  Serial.println("  GET /image - Captura imagem");
+  Serial.println("  GET /snapshot - Captura com status");
+  Serial.println("  GET /sustainability - Relatório de sustentabilidade");
+  Serial.println("  GET /config?auto_off_ms=<ms> - Configura auto-off");
+  Serial.println("  GET /config?power_mode=<mode> - Configura modo de energia");
+  Serial.println();
   
   setPowerMode(POWER_MODE_BALANCED);
   lastActivityTime = millis();
@@ -426,10 +440,20 @@ void loop() {
     if (c == '\n' && request.endsWith("\r\n\r\n")) break;
   }
 
+  // Endpoints compatíveis com o app
   if (request.indexOf("GET /status") >= 0) {
+    sendStatusResponse(client);
+  } else if (request.indexOf("GET /") >= 0 && request.indexOf("GET / ") >= 0) {
+    // Endpoint raiz - retorna status
     sendStatusResponse(client);
   } else if (request.indexOf("GET /snapshot") >= 0) {
     sendImageResponse(client);
+  } else if (request.indexOf("GET /image") >= 0) {
+    sendImageResponse(client);
+  } else if (request.indexOf("GET /led/on") >= 0) {
+    sendLedResponse(client, "on");
+  } else if (request.indexOf("GET /led/off") >= 0) {
+    sendLedResponse(client, "off");
   } else if (request.indexOf("GET /led?state=") >= 0) {
     int idx = request.indexOf("state=");
     String state = request.substring(idx + 6, idx + 9);
@@ -441,6 +465,12 @@ void loop() {
     int end = param.indexOf(' ');
     if (end > 0) param = param.substring(0, end);
     sendConfigResponse(client, param);
+  } else if (request.indexOf("GET /config?power_mode=") >= 0) {
+    int idx = request.indexOf("power_mode=");
+    String mode = request.substring(idx + 11);
+    int end = mode.indexOf(' ');
+    if (end > 0) mode = mode.substring(0, end);
+    sendPowerModeResponse(client, mode);
   } else if (request.indexOf("GET /power?mode=") >= 0) {
     int idx = request.indexOf("mode=");
     String mode = request.substring(idx + 5);
@@ -450,9 +480,12 @@ void loop() {
   } else if (request.indexOf("GET /sustainability") >= 0) {
     sendSustainabilityReport(client);
   } else {
+    // 404 com JSON
     client.println("HTTP/1.1 404 Not Found");
+    client.println("Content-Type: application/json");
     client.println("Connection: close");
     client.println();
+    client.println("{\"error\":\"Endpoint not found\",\"available_endpoints\":[\"/status\",\"/led/on\",\"/led/off\",\"/image\",\"/snapshot\",\"/sustainability\"]}");
   }
 
   client.stop();
