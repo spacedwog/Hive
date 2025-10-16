@@ -57,7 +57,7 @@ export default function HiveScreen() {
 
   const fetchStatus = React.useCallback(async () => {
     try {
-      const servers = ["192.168.4.1", "192.168.15.166"];
+      const servers = ["192.168.4.1", "192.168.0.109"];
       const responses = await Promise.all(
         servers.map(async (server) => {
           let res;
