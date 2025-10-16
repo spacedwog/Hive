@@ -208,22 +208,7 @@ export default function StreamScreen() {
             IP STA: {status.ip_sta}
           </Text>
           <Text style={styles.overlayText}>
-            🔊 Sensor de Som: {status.sensor_db} dB
-          </Text>
-          <Text style={styles.overlayText}>
-            ⚡ Modo de Energia: {status.power_mode ?? "balanced"}
-          </Text>
-          <Text style={styles.overlayText}>
-            📊 Energy Score: {status.energy_score?.toFixed(1) ?? "0.0"}
-          </Text>
-          <Text style={styles.overlayText}>
-            💾 Memória Livre: {((status.free_heap ?? 0) / 1024).toFixed(1)} KB
-          </Text>
-          <Text style={styles.overlayText}>
-            ⏱️ Uptime: {((status.uptime_ms ?? 0) / 1000).toFixed(0)}s
-          </Text>
-          <Text style={styles.overlayText}>
-            📡 Total Requisições: {status.total_requests ?? 0}
+            🔊 Nível de Som: {status.sound_level}
           </Text>
           <Text style={styles.overlayText}>
             ⏲️ Auto-off: {status.auto_off_ms}ms

@@ -3,21 +3,15 @@ import { ESP32_SOFTAP_IP, ESP32_STA_IP } from "@env";
 import SustainabilityManager from '../hive_sustain/SustainabilityManager.ts';
 
 export type LedStatus = "on" | "off";
-export type PowerMode = "eco" | "balanced" | "performance";
 
-// Estrutura real retornada pelo ESP32-CAM
+// Estrutura real retornada pelo ESP32-CAM (baseada no firmware atual)
 export type Esp32Status = {
   led_builtin: LedStatus;
   led_opposite: LedStatus;
-  sensor_db: number;
+  sound_level: number;  // Nível do sensor de som (valor analógico)
   ip_ap: string;
   ip_sta: string;
-  auto_off_ms: number;
-  power_mode?: PowerMode;
-  energy_score?: number;
-  free_heap?: number;
-  total_requests?: number;
-  uptime_ms?: number;
+  auto_off_ms: number;  // Tempo em ms para desligar LED automaticamente
 };
 
 type ModalCallback = (message: string) => void;
@@ -54,15 +48,10 @@ export default class Esp32Service {
     this.status = {
       led_builtin: "off",
       led_opposite: "on",
-      sensor_db: 0,
+      sound_level: 0,
       ip_ap: Esp32Service.SOFTAP_IP,
       ip_sta: Esp32Service.STA_IP,
       auto_off_ms: 5000,
-      power_mode: "balanced",
-      energy_score: 0,
-      free_heap: 0,
-      total_requests: 0,
-      uptime_ms: 0,
     };
 
     console.log("📡 ESP32-CAM Service iniciado");
@@ -202,8 +191,9 @@ export default class Esp32Service {
           console.error(`   - GET /status (obtém status completo)`);
           console.error(`   - GET /led/on (liga o LED)`);
           console.error(`   - GET /led/off (desliga o LED)`);
+          console.error(`   - GET /image (obtém imagem JPG)`);
+          console.error(`   - GET /snapshot (obtém status + imagem)`);
           console.error(`   - GET /config?auto_off_ms=<ms> (configura auto-off)`);
-          console.error(`   - GET /config?power_mode=<mode> (configura modo de energia)`);
         }
         throw new Error(errorDetail);
       }
@@ -398,29 +388,13 @@ export default class Esp32Service {
     }
   }
 
-  async setPowerMode(mode: PowerMode) {
-    console.log(`⚡ Configurando power_mode para: ${mode}`);
-    
-    try {
-      const json = await this.request(`config?power_mode=${mode}`);
-      this.syncStatus(json);
-      console.log(`✅ Power mode configurado: ${mode}`);
-      return json;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
-      console.error(`⚠️ Erro ao atualizar power_mode: ${errorMessage}`);
-      this.showModal("Erro ao atualizar power_mode.");
-      throw err;
-    }
-  }
-
   private syncStatus(json: Partial<Esp32Status>) {
     this.status = {
       ...this.status,
       ...json,
       led_builtin: json.led_builtin ?? this.status.led_builtin,
       led_opposite: json.led_opposite ?? this.status.led_opposite,
-      sensor_db: json.sensor_db ?? this.status.sensor_db,
+      sound_level: json.sound_level ?? this.status.sound_level,
       ip_ap: json.ip_ap ?? this.status.ip_ap,
       ip_sta: json.ip_sta ?? this.status.ip_sta,
       auto_off_ms: json.auto_off_ms ?? this.status.auto_off_ms,
@@ -472,21 +446,8 @@ export default class Esp32Service {
     return {
       led_builtin: this.status.led_builtin,
       led_opposite: this.status.led_opposite,
-      sensor_db: this.status.sensor_db,
-      power_mode: this.status.power_mode,
-      energy_score: this.status.energy_score,
-      free_heap: this.status.free_heap,
-      uptime_ms: this.status.uptime_ms,
-    };
-  }
-
-  getPerformanceInfo() {
-    return {
-      energy_score: this.status.energy_score,
-      free_heap: this.status.free_heap,
-      total_requests: this.status.total_requests,
-      uptime_ms: this.status.uptime_ms,
-      power_mode: this.status.power_mode,
+      sound_level: this.status.sound_level,
+      auto_off_ms: this.status.auto_off_ms,
     };
   }
 

@@ -1028,5 +1028,6 @@
     "utility": "cpp",
     "xutility": "cpp",
     "semaphore": "cpp"
-  }
+  },
+  "sarif-viewer.connectToGithubCodeScanning": "on"
 }
