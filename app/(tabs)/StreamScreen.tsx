@@ -70,8 +70,8 @@ export default function StreamScreen() {
     };
   }, [logService]);
 
-  // Função para exibir erros (apenas para ações manuais do usuário)
-  const showError = (err: any, isUserAction = false) => {
+  // Função para exibir erros com modal
+  const showError = (err: any, isUserAction = false, forceModal = false) => {
     let msg = "";
     if (typeof err === "string") {
       msg = err;
@@ -81,12 +81,13 @@ export default function StreamScreen() {
       try { msg = JSON.stringify(err, null, 2); } catch { msg = String(err); }
     }
     
-    // Apenas mostra modal se for ação do usuário
-    // Erros automáticos (polling) são apenas logados
-    if (isUserAction) {
+    // Mostra modal se:
+    // 1. For ação do usuário OU
+    // 2. forceModal = true (erros críticos)
+    if (isUserAction || forceModal) {
       setErrorMessage(msg);
       setErrorModalVisible(true);
-      logService.error("Erro em ação do usuário", msg);
+      logService.error("Erro crítico", msg);
     } else {
       logService.warn("Erro em background", msg);
     }
@@ -107,8 +108,29 @@ export default function StreamScreen() {
   // Solicita permissão para câmera
   useEffect(() => {
     (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === "granted");
+      try {
+        const { status } = await Camera.requestCameraPermissionsAsync();
+        const granted = status === "granted";
+        setHasPermission(granted);
+        
+        if (!granted) {
+          logService.error("Permissão de câmera negada");
+          showError(
+            "Permissão de câmera negada. O app precisa de acesso à câmera para funcionar corretamente.",
+            false,
+            true // forceModal = true (erro crítico)
+          );
+        } else {
+          logService.success("Permissão de câmera concedida");
+        }
+      } catch (error) {
+        logService.error("Erro ao solicitar permissão de câmera", String(error));
+        showError(
+          "Erro ao solicitar permissão de câmera: " + String(error),
+          false,
+          true // forceModal = true (erro crítico)
+        );
+      }
     })();
   }, []);
 
@@ -147,8 +169,25 @@ export default function StreamScreen() {
         setIsConnecting(false);
         logService.success("Conectado no novo modo");
       } catch (err) {
-        logService.warn("Não foi possível conectar no novo modo ainda");
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        logService.warn("Não foi possível conectar no novo modo ainda", errorMsg);
         setIsConnecting(false);
+        
+        // Mostra modal se o erro persistir por mais de 10 segundos
+        setTimeout(() => {
+          if (!isConnected) {
+            showError(
+              `⚠️ Não foi possível conectar no modo ${esp32Service.mode}.\n\n` +
+              `Erro: ${errorMsg}\n\n` +
+              `💡 Tente:\n` +
+              `• Aguardar alguns segundos\n` +
+              `• Trocar novamente de modo\n` +
+              `• Verificar o IP: ${esp32Service.mode === 'STA' ? status.ip_sta : status.ip_ap}`,
+              false,
+              true // forceModal = true
+            );
+          }
+        }, 10000);
       }
     } catch (error) {
       showError(error, true);
@@ -164,7 +203,11 @@ export default function StreamScreen() {
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(
+          `Erro HTTP ${response.status}: ${response.statusText}\n\n` +
+          `Não foi possível obter status do Vercel.\n` +
+          `Verifique se a API está disponível.`
+        );
       }
       
       const text = await response.text();
@@ -172,7 +215,11 @@ export default function StreamScreen() {
       try {
         result = JSON.parse(text);
       } catch {
-        throw new Error("Resposta não é JSON válido: " + text.substring(0, 100));
+        throw new Error(
+          "Resposta inválida do Vercel\n\n" +
+          "A API retornou conteúdo que não é JSON válido.\n\n" +
+          `Preview: ${text.substring(0, 100)}...`
+        );
       }
       setVercelStatus(result);
       setVercelModalVisible(true);
@@ -185,6 +232,7 @@ export default function StreamScreen() {
   // POST dados/foto para Vercel
   const sendDataToVercel = useCallback(
     async (photoBase64?: string) => {
+      logService.info("Enviando dados para Vercel...");
       try {
         const payload = { status, image: photoBase64 || null };
         const response = await fetch(VERCEL_API_URL, {
@@ -194,7 +242,11 @@ export default function StreamScreen() {
         });
         
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          throw new Error(
+            `❌ Erro ao enviar dados para Vercel\n\n` +
+            `HTTP ${response.status}: ${response.statusText}\n\n` +
+            `Verifique a conexão com a API Vercel.`
+          );
         }
         
         const text = await response.text();
@@ -202,12 +254,19 @@ export default function StreamScreen() {
         try {
           result = JSON.parse(text);
         } catch {
-          throw new Error("Resposta não é JSON válido: " + text.substring(0, 100));
+          throw new Error(
+            "Resposta inválida do Vercel\n\n" +
+            "A API retornou conteúdo que não é JSON válido.\n\n" +
+            `Preview: ${text.substring(0, 100)}...`
+          );
         }
         if (result.success) {
           logService.success("Dados enviados para Vercel", JSON.stringify(result.logData));
         } else {
-          throw new Error(result.message || "Erro ao enviar dados");
+          throw new Error(
+            result.message || 
+            "Erro desconhecido ao enviar dados.\n\nA API retornou success: false sem mensagem de erro."
+          );
         }
       } catch (err) {
         showError(err, true); // true = ação do usuário
@@ -219,9 +278,19 @@ export default function StreamScreen() {
   // Captura e envia foto
   const captureAndUploadPhoto = async () => {
     if (!cameraRef.current) {
-      showError("Câmera não está pronta", true);
+      const errorMsg = "Câmera não está pronta. Aguarde a inicialização da câmera.";
+      logService.error(errorMsg);
+      showError(errorMsg, true, true); // forceModal = true
       return;
     }
+    
+    if (hasPermission === false) {
+      const errorMsg = "Permissão de câmera negada. Não é possível tirar fotos.";
+      logService.error(errorMsg);
+      showError(errorMsg, true, true); // forceModal = true
+      return;
+    }
+    
     logService.info("Capturando foto...");
     try {
       const photo = await cameraRef.current.takePictureAsync({
@@ -261,17 +330,33 @@ export default function StreamScreen() {
         }
       } catch (err) {
         setIsConnected(false);
-        setConsecutiveErrors(prev => prev + 1);
+        const newErrorCount = consecutiveErrors + 1;
+        setConsecutiveErrors(newErrorCount);
         
-        // Não mostra erro em polling automático
         const errorMsg = err instanceof Error ? err.message : String(err);
-        logService.warn(`Erro no polling automático (${consecutiveErrors + 1}x)`, errorMsg);
+        logService.warn(`Erro no polling automático (${newErrorCount}x)`, errorMsg);
         
         // Backoff exponencial: 5s, 10s, 20s, 30s (máximo)
         const backoffDelay = Math.min(5000 * Math.pow(2, consecutiveErrors), 30000);
         
-        if (consecutiveErrors >= 3) {
+        if (newErrorCount >= 3) {
           logService.warn(`Múltiplas falhas consecutivas. Pausando polling por ${backoffDelay/1000}s`);
+        }
+        
+        // ERRO CRÍTICO: Mostra modal após 5 falhas consecutivas
+        if (newErrorCount === 5) {
+          logService.error("Erro crítico: ESP32 não responde após 5 tentativas");
+          showError(
+            `❌ ESP32 não responde após ${newErrorCount} tentativas consecutivas.\n\n` +
+            `💡 Sugestões:\n` +
+            `• Verifique se o ESP32 está ligado\n` +
+            `• Confirme a conexão Wi-Fi\n` +
+            `• Tente trocar de modo (STA ↔ Soft-AP)\n` +
+            `• Verifique o IP no arquivo .env\n\n` +
+            `IP atual: ${mode === 'STA' ? status.ip_sta : status.ip_ap}`,
+            false,
+            true // forceModal = true (erro crítico)
+          );
         }
         
         if (isActive) {
