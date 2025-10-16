@@ -21,6 +21,18 @@ export type Esp32Status = {
 };
 
 type ModalCallback = (message: string) => void;
+type ErrorCallback = (error: ErrorLog) => void;
+
+export type ErrorLog = {
+  id: string;
+  timestamp: Date;
+  message: string;
+  type: 'network' | 'timeout' | 'http' | 'unknown';
+  endpoint?: string;
+  ip?: string;
+  mode?: string;
+  details?: string;
+};
 
 export default class Esp32Service {
   static SOFTAP_IP = ESP32_SOFTAP_IP;
@@ -30,8 +42,11 @@ export default class Esp32Service {
   mode: "Soft-AP" | "STA";
   private reconnectInterval?: NodeJS.Timeout;
   private modalCallback?: ModalCallback;
+  private errorCallback?: ErrorCallback;
   private retryCount = 0;
   private sustainManager: SustainabilityManager;
+  private errorHistory: ErrorLog[] = [];
+  private maxErrorHistory = 20;
 
   constructor() {
     this.sustainManager = SustainabilityManager.getInstance();
@@ -59,10 +74,58 @@ export default class Esp32Service {
     this.modalCallback = callback;
   }
 
+  onError(callback: ErrorCallback) {
+    this.errorCallback = callback;
+  }
+
   private showModal(message: string) {
     if (this.modalCallback) {
       this.modalCallback(message);
     }
+  }
+
+  private logError(message: string, type: ErrorLog['type'], endpoint?: string, details?: string) {
+    const errorLog: ErrorLog = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date(),
+      message,
+      type,
+      endpoint,
+      ip: this.getCurrentIP(),
+      mode: this.mode,
+      details
+    };
+
+    this.errorHistory.unshift(errorLog);
+    if (this.errorHistory.length > this.maxErrorHistory) {
+      this.errorHistory.pop();
+    }
+
+    console.error(`📝 Erro registrado [${type}]: ${message}`);
+    
+    if (this.errorCallback) {
+      this.errorCallback(errorLog);
+    }
+  }
+
+  getErrorHistory(): ErrorLog[] {
+    return [...this.errorHistory];
+  }
+
+  clearErrorHistory() {
+    this.errorHistory = [];
+    console.log('🧹 Histórico de erros limpo');
+  }
+
+  getErrorStats() {
+    const stats = {
+      total: this.errorHistory.length,
+      network: this.errorHistory.filter(e => e.type === 'network').length,
+      timeout: this.errorHistory.filter(e => e.type === 'timeout').length,
+      http: this.errorHistory.filter(e => e.type === 'http').length,
+      unknown: this.errorHistory.filter(e => e.type === 'unknown').length,
+    };
+    return stats;
   }
 
   switchMode(): "Soft-AP" | "STA" {
@@ -131,6 +194,8 @@ export default class Esp32Service {
       
       if (!res.ok) {
         const errorDetail = `HTTP ${res.status} - ${res.statusText}`;
+        this.logError(errorDetail, 'http', path, `Status: ${res.status}`);
+        
         if (res.status === 404) {
           console.error(`❌ Endpoint não encontrado: ${path}`);
           console.error(`   Endpoints disponíveis no ESP32-CAM:`);
@@ -145,6 +210,19 @@ export default class Esp32Service {
       return await res.json();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      
+      // Categoriza o tipo de erro
+      let errorType: ErrorLog['type'] = 'unknown';
+      if (errorMessage.includes('Network request failed')) {
+        errorType = 'network';
+      } else if (errorMessage.includes('aborted') || errorMessage.includes('timeout')) {
+        errorType = 'timeout';
+      } else if (errorMessage.includes('HTTP')) {
+        errorType = 'http';
+      }
+      
+      this.logError(errorMessage, errorType, path, `URL: ${url}`);
+      
       console.error(`❌ Falha no request: ${errorMessage}`);
       console.error(`   URL: ${url}`);
       console.error(`   Modo: ${this.mode}`);
@@ -157,7 +235,28 @@ export default class Esp32Service {
 
   private async tryReconnectOnce(path: string) {
     console.log(`🔄 Tentando reconexão imediata para: ${path}`);
-    return this.request(path);
+    console.log(`   IP atual: ${this.getCurrentIP()}`);
+    console.log(`   Modo atual: ${this.mode}`);
+    
+    try {
+      // Usa timeout mais curto para reconexão imediata (10s ao invés de 30s)
+      return await this.request(path, {}, 10000);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error(`   ⚠️ Erro na tentativa: ${errorMessage}`);
+      
+      // Verifica se é erro de rede ou timeout
+      if (errorMessage.includes('Network request failed')) {
+        console.error(`   🔴 Falha de rede: ESP32 pode estar offline ou inacessível`);
+        console.error(`   💡 Dica: Verifique se o ESP32 está ligado e na mesma rede`);
+      } else if (errorMessage.includes('aborted')) {
+        console.error(`   ⏱️  Timeout: ESP32 não respondeu a tempo`);
+        console.error(`   💡 Dica: ESP32 pode estar sobrecarregado ou com problemas`);
+      }
+      
+      // Não registra novamente aqui pois já foi registrado no método request()
+      throw err;
+    }
   }
 
   private startReconnectLoop(path: string, baseIntervalMs = 5000, maxRetries = 10) {
@@ -251,6 +350,7 @@ export default class Esp32Service {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       console.error(`⚠️ Erro ao alternar LED: ${errorMessage}`);
+      console.error(`   Endpoint tentado: ${endpoint}`);
       this.showModal("Erro ao alternar LED. Tentando reconectar...");
       
       try {
@@ -262,6 +362,16 @@ export default class Esp32Service {
       } catch (retryErr) {
         const retryErrorMessage = retryErr instanceof Error ? retryErr.message : 'Erro desconhecido';
         console.error(`❌ Falha na reconexão imediata: ${retryErrorMessage}`);
+        
+        // Diagnóstico adicional
+        if (retryErrorMessage.includes('Network request failed')) {
+          console.error(`   🔴 Problema de conectividade de rede detectado`);
+          console.error(`   📡 Verifique:`);
+          console.error(`      1. ESP32 está ligado?`);
+          console.error(`      2. Está na mesma rede Wi-Fi?`);
+          console.error(`      3. IP está correto? (${this.getCurrentIP()})`);
+        }
+        
         console.log("🔁 Iniciando loop de reconexão automática...");
         this.startReconnectLoop(endpoint, 5000, 10);
         this.status.led_builtin = this.status.led_builtin === "on" ? "off" : "on";
@@ -340,6 +450,17 @@ export default class Esp32Service {
       } catch (retryErr) {
         const retryErrorMessage = retryErr instanceof Error ? retryErr.message : 'Erro desconhecido';
         console.error(`❌ Falha na reconexão imediata: ${retryErrorMessage}`);
+        
+        // Diagnóstico adicional
+        if (retryErrorMessage.includes('Network request failed')) {
+          console.error(`   🔴 Problema de conectividade de rede detectado`);
+          console.error(`   📡 Ações sugeridas:`);
+          console.error(`      1. Verifique se o ESP32 está ligado`);
+          console.error(`      2. Confirme que está na mesma rede Wi-Fi`);
+          console.error(`      3. Valide o IP no .env: ${this.getCurrentIP()}`);
+          console.error(`      4. Tente alternar entre STA/Soft-AP`);
+        }
+        
         console.log("🔁 Iniciando loop de reconexão automática...");
         this.startReconnectLoop("status", 5000, 10);
         return this.status;
@@ -375,5 +496,114 @@ export default class Esp32Service {
 
   getActiveIP() {
     return this.getCurrentIP();
+  }
+
+  /**
+   * Executa diagnóstico completo da conexão com o ESP32
+   * @returns Relatório de diagnóstico com informações de conectividade
+   */
+  async runDiagnostics(): Promise<{
+    success: boolean;
+    mode: string;
+    ip: string;
+    connectivity: boolean;
+    latency?: number;
+    errors: string[];
+    suggestions: string[];
+  }> {
+    console.log("🔍 Iniciando diagnóstico de conexão...");
+    const errors: string[] = [];
+    const suggestions: string[] = [];
+    let connectivity = false;
+    let latency: number | undefined;
+
+    // Teste 1: Verificar configuração
+    console.log("📋 Teste 1: Verificando configuração...");
+    console.log(`   Modo atual: ${this.mode}`);
+    console.log(`   IP STA: ${Esp32Service.STA_IP}`);
+    console.log(`   IP Soft-AP: ${Esp32Service.SOFTAP_IP}`);
+    console.log(`   IP ativo: ${this.getCurrentIP()}`);
+
+    // Teste 2: Teste de conectividade
+    console.log("📋 Teste 2: Testando conectividade...");
+    try {
+      const startTime = Date.now();
+      connectivity = await this.testConnectivity();
+      latency = Date.now() - startTime;
+      
+      if (connectivity) {
+        console.log(`✅ Conectividade OK (${latency}ms)`);
+      } else {
+        errors.push("Falha no teste de conectividade");
+        suggestions.push("Verifique se o ESP32 está ligado e acessível");
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      errors.push(`Erro no teste: ${errorMessage}`);
+      
+      if (errorMessage.includes('Network request failed')) {
+        suggestions.push("ESP32 parece estar offline ou inacessível");
+        suggestions.push("Verifique a alimentação do ESP32");
+        suggestions.push("Confirme que está na mesma rede Wi-Fi");
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
+        suggestions.push("Timeout na conexão - ESP32 pode estar sobrecarregado");
+        suggestions.push("Tente reiniciar o ESP32");
+      }
+      
+      suggestions.push(`Tente alternar entre STA (${Esp32Service.STA_IP}) e Soft-AP (${Esp32Service.SOFTAP_IP})`);
+    }
+
+    // Teste 3: Verificar modo alternativo
+    if (!connectivity) {
+      console.log("📋 Teste 3: Testando modo alternativo...");
+      const currentMode = this.mode;
+      this.switchMode();
+      
+      try {
+        const altConnectivity = await this.testConnectivity();
+        if (altConnectivity) {
+          console.log(`✅ Conectividade OK no modo ${this.mode}!`);
+          suggestions.push(`Use o modo ${this.mode} (IP: ${this.getCurrentIP()})`);
+          connectivity = true;
+        } else {
+          // Volta para o modo original
+          this.switchMode();
+        }
+      } catch {
+        // Volta para o modo original
+        this.switchMode();
+      }
+    }
+
+    // Relatório final
+    console.log("\n📊 === RELATÓRIO DE DIAGNÓSTICO ===");
+    console.log(`Status: ${connectivity ? '✅ Conectado' : '❌ Sem conexão'}`);
+    console.log(`Modo: ${this.mode}`);
+    console.log(`IP: ${this.getCurrentIP()}`);
+    if (latency) {
+      console.log(`Latência: ${latency}ms`);
+    }
+    
+    if (errors.length > 0) {
+      console.log("\n❌ Erros encontrados:");
+      errors.forEach(err => console.log(`   - ${err}`));
+    }
+    
+    if (suggestions.length > 0) {
+      console.log("\n💡 Sugestões:");
+      suggestions.forEach(sug => console.log(`   - ${sug}`));
+    }
+    
+    console.log("================================\n");
+
+    return {
+      success: connectivity,
+      mode: this.mode,
+      ip: this.getCurrentIP(),
+      connectivity,
+      latency,
+      errors,
+      suggestions
+    };
   }
 }

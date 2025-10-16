@@ -1,20 +1,72 @@
-# Welcome to your Expo app 👋
+# 🐝 Hive - Smart Sustainability IoT Platform
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Sistema inteligente de monitoramento e controle IoT com foco em sustentabilidade, integrado com ESP32, GitHub Issues e Vercel.
 
-## Get started
+---
 
-1. Install dependencies
+## 🚨 TROUBLESHOOTING ESP32
 
-   ```bash
-   npm install
-   ```
+Se você está tendo problemas de conexão com o ESP32:
 
-2. Start the app
+### 🔧 Teste Rápido
+```bash
+# Windows
+scripts\test-esp32.bat
 
-   ```bash
-   npx expo start
-   ```
+# Ou diagnóstico completo
+node scripts\diagnose-esp32.cjs
+```
+
+### 📚 Documentação de Suporte
+- **Problema comum:** [README_FIX.md](README_FIX.md) - Resumo executivo
+- **Diagnóstico:** [DIAGNOSTIC_REPORT.md](DIAGNOSTIC_REPORT.md) - Análise detalhada  
+- **Solução:** [SOLUTION_REFLASH_FIRMWARE.md](SOLUTION_REFLASH_FIRMWARE.md) - Passo a passo
+- **Guia completo:** [ESP32_CONNECTION_GUIDE.md](ESP32_CONNECTION_GUIDE.md) - Troubleshooting
+
+---
+
+## 🚀 Get Started
+
+### 1. Configure o ambiente
+
+```bash
+npm install
+```
+
+### 2. Configure variáveis de ambiente
+
+Copie `.env.example` para `.env` e configure:
+
+```env
+# ESP32 Configuration
+ESP32_STA_IP=http://192.168.15.188
+ESP32_SOFTAP_IP=http://192.168.4.1
+
+# GitHub Configuration  
+GITHUB_TOKEN=your_token_here
+GITHUB_OWNER=spacedwog
+GITHUB_REPO=hive
+
+# Vercel Configuration
+VERCEL_TOKEN=your_token_here
+```
+
+### 3. Configure o ESP32
+
+Antes de iniciar o app, certifique-se de que o ESP32 está funcionando:
+
+```bash
+# Teste a conexão
+node scripts\diagnose-esp32.cjs
+```
+
+Se o teste falhar, siga: [SOLUTION_REFLASH_FIRMWARE.md](SOLUTION_REFLASH_FIRMWARE.md)
+
+### 4. Inicie o app
+
+```bash
+npx expo start
+```
 
 In the output, you'll find options to open the app in a
 

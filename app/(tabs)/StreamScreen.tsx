@@ -14,7 +14,7 @@ import ErrorModal from "../../hive_body/hive_modal/ErrorModal.tsx";
 import StatusModal from "../../hive_body/hive_modal/StatusModal.tsx";
 import VercelModal from "../../hive_body/hive_modal/VercelModal.tsx";
 
-import Esp32Service, { Esp32Status } from "../../hive_brain/hive_stream/Esp32Service.ts";
+import Esp32Service, { ErrorLog, Esp32Status } from "../../hive_brain/hive_stream/Esp32Service.ts";
 
 export default function StreamScreen() {
   const [esp32Service] = useState(() => new Esp32Service());
@@ -26,6 +26,7 @@ export default function StreamScreen() {
 
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
 
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [vercelModalVisible, setVercelModalVisible] = useState(false);
@@ -34,7 +35,14 @@ export default function StreamScreen() {
   const cameraRef = useRef<CameraView>(null);
   const VERCEL_API_URL = `${VERCEL_URL}/api/esp32-camera`;
 
-  // Função para exibir erros
+  // Configura callbacks para capturar erros do ESP32Service
+  useEffect(() => {
+    esp32Service.onError((error: ErrorLog) => {
+      setErrorLogs(esp32Service.getErrorHistory());
+    });
+  }, [esp32Service]);
+
+  // Função para exibir erros (mantida para compatibilidade)
   const showError = (err: any) => {
     let msg = "";
     if (typeof err === "string") {
@@ -46,6 +54,18 @@ export default function StreamScreen() {
     }
     setErrorMessage(msg);
     setErrorModalVisible(true);
+  };
+
+  // Função para mostrar o modal de erros com histórico
+  const showErrorHistory = () => {
+    setErrorLogs(esp32Service.getErrorHistory());
+    setErrorModalVisible(true);
+  };
+
+  // Função para limpar histórico de erros
+  const clearErrorHistory = () => {
+    esp32Service.clearErrorHistory();
+    setErrorLogs([]);
   };
 
   // Solicita permissão para câmera
@@ -229,6 +249,13 @@ export default function StreamScreen() {
             onPress={fetchStatusFromVercel}
             color="#ff9900"
           />
+          <View style={{ marginTop: 10 }}>
+            <Button
+              title={`📝 Ver Erros (${errorLogs.length})`}
+              onPress={showErrorHistory}
+              color={errorLogs.length > 0 ? "#ff6666" : "#666"}
+            />
+          </View>
         </View>
 
         {/* Câmera iOS */}
@@ -262,7 +289,10 @@ export default function StreamScreen() {
       <ErrorModal
         visible={errorModalVisible}
         errorMessage={errorMessage}
+        errorLogs={errorLogs}
+        errorStats={esp32Service.getErrorStats()}
         onClose={() => setErrorModalVisible(false)}
+        onClearHistory={clearErrorHistory}
       />
       <StatusModal
         visible={statusModalVisible}
