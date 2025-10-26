@@ -30,10 +30,10 @@ export default function StreamScreen() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
-  
+
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [systemLogs, setSystemLogs] = useState<LogEntry[]>([]);
-  
+
   // Estados de conectividade
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -59,12 +59,12 @@ export default function StreamScreen() {
     const updateLogs = () => {
       setSystemLogs(logService.getLogs());
     };
-    
+
     logService.subscribe(updateLogs);
     updateLogs(); // Carrega logs iniciais
-    
+
     logService.info("StreamScreen iniciado");
-    
+
     return () => {
       logService.unsubscribe(updateLogs);
     };
@@ -80,10 +80,7 @@ export default function StreamScreen() {
     } else {
       try { msg = JSON.stringify(err, null, 2); } catch { msg = String(err); }
     }
-    
-    // Mostra modal se:
-    // 1. For ação do usuário OU
-    // 2. forceModal = true (erros críticos)
+
     if (isUserAction || forceModal) {
       setErrorMessage(msg);
       setErrorModalVisible(true);
@@ -93,13 +90,11 @@ export default function StreamScreen() {
     }
   };
 
-  // Função para mostrar o modal de erros com histórico
   const showErrorHistory = () => {
     setErrorLogs(esp32Service.getErrorHistory());
     setErrorModalVisible(true);
   };
 
-  // Função para limpar histórico de erros
   const clearErrorHistory = () => {
     esp32Service.clearErrorHistory();
     setErrorLogs([]);
@@ -112,13 +107,13 @@ export default function StreamScreen() {
         const { status } = await Camera.requestCameraPermissionsAsync();
         const granted = status === "granted";
         setHasPermission(granted);
-        
+
         if (!granted) {
           logService.error("Permissão de câmera negada");
           showError(
             "Permissão de câmera negada. O app precisa de acesso à câmera para funcionar corretamente.",
             false,
-            true // forceModal = true (erro crítico)
+            true
           );
         } else {
           logService.success("Permissão de câmera concedida");
@@ -128,7 +123,7 @@ export default function StreamScreen() {
         showError(
           "Erro ao solicitar permissão de câmera: " + String(error),
           false,
-          true // forceModal = true (erro crítico)
+          true
         );
       }
     })();
@@ -145,7 +140,7 @@ export default function StreamScreen() {
       setConsecutiveErrors(0);
       logService.success("LED alternado com sucesso");
     } catch (error) {
-      showError(error, true); // true = ação do usuário
+      showError(error, true);
       setIsConnected(false);
     }
   };
@@ -160,76 +155,54 @@ export default function StreamScreen() {
       setIsConnecting(true);
       setConsecutiveErrors(0);
       logService.success(`Modo alterado para ${esp32Service.mode}`);
-      
-      // Tenta reconectar imediatamente no novo modo
-      try {
-        const newStatus = await esp32Service.fetchStatus();
-        setStatus({ ...newStatus });
-        setIsConnected(true);
-        setIsConnecting(false);
-        logService.success("Conectado no novo modo");
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        logService.warn("Não foi possível conectar no novo modo ainda", errorMsg);
-        setIsConnecting(false);
-        
-        // Mostra modal se o erro persistir por mais de 10 segundos
-        setTimeout(() => {
-          if (!isConnected) {
-            showError(
-              `⚠️ Não foi possível conectar no modo ${esp32Service.mode}.\n\n` +
-              `Erro: ${errorMsg}\n\n` +
-              `💡 Tente:\n` +
-              `• Aguardar alguns segundos\n` +
-              `• Trocar novamente de modo\n` +
-              `• Verificar o IP: ${esp32Service.mode === 'STA' ? status.ip_sta : status.ip_ap}`,
-              false,
-              true // forceModal = true
-            );
-          }
-        }, 10000);
-      }
     } catch (error) {
       showError(error, true);
     }
   };
 
-  // GET status do Vercel (somente para modal)
-  const fetchStatusFromVercel = async () => {
-    logService.info("Buscando status do Vercel...");
+  // Fallback automático: tenta ESP32 e depois Vercel
+  const safeFetchStatus = async () => {
     try {
-      const response = await fetch(`${VERCEL_URL}/api/status?info=server`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      
-      if (!response.ok) {
-        throw new Error(
-          `Erro HTTP ${response.status}: ${response.statusText}\n\n` +
-          `Não foi possível obter status do Vercel.\n` +
-          `Verifique se a API está disponível.`
-        );
-      }
-      
-      const text = await response.text();
-      let result;
-      try {
-        result = JSON.parse(text);
-      } catch {
-        throw new Error(
-          "Resposta inválida do Vercel\n\n" +
-          "A API retornou conteúdo que não é JSON válido.\n\n" +
-          `Preview: ${text.substring(0, 100)}...`
-        );
-      }
-      setVercelStatus(result);
-      setVercelModalVisible(true);
-      logService.success("Status Vercel obtido", JSON.stringify(result));
+      const newStatus = await esp32Service.fetchStatus();
+      setStatus({ ...newStatus });
+      setIsConnected(true);
+      setIsConnecting(false);
+      setConsecutiveErrors(0);
+      logService.success("Status obtido do ESP32 local");
+      return newStatus;
     } catch (err) {
-      showError(err, true); // true = ação do usuário
+      const newErrorCount = consecutiveErrors + 1;
+      setConsecutiveErrors(newErrorCount);
+      logService.warn(`Falha ao obter status do ESP32 (${newErrorCount}x)`, String(err));
+
+      // Após 3 falhas, ativa fallback Vercel
+      if (newErrorCount >= 3) {
+        logService.info("Tentando fallback via API Vercel...");
+        try {
+          const response = await fetch(`${VERCEL_URL}/api/status?info=fallback`, {
+            headers: { "Content-Type": "application/json" },
+          });
+          if (!response.ok) throw new Error(`Erro HTTP ${response.status}: ${response.statusText}`);
+
+          const result = await response.json();
+          setVercelStatus(result);
+          setIsConnected(true);
+          setIsConnecting(false);
+          logService.success("Fallback ativo via API Vercel", JSON.stringify(result));
+          return result;
+        } catch (fallbackError) {
+          logService.error("Falha também no fallback da Vercel", String(fallbackError));
+          setIsConnected(false);
+          throw fallbackError;
+        }
+      } else {
+        setIsConnected(false);
+        throw err;
+      }
     }
   };
 
-  // POST dados/foto para Vercel
+  // POST dados/foto com fallback
   const sendDataToVercel = useCallback(
     async (photoBase64?: string) => {
       logService.info("Enviando dados para Vercel...");
@@ -240,36 +213,26 @@ export default function StreamScreen() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        
-        if (!response.ok) {
-          throw new Error(
-            `❌ Erro ao enviar dados para Vercel\n\n` +
-            `HTTP ${response.status}: ${response.statusText}\n\n` +
-            `Verifique a conexão com a API Vercel.`
-          );
-        }
-        
-        const text = await response.text();
-        let result;
-        try {
-          result = JSON.parse(text);
-        } catch {
-          throw new Error(
-            "Resposta inválida do Vercel\n\n" +
-            "A API retornou conteúdo que não é JSON válido.\n\n" +
-            `Preview: ${text.substring(0, 100)}...`
-          );
-        }
+
+        if (!response.ok) throw new Error(`Erro HTTP ${response.status}: ${response.statusText}`);
+        const result = await response.json();
         if (result.success) {
           logService.success("Dados enviados para Vercel", JSON.stringify(result.logData));
         } else {
-          throw new Error(
-            result.message || 
-            "Erro desconhecido ao enviar dados.\n\nA API retornou success: false sem mensagem de erro."
-          );
+          throw new Error(result.message || "Erro desconhecido no envio");
         }
       } catch (err) {
-        showError(err, true); // true = ação do usuário
+        logService.warn("Erro no envio direto, tentando fallback...");
+        try {
+          await fetch(`${VERCEL_URL}/api/fallback/upload`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status, image: photoBase64 }),
+          });
+          logService.success("Fallback de upload realizado via Vercel");
+        } catch (fallbackErr) {
+          showError(fallbackErr, true);
+        }
       }
     },
     [status, VERCEL_API_URL]
@@ -280,17 +243,17 @@ export default function StreamScreen() {
     if (!cameraRef.current) {
       const errorMsg = "Câmera não está pronta. Aguarde a inicialização da câmera.";
       logService.error(errorMsg);
-      showError(errorMsg, true, true); // forceModal = true
+      showError(errorMsg, true, true);
       return;
     }
-    
+
     if (hasPermission === false) {
       const errorMsg = "Permissão de câmera negada. Não é possível tirar fotos.";
       logService.error(errorMsg);
-      showError(errorMsg, true, true); // forceModal = true
+      showError(errorMsg, true, true);
       return;
     }
-    
+
     logService.info("Capturando foto...");
     try {
       const photo = await cameraRef.current.takePictureAsync({
@@ -303,73 +266,33 @@ export default function StreamScreen() {
       logService.success("Foto capturada", photo.uri);
       await sendDataToVercel(photo.base64);
     } catch (err) {
-      showError(err, true); // true = ação do usuário
+      showError(err, true);
     }
   };
 
-  // Polling inteligente com backoff exponencial
+  // Polling inteligente com fallback
   useEffect(() => {
     let interval: NodeJS.Timeout;
     let isActive = true;
-    
+
     const fetchStatusWithBackoff = async () => {
       if (!isActive || isFetchingStatus) return;
-      
       setIsFetchingStatus(true);
-      
+
       try {
-        const newStatus = await esp32Service.fetchStatus();
-        setStatus({ ...newStatus });
-        setIsConnected(true);
-        setIsConnecting(false);
-        setConsecutiveErrors(0);
-        
-        // Sucesso: polling normal (2s)
-        if (isActive) {
-          interval = setTimeout(fetchStatusWithBackoff, 2000);
-        }
+        await safeFetchStatus();
+        if (isActive) interval = setTimeout(fetchStatusWithBackoff, 2000);
       } catch (err) {
-        setIsConnected(false);
         const newErrorCount = consecutiveErrors + 1;
         setConsecutiveErrors(newErrorCount);
-        
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        logService.warn(`Erro no polling automático (${newErrorCount}x)`, errorMsg);
-        
-        // Backoff exponencial: 5s, 10s, 20s, 30s (máximo)
-        const backoffDelay = Math.min(5000 * Math.pow(2, consecutiveErrors), 30000);
-        
-        if (newErrorCount >= 3) {
-          logService.warn(`Múltiplas falhas consecutivas. Pausando polling por ${backoffDelay/1000}s`);
-        }
-        
-        // ERRO CRÍTICO: Mostra modal após 5 falhas consecutivas
-        if (newErrorCount === 5) {
-          logService.error("Erro crítico: ESP32 não responde após 5 tentativas");
-          showError(
-            `❌ ESP32 não responde após ${newErrorCount} tentativas consecutivas.\n\n` +
-            `💡 Sugestões:\n` +
-            `• Verifique se o ESP32 está ligado\n` +
-            `• Confirme a conexão Wi-Fi\n` +
-            `• Tente trocar de modo (STA ↔ Soft-AP)\n` +
-            `• Verifique o IP no arquivo .env\n\n` +
-            `IP atual: ${mode === 'STA' ? status.ip_sta : status.ip_ap}`,
-            false,
-            true // forceModal = true (erro crítico)
-          );
-        }
-        
-        if (isActive) {
-          interval = setTimeout(fetchStatusWithBackoff, backoffDelay);
-        }
+        const backoffDelay = Math.min(5000 * Math.pow(2, newErrorCount), 30000);
+        if (isActive) interval = setTimeout(fetchStatusWithBackoff, backoffDelay);
       } finally {
         setIsFetchingStatus(false);
       }
     };
-    
-    // Inicia polling
+
     fetchStatusWithBackoff();
-    
     return () => {
       isActive = false;
       if (interval) clearTimeout(interval);
@@ -384,100 +307,45 @@ export default function StreamScreen() {
         {isConnecting ? (
           `🔄 Conectando... (${mode})`
         ) : isConnected ? (
-          `✅ Conectado (${mode}: ${mode === "STA" ? status.ip_sta : status.ip_ap})`
-        ) : consecutiveErrors > 0 ? (
-          `❌ Desconectado - ${consecutiveErrors} tentativas falharam`
+          `✅ Conectado (${mode === "STA" ? status.ip_sta : status.ip_ap || "Vercel"})`
         ) : (
-          "⏳ Iniciando..."
+          `❌ Desconectado`
         )}
       </Text>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, width: "100%" }}>
-        {/* Status ESP32-CAM */}
         <Text style={[styles.text, { marginTop: 20 }]}>📷 Status ESP32-CAM:</Text>
         <View style={[styles.dataBox, { alignSelf: "center" }]}>
-          <Text style={styles.overlayText}>
-            LED Built-in:{" "}
-            <Text style={{ color: status.led_builtin === "on" ? "lightgreen" : "red" }}>
-              {status.led_builtin.toUpperCase()}
-            </Text>
-          </Text>
-          <Text style={styles.overlayText}>
-            LED Opposite:{" "}
-            <Text style={{ color: status.led_opposite === "on" ? "lightgreen" : "red" }}>
-              {status.led_opposite.toUpperCase()}
-            </Text>
-          </Text>
-          <Text style={styles.overlayText}>
-            IP AP: {status.ip_ap}
-          </Text>
-                    <Text style={styles.overlayText}>
-            IP STA: {status.ip_sta}
-          </Text>
-          <Text style={styles.overlayText}>
-            🔊 Nível de Som: {status.sound_level}
-          </Text>
-          <Text style={styles.overlayText}>
-            ⏲️ Auto-off: {status.auto_off_ms}ms
-          </Text>
+          <Text style={styles.overlayText}>LED Built-in: {status.led_builtin}</Text>
+          <Text style={styles.overlayText}>LED Opposite: {status.led_opposite}</Text>
+          <Text style={styles.overlayText}>IP AP: {status.ip_ap}</Text>
+          <Text style={styles.overlayText}>IP STA: {status.ip_sta}</Text>
+          <Text style={styles.overlayText}>🔊 Nível de Som: {status.sound_level}</Text>
+          <Text style={styles.overlayText}>⏲️ Auto-off: {status.auto_off_ms}ms</Text>
+
           <View style={styles.buttonRow}>
-            <Button
-              title={status.led_builtin === "on" ? "Desligar LED" : "Ligar LED"}
-              onPress={toggleLed}
-            />
-            <Button
-              title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`}
-              onPress={switchMode}
-              color="#facc15"
-            />
+            <Button title="Alternar LED" onPress={toggleLed} />
+            <Button title={`Modo: ${mode === "Soft-AP" ? "STA" : "Soft-AP"}`} onPress={switchMode} color="#facc15" />
           </View>
-          <Button
-            title="🛜 ESP32-CAM(Data)"
-            onPress={() => setStatusModalVisible(true)}
-            color="#0af"
-          />
-          <Button
-            title="❤️‍🔥 API(Infra-estrutura)"
-            onPress={fetchStatusFromVercel}
-            color="#ff9900"
-          />
+
+          <Button title="🛜 ESP32-CAM(Data)" onPress={() => setStatusModalVisible(true)} color="#0af" />
+          <Button title="❤️‍🔥 API(Infra-estrutura)" onPress={() => setVercelModalVisible(true)} color="#ff9900" />
           <View style={{ marginTop: 10 }}>
-            <Button
-              title={`📝 Ver Erros (${errorLogs.length})`}
-              onPress={showErrorHistory}
-              color={errorLogs.length > 0 ? "#ff6666" : "#666"}
-            />
+            <Button title={`📝 Erros (${errorLogs.length})`} onPress={showErrorHistory} color="#ff6666" />
           </View>
           <View style={{ marginTop: 10 }}>
-            <Button
-              title={`📋 Ver Logs (${systemLogs.length})`}
-              onPress={() => setLogModalVisible(true)}
-              color="#0af"
-            />
+            <Button title={`📋 Logs (${systemLogs.length})`} onPress={() => setLogModalVisible(true)} color="#0af" />
           </View>
         </View>
 
-        {/* Câmera iOS */}
         <Text style={[styles.text, { marginTop: 20 }]}>📱 Câmera iOS:</Text>
         <View style={styles.nativeCamera}>
           {hasPermission ? (
             <>
               <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={type} />
-              <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 5 }}>
-                <Button
-                  title="🔄 Trocar câmera"
-                  onPress={() => setType(type === "back" ? "front" : "back")}
-                  color="#0af"
-                />
-              </View>
-              <Button
-                title="📸 Tirar Foto"
-                onPress={captureAndUploadPhoto}
-                color="#4caf50"
-              />
-              {capturedPhoto && (
-                <Image source={{ uri: capturedPhoto }} style={{ width: "100%", height: 240, marginTop: 10 }} />
-              )}
+              <Button title="🔄 Trocar câmera" onPress={() => setType(type === "back" ? "front" : "back")} color="#0af" />
+              <Button title="📸 Tirar Foto" onPress={captureAndUploadPhoto} color="#4caf50" />
+              {capturedPhoto && <Image source={{ uri: capturedPhoto }} style={{ width: "100%", height: 240, marginTop: 10 }} />}
             </>
           ) : (
             <Text style={{ color: "red" }}>Permissão para câmera negada</Text>
@@ -485,48 +353,20 @@ export default function StreamScreen() {
         </View>
       </ScrollView>
 
-      <ErrorModal
-        visible={errorModalVisible}
-        errorMessage={errorMessage}
-        errorLogs={errorLogs}
-        errorStats={esp32Service.getErrorStats()}
-        onClose={() => setErrorModalVisible(false)}
-        onClearHistory={clearErrorHistory}
-      />
-      <StatusModal
-        visible={statusModalVisible}
-        status={status}
-        onClose={() => setStatusModalVisible(false)}
-      />
-      <VercelModal
-        visible={vercelModalVisible}
-        vercelStatus={vercelStatus}
-        onClose={() => setVercelModalVisible(false)}
-      />
-      <LogModal
-        visible={logModalVisible}
-        logs={systemLogs}
-        onClose={() => setLogModalVisible(false)}
-        onClearLogs={() => {
-          logService.clearLogs();
-          setSystemLogs([]);
-        }}
-      />
+      <ErrorModal visible={errorModalVisible} errorMessage={errorMessage} errorLogs={errorLogs} onClose={() => setErrorModalVisible(false)} onClearHistory={clearErrorHistory} />
+      <StatusModal visible={statusModalVisible} status={status} onClose={() => setStatusModalVisible(false)} />
+      <VercelModal visible={vercelModalVisible} vercelStatus={vercelStatus} onClose={() => setVercelModalVisible(false)} />
+      <LogModal visible={logModalVisible} logs={systemLogs} onClose={() => setLogModalVisible(false)} onClearLogs={() => { logService.clearLogs(); setSystemLogs([]); }} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 42, backgroundColor: "#121212", alignItems: "center", justifyContent: "flex-start"},
+  container: { flex: 1, padding: 42, backgroundColor: "#121212", alignItems: "center", justifyContent: "flex-start" },
   connectionText: { fontSize: 16, fontWeight: "bold", color: "#0af", marginBottom: 10, textAlign: "center" },
   text: { fontSize: 16, color: "#fff", marginVertical: 5, textAlign: "center" },
   dataBox: { width: "90%", maxWidth: 400, padding: 10, backgroundColor: "#222", borderRadius: 8, marginBottom: 15 },
   nativeCamera: { width: 320, height: 350, borderWidth: 2, borderColor: "#0f0", borderRadius: 10, overflow: "hidden", marginTop: 10, backgroundColor: "black", padding: 5 },
   overlayText: { color: "#fff", fontSize: 14, marginBottom: 4 },
   buttonRow: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
-  modalBackground: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.7)" },
-  modalBox: { width: "85%", backgroundColor: "#1e1e1e", borderRadius: 10, padding: 20, shadowColor: "#000", shadowOpacity: 0.5, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, elevation: 5 },
-  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#0af", marginBottom: 10 },
-  modalText: { color: "#fff", fontSize: 14 },
-  modalButton: { marginTop: 15, backgroundColor: "#0af", padding: 10, borderRadius: 8, alignItems: "center" },
 });
